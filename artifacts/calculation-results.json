@@ -1,0 +1,1433 @@
+{
+  "source": "examples/p0-project.json",
+  "links": [
+    {
+      "id": "link28",
+      "name": "RF_CH28",
+      "status": "ok",
+      "errors": [],
+      "frequencyGHz": 1,
+      "stages": [
+        {
+          "label": "rf-in28",
+          "kind": "connection",
+          "gainDb": 0,
+          "rfGainDb": 0
+        },
+        {
+          "label": "tx28/mzm/transfer0",
+          "kind": "eo",
+          "gainDb": -4,
+          "opticalPowerDbm": 2,
+          "rfGainDb": 0
+        },
+        {
+          "label": "tx-mux28",
+          "kind": "connection",
+          "gainDb": 0,
+          "opticalPowerDbm": 2,
+          "rfGainDb": 0
+        },
+        {
+          "label": "mux/transfer0",
+          "kind": "optical",
+          "gainDb": -1,
+          "opticalPowerDbm": 1,
+          "rfGainDb": 0
+        },
+        {
+          "label": "mux-attenuator",
+          "kind": "connection",
+          "gainDb": 0,
+          "opticalPowerDbm": 1,
+          "rfGainDb": 0
+        },
+        {
+          "label": "attenuator/transfer0",
+          "kind": "optical",
+          "gainDb": 0,
+          "opticalPowerDbm": 1,
+          "rfGainDb": 0
+        },
+        {
+          "label": "shared-fiber",
+          "kind": "connection",
+          "gainDb": -2,
+          "opticalPowerDbm": -1,
+          "rfGainDb": 0
+        },
+        {
+          "label": "demux/transfer0",
+          "kind": "optical",
+          "gainDb": -1,
+          "opticalPowerDbm": -2,
+          "rfGainDb": 0
+        },
+        {
+          "label": "demux-pd28",
+          "kind": "connection",
+          "gainDb": 0,
+          "opticalPowerDbm": -2,
+          "rfGainDb": 0
+        },
+        {
+          "label": "pd28/transfer0",
+          "kind": "oe",
+          "gainDb": -22,
+          "opticalPowerDbm": -2,
+          "rfGainDb": -22
+        },
+        {
+          "label": "rf-out28",
+          "kind": "connection",
+          "gainDb": 0,
+          "opticalPowerDbm": -2,
+          "rfGainDb": -22
+        }
+      ],
+      "path": [
+        {
+          "id": "rf-in28",
+          "from": "input28:rf",
+          "to": "tx28:rf",
+          "kind": "connection",
+          "connection": {
+            "id": "rf-in28",
+            "from": {
+              "instanceId": "input28",
+              "portId": "rf"
+            },
+            "to": {
+              "instanceId": "tx28",
+              "portId": "rf"
+            },
+            "gainDb": {
+              "kind": "fixed",
+              "value": 0
+            }
+          }
+        },
+        {
+          "id": "tx28/map-rf",
+          "from": "tx28:rf",
+          "to": "tx28/mzm:rf",
+          "kind": "mapping"
+        },
+        {
+          "id": "tx28/mzm/transfer0",
+          "from": "tx28/mzm:rf",
+          "to": "tx28/mzm:opt",
+          "kind": "eo",
+          "instanceId": "tx28/mzm",
+          "transfer": {
+            "from": "rf",
+            "to": "opt",
+            "kind": "eo",
+            "supplyPort": "laser"
+          }
+        },
+        {
+          "id": "tx28/map-opt",
+          "from": "tx28/mzm:opt",
+          "to": "tx28:opt",
+          "kind": "mapping"
+        },
+        {
+          "id": "tx-mux28",
+          "from": "tx28:opt",
+          "to": "mux:ch28",
+          "kind": "connection",
+          "connection": {
+            "id": "tx-mux28",
+            "from": {
+              "instanceId": "tx28",
+              "portId": "opt"
+            },
+            "to": {
+              "instanceId": "mux",
+              "portId": "ch28"
+            },
+            "gainDb": {
+              "kind": "fixed",
+              "value": 0
+            }
+          }
+        },
+        {
+          "id": "mux/transfer0",
+          "from": "mux:ch28",
+          "to": "mux:line",
+          "kind": "optical",
+          "instanceId": "mux",
+          "transfer": {
+            "from": "ch28",
+            "to": "line",
+            "kind": "optical",
+            "channels": [
+              "DWDM_CH28"
+            ],
+            "gainDb": {
+              "kind": "channel",
+              "values": {
+                "DWDM_CH28": -1,
+                "DWDM_CH30": -1
+              }
+            }
+          }
+        },
+        {
+          "id": "mux-attenuator",
+          "from": "mux:line",
+          "to": "attenuator:in",
+          "kind": "connection",
+          "connection": {
+            "id": "mux-attenuator",
+            "from": {
+              "instanceId": "mux",
+              "portId": "line"
+            },
+            "to": {
+              "instanceId": "attenuator",
+              "portId": "in"
+            },
+            "gainDb": {
+              "kind": "fixed",
+              "value": 0
+            }
+          }
+        },
+        {
+          "id": "attenuator/transfer0",
+          "from": "attenuator:in",
+          "to": "attenuator:out",
+          "kind": "optical",
+          "instanceId": "attenuator",
+          "transfer": {
+            "from": "in",
+            "to": "out",
+            "kind": "optical",
+            "gainDb": {
+              "kind": "channel",
+              "values": {
+                "DWDM_CH28": 0,
+                "DWDM_CH30": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "shared-fiber",
+          "from": "attenuator:out",
+          "to": "demux:line",
+          "kind": "connection",
+          "connection": {
+            "id": "shared-fiber",
+            "from": {
+              "instanceId": "attenuator",
+              "portId": "out"
+            },
+            "to": {
+              "instanceId": "demux",
+              "portId": "line"
+            },
+            "gainDb": {
+              "kind": "fixed",
+              "value": -2
+            }
+          }
+        },
+        {
+          "id": "demux/transfer0",
+          "from": "demux:line",
+          "to": "demux:ch28",
+          "kind": "optical",
+          "instanceId": "demux",
+          "transfer": {
+            "from": "line",
+            "to": "ch28",
+            "kind": "optical",
+            "channels": [
+              "DWDM_CH28"
+            ],
+            "gainDb": {
+              "kind": "channel",
+              "values": {
+                "DWDM_CH28": -1,
+                "DWDM_CH30": -1
+              }
+            }
+          }
+        },
+        {
+          "id": "demux-pd28",
+          "from": "demux:ch28",
+          "to": "pd28:opt",
+          "kind": "connection",
+          "connection": {
+            "id": "demux-pd28",
+            "from": {
+              "instanceId": "demux",
+              "portId": "ch28"
+            },
+            "to": {
+              "instanceId": "pd28",
+              "portId": "opt"
+            },
+            "gainDb": {
+              "kind": "fixed",
+              "value": 0
+            }
+          }
+        },
+        {
+          "id": "pd28/transfer0",
+          "from": "pd28:opt",
+          "to": "pd28:rf",
+          "kind": "oe",
+          "instanceId": "pd28",
+          "transfer": {
+            "from": "opt",
+            "to": "rf",
+            "kind": "oe"
+          }
+        },
+        {
+          "id": "rf-out28",
+          "from": "pd28:rf",
+          "to": "output28:rf",
+          "kind": "connection",
+          "connection": {
+            "id": "rf-out28",
+            "from": {
+              "instanceId": "pd28",
+              "portId": "rf"
+            },
+            "to": {
+              "instanceId": "output28",
+              "portId": "rf"
+            },
+            "gainDb": {
+              "kind": "fixed",
+              "value": 0
+            }
+          }
+        }
+      ],
+      "highlightNodes": [
+        "input28",
+        "tx28",
+        "tx28/mzm",
+        "mux",
+        "attenuator",
+        "demux",
+        "pd28",
+        "output28",
+        "tx28/laser"
+      ],
+      "highlightConnections": [
+        "rf-in28",
+        "tx28/map-rf",
+        "tx28/map-opt",
+        "tx-mux28",
+        "mux-attenuator",
+        "shared-fiber",
+        "demux-pd28",
+        "rf-out28",
+        "tx28/laser-feed"
+      ],
+      "rfGainDb": -22,
+      "opticalPowerDbm": -2
+    },
+    {
+      "id": "link30",
+      "name": "RF_CH30",
+      "status": "ok",
+      "errors": [],
+      "frequencyGHz": 1,
+      "stages": [
+        {
+          "label": "rf-in30",
+          "kind": "connection",
+          "gainDb": 0,
+          "rfGainDb": 0
+        },
+        {
+          "label": "tx30/mzm/transfer0",
+          "kind": "eo",
+          "gainDb": -4,
+          "opticalPowerDbm": 4,
+          "rfGainDb": 0
+        },
+        {
+          "label": "tx-mux30",
+          "kind": "connection",
+          "gainDb": 0,
+          "opticalPowerDbm": 4,
+          "rfGainDb": 0
+        },
+        {
+          "label": "mux/transfer1",
+          "kind": "optical",
+          "gainDb": -1,
+          "opticalPowerDbm": 3,
+          "rfGainDb": 0
+        },
+        {
+          "label": "mux-attenuator",
+          "kind": "connection",
+          "gainDb": 0,
+          "opticalPowerDbm": 3,
+          "rfGainDb": 0
+        },
+        {
+          "label": "attenuator/transfer0",
+          "kind": "optical",
+          "gainDb": 0,
+          "opticalPowerDbm": 3,
+          "rfGainDb": 0
+        },
+        {
+          "label": "shared-fiber",
+          "kind": "connection",
+          "gainDb": -2,
+          "opticalPowerDbm": 1,
+          "rfGainDb": 0
+        },
+        {
+          "label": "demux/transfer1",
+          "kind": "optical",
+          "gainDb": -1,
+          "opticalPowerDbm": 0,
+          "rfGainDb": 0
+        },
+        {
+          "label": "demux-pd30",
+          "kind": "connection",
+          "gainDb": 0,
+          "opticalPowerDbm": 0,
+          "rfGainDb": 0
+        },
+        {
+          "label": "pd30/transfer0",
+          "kind": "oe",
+          "gainDb": -22,
+          "opticalPowerDbm": 0,
+          "rfGainDb": -22
+        },
+        {
+          "label": "rf-out30",
+          "kind": "connection",
+          "gainDb": 0,
+          "opticalPowerDbm": 0,
+          "rfGainDb": -22
+        }
+      ],
+      "path": [
+        {
+          "id": "rf-in30",
+          "from": "input30:rf",
+          "to": "tx30:rf",
+          "kind": "connection",
+          "connection": {
+            "id": "rf-in30",
+            "from": {
+              "instanceId": "input30",
+              "portId": "rf"
+            },
+            "to": {
+              "instanceId": "tx30",
+              "portId": "rf"
+            },
+            "gainDb": {
+              "kind": "fixed",
+              "value": 0
+            }
+          }
+        },
+        {
+          "id": "tx30/map-rf",
+          "from": "tx30:rf",
+          "to": "tx30/mzm:rf",
+          "kind": "mapping"
+        },
+        {
+          "id": "tx30/mzm/transfer0",
+          "from": "tx30/mzm:rf",
+          "to": "tx30/mzm:opt",
+          "kind": "eo",
+          "instanceId": "tx30/mzm",
+          "transfer": {
+            "from": "rf",
+            "to": "opt",
+            "kind": "eo",
+            "supplyPort": "laser"
+          }
+        },
+        {
+          "id": "tx30/map-opt",
+          "from": "tx30/mzm:opt",
+          "to": "tx30:opt",
+          "kind": "mapping"
+        },
+        {
+          "id": "tx-mux30",
+          "from": "tx30:opt",
+          "to": "mux:ch30",
+          "kind": "connection",
+          "connection": {
+            "id": "tx-mux30",
+            "from": {
+              "instanceId": "tx30",
+              "portId": "opt"
+            },
+            "to": {
+              "instanceId": "mux",
+              "portId": "ch30"
+            },
+            "gainDb": {
+              "kind": "fixed",
+              "value": 0
+            }
+          }
+        },
+        {
+          "id": "mux/transfer1",
+          "from": "mux:ch30",
+          "to": "mux:line",
+          "kind": "optical",
+          "instanceId": "mux",
+          "transfer": {
+            "from": "ch30",
+            "to": "line",
+            "kind": "optical",
+            "channels": [
+              "DWDM_CH30"
+            ],
+            "gainDb": {
+              "kind": "channel",
+              "values": {
+                "DWDM_CH28": -1,
+                "DWDM_CH30": -1
+              }
+            }
+          }
+        },
+        {
+          "id": "mux-attenuator",
+          "from": "mux:line",
+          "to": "attenuator:in",
+          "kind": "connection",
+          "connection": {
+            "id": "mux-attenuator",
+            "from": {
+              "instanceId": "mux",
+              "portId": "line"
+            },
+            "to": {
+              "instanceId": "attenuator",
+              "portId": "in"
+            },
+            "gainDb": {
+              "kind": "fixed",
+              "value": 0
+            }
+          }
+        },
+        {
+          "id": "attenuator/transfer0",
+          "from": "attenuator:in",
+          "to": "attenuator:out",
+          "kind": "optical",
+          "instanceId": "attenuator",
+          "transfer": {
+            "from": "in",
+            "to": "out",
+            "kind": "optical",
+            "gainDb": {
+              "kind": "channel",
+              "values": {
+                "DWDM_CH28": 0,
+                "DWDM_CH30": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "shared-fiber",
+          "from": "attenuator:out",
+          "to": "demux:line",
+          "kind": "connection",
+          "connection": {
+            "id": "shared-fiber",
+            "from": {
+              "instanceId": "attenuator",
+              "portId": "out"
+            },
+            "to": {
+              "instanceId": "demux",
+              "portId": "line"
+            },
+            "gainDb": {
+              "kind": "fixed",
+              "value": -2
+            }
+          }
+        },
+        {
+          "id": "demux/transfer1",
+          "from": "demux:line",
+          "to": "demux:ch30",
+          "kind": "optical",
+          "instanceId": "demux",
+          "transfer": {
+            "from": "line",
+            "to": "ch30",
+            "kind": "optical",
+            "channels": [
+              "DWDM_CH30"
+            ],
+            "gainDb": {
+              "kind": "channel",
+              "values": {
+                "DWDM_CH28": -1,
+                "DWDM_CH30": -1
+              }
+            }
+          }
+        },
+        {
+          "id": "demux-pd30",
+          "from": "demux:ch30",
+          "to": "pd30:opt",
+          "kind": "connection",
+          "connection": {
+            "id": "demux-pd30",
+            "from": {
+              "instanceId": "demux",
+              "portId": "ch30"
+            },
+            "to": {
+              "instanceId": "pd30",
+              "portId": "opt"
+            },
+            "gainDb": {
+              "kind": "fixed",
+              "value": 0
+            }
+          }
+        },
+        {
+          "id": "pd30/transfer0",
+          "from": "pd30:opt",
+          "to": "pd30:rf",
+          "kind": "oe",
+          "instanceId": "pd30",
+          "transfer": {
+            "from": "opt",
+            "to": "rf",
+            "kind": "oe"
+          }
+        },
+        {
+          "id": "rf-out30",
+          "from": "pd30:rf",
+          "to": "output30:rf",
+          "kind": "connection",
+          "connection": {
+            "id": "rf-out30",
+            "from": {
+              "instanceId": "pd30",
+              "portId": "rf"
+            },
+            "to": {
+              "instanceId": "output30",
+              "portId": "rf"
+            },
+            "gainDb": {
+              "kind": "fixed",
+              "value": 0
+            }
+          }
+        }
+      ],
+      "highlightNodes": [
+        "input30",
+        "tx30",
+        "tx30/mzm",
+        "mux",
+        "attenuator",
+        "demux",
+        "pd30",
+        "output30",
+        "tx30/laser"
+      ],
+      "highlightConnections": [
+        "rf-in30",
+        "tx30/map-rf",
+        "tx30/map-opt",
+        "tx-mux30",
+        "mux-attenuator",
+        "shared-fiber",
+        "demux-pd30",
+        "rf-out30",
+        "tx30/laser-feed"
+      ],
+      "rfGainDb": -22,
+      "opticalPowerDbm": 0
+    },
+    {
+      "id": "rf-scan",
+      "name": "PCB → RF 后级 · 扫频 / NF",
+      "status": "ok",
+      "errors": [],
+      "frequencyGHz": 1,
+      "stages": [
+        {
+          "label": "pcb/transfer0",
+          "kind": "rf",
+          "gainDb": 10,
+          "rfGainDb": 10
+        },
+        {
+          "label": "pcb-amp",
+          "kind": "connection",
+          "gainDb": 0,
+          "rfGainDb": 10
+        },
+        {
+          "label": "amp/transfer0",
+          "kind": "rf",
+          "gainDb": 6,
+          "rfGainDb": 16
+        }
+      ],
+      "path": [
+        {
+          "id": "pcb/transfer0",
+          "from": "pcb:RF_IN",
+          "to": "pcb:RF_OUT",
+          "kind": "rf",
+          "instanceId": "pcb",
+          "transfer": {
+            "from": "RF_IN",
+            "to": "RF_OUT",
+            "kind": "rf",
+            "gainDb": {
+              "kind": "rf",
+              "points": [
+                [
+                  1,
+                  10
+                ],
+                [
+                  3,
+                  14
+                ],
+                [
+                  5,
+                  12
+                ]
+              ]
+            },
+            "nfDb": {
+              "kind": "fixed",
+              "value": 3
+            }
+          }
+        },
+        {
+          "id": "pcb-amp",
+          "from": "pcb:RF_OUT",
+          "to": "amp:in",
+          "kind": "connection",
+          "connection": {
+            "id": "pcb-amp",
+            "from": {
+              "instanceId": "pcb",
+              "portId": "RF_OUT"
+            },
+            "to": {
+              "instanceId": "amp",
+              "portId": "in"
+            },
+            "gainDb": {
+              "kind": "fixed",
+              "value": 0
+            }
+          }
+        },
+        {
+          "id": "amp/transfer0",
+          "from": "amp:in",
+          "to": "amp:out",
+          "kind": "rf",
+          "instanceId": "amp",
+          "transfer": {
+            "from": "in",
+            "to": "out",
+            "kind": "rf",
+            "gainDb": {
+              "kind": "fixed",
+              "value": 6
+            },
+            "nfDb": {
+              "kind": "fixed",
+              "value": 4
+            }
+          }
+        }
+      ],
+      "highlightNodes": [
+        "pcb",
+        "amp"
+      ],
+      "highlightConnections": [
+        "pcb-amp"
+      ],
+      "rfGainDb": 16,
+      "nfDb": 3.3172097021529496
+    },
+    {
+      "id": "unconnected",
+      "name": "未定义关系 · 应无法连通",
+      "status": "error",
+      "errors": [
+        "无法连通：检查端口关系、通道和必经连接约束"
+      ],
+      "frequencyGHz": 1,
+      "stages": [],
+      "path": [],
+      "highlightNodes": [],
+      "highlightConnections": []
+    },
+    {
+      "id": "pcb-optical",
+      "name": "PCB 光端口 · 插损验证",
+      "status": "ok",
+      "errors": [],
+      "frequencyGHz": 1,
+      "stages": [
+        {
+          "label": "tx-pcb-opt",
+          "kind": "connection",
+          "gainDb": 0,
+          "opticalPowerDbm": 2,
+          "rfGainDb": 0
+        },
+        {
+          "label": "pcb/transfer1",
+          "kind": "optical",
+          "gainDb": -1.5,
+          "opticalPowerDbm": 0.5,
+          "rfGainDb": 0
+        }
+      ],
+      "path": [
+        {
+          "id": "tx-pcb-opt",
+          "from": "tx28:opt",
+          "to": "pcb:OPT_IN",
+          "kind": "connection",
+          "connection": {
+            "id": "tx-pcb-opt",
+            "from": {
+              "instanceId": "tx28",
+              "portId": "opt"
+            },
+            "to": {
+              "instanceId": "pcb",
+              "portId": "OPT_IN"
+            },
+            "gainDb": {
+              "kind": "fixed",
+              "value": 0
+            }
+          }
+        },
+        {
+          "id": "pcb/transfer1",
+          "from": "pcb:OPT_IN",
+          "to": "pcb:OPT_OUT",
+          "kind": "optical",
+          "instanceId": "pcb",
+          "transfer": {
+            "from": "OPT_IN",
+            "to": "OPT_OUT",
+            "kind": "optical",
+            "gainDb": {
+              "kind": "channel",
+              "values": {
+                "DWDM_CH28": -1.5,
+                "DWDM_CH30": -2
+              }
+            }
+          }
+        }
+      ],
+      "highlightNodes": [
+        "tx28",
+        "pcb",
+        "tx28/laser",
+        "tx28/mzm"
+      ],
+      "highlightConnections": [
+        "tx-pcb-opt",
+        "tx28/laser-feed",
+        "tx28/map-opt"
+      ],
+      "opticalPowerDbm": 0.5
+    }
+  ],
+  "rfScan": [
+    {
+      "status": "ok",
+      "errors": [],
+      "frequencyGHz": 1,
+      "stages": [
+        {
+          "label": "pcb/transfer0",
+          "kind": "rf",
+          "gainDb": 10,
+          "rfGainDb": 10
+        },
+        {
+          "label": "pcb-amp",
+          "kind": "connection",
+          "gainDb": 0,
+          "rfGainDb": 10
+        },
+        {
+          "label": "amp/transfer0",
+          "kind": "rf",
+          "gainDb": 6,
+          "rfGainDb": 16
+        }
+      ],
+      "path": [
+        {
+          "id": "pcb/transfer0",
+          "from": "pcb:RF_IN",
+          "to": "pcb:RF_OUT",
+          "kind": "rf",
+          "instanceId": "pcb",
+          "transfer": {
+            "from": "RF_IN",
+            "to": "RF_OUT",
+            "kind": "rf",
+            "gainDb": {
+              "kind": "rf",
+              "points": [
+                [
+                  1,
+                  10
+                ],
+                [
+                  3,
+                  14
+                ],
+                [
+                  5,
+                  12
+                ]
+              ]
+            },
+            "nfDb": {
+              "kind": "fixed",
+              "value": 3
+            }
+          }
+        },
+        {
+          "id": "pcb-amp",
+          "from": "pcb:RF_OUT",
+          "to": "amp:in",
+          "kind": "connection",
+          "connection": {
+            "id": "pcb-amp",
+            "from": {
+              "instanceId": "pcb",
+              "portId": "RF_OUT"
+            },
+            "to": {
+              "instanceId": "amp",
+              "portId": "in"
+            },
+            "gainDb": {
+              "kind": "fixed",
+              "value": 0
+            }
+          }
+        },
+        {
+          "id": "amp/transfer0",
+          "from": "amp:in",
+          "to": "amp:out",
+          "kind": "rf",
+          "instanceId": "amp",
+          "transfer": {
+            "from": "in",
+            "to": "out",
+            "kind": "rf",
+            "gainDb": {
+              "kind": "fixed",
+              "value": 6
+            },
+            "nfDb": {
+              "kind": "fixed",
+              "value": 4
+            }
+          }
+        }
+      ],
+      "highlightNodes": [
+        "pcb",
+        "amp"
+      ],
+      "highlightConnections": [
+        "pcb-amp"
+      ],
+      "rfGainDb": 16,
+      "nfDb": 3.3172097021529496
+    },
+    {
+      "status": "ok",
+      "errors": [],
+      "frequencyGHz": 2,
+      "stages": [
+        {
+          "label": "pcb/transfer0",
+          "kind": "rf",
+          "gainDb": 12,
+          "rfGainDb": 12
+        },
+        {
+          "label": "pcb-amp",
+          "kind": "connection",
+          "gainDb": 0,
+          "rfGainDb": 12
+        },
+        {
+          "label": "amp/transfer0",
+          "kind": "rf",
+          "gainDb": 6,
+          "rfGainDb": 18
+        }
+      ],
+      "path": [
+        {
+          "id": "pcb/transfer0",
+          "from": "pcb:RF_IN",
+          "to": "pcb:RF_OUT",
+          "kind": "rf",
+          "instanceId": "pcb",
+          "transfer": {
+            "from": "RF_IN",
+            "to": "RF_OUT",
+            "kind": "rf",
+            "gainDb": {
+              "kind": "rf",
+              "points": [
+                [
+                  1,
+                  10
+                ],
+                [
+                  3,
+                  14
+                ],
+                [
+                  5,
+                  12
+                ]
+              ]
+            },
+            "nfDb": {
+              "kind": "fixed",
+              "value": 3
+            }
+          }
+        },
+        {
+          "id": "pcb-amp",
+          "from": "pcb:RF_OUT",
+          "to": "amp:in",
+          "kind": "connection",
+          "connection": {
+            "id": "pcb-amp",
+            "from": {
+              "instanceId": "pcb",
+              "portId": "RF_OUT"
+            },
+            "to": {
+              "instanceId": "amp",
+              "portId": "in"
+            },
+            "gainDb": {
+              "kind": "fixed",
+              "value": 0
+            }
+          }
+        },
+        {
+          "id": "amp/transfer0",
+          "from": "amp:in",
+          "to": "amp:out",
+          "kind": "rf",
+          "instanceId": "amp",
+          "transfer": {
+            "from": "in",
+            "to": "out",
+            "kind": "rf",
+            "gainDb": {
+              "kind": "fixed",
+              "value": 6
+            },
+            "nfDb": {
+              "kind": "fixed",
+              "value": 4
+            }
+          }
+        }
+      ],
+      "highlightNodes": [
+        "pcb",
+        "amp"
+      ],
+      "highlightConnections": [
+        "pcb-amp"
+      ],
+      "rfGainDb": 18,
+      "nfDb": 3.202825583413662
+    },
+    {
+      "status": "ok",
+      "errors": [],
+      "frequencyGHz": 3,
+      "stages": [
+        {
+          "label": "pcb/transfer0",
+          "kind": "rf",
+          "gainDb": 14,
+          "rfGainDb": 14
+        },
+        {
+          "label": "pcb-amp",
+          "kind": "connection",
+          "gainDb": 0,
+          "rfGainDb": 14
+        },
+        {
+          "label": "amp/transfer0",
+          "kind": "rf",
+          "gainDb": 6,
+          "rfGainDb": 20
+        }
+      ],
+      "path": [
+        {
+          "id": "pcb/transfer0",
+          "from": "pcb:RF_IN",
+          "to": "pcb:RF_OUT",
+          "kind": "rf",
+          "instanceId": "pcb",
+          "transfer": {
+            "from": "RF_IN",
+            "to": "RF_OUT",
+            "kind": "rf",
+            "gainDb": {
+              "kind": "rf",
+              "points": [
+                [
+                  1,
+                  10
+                ],
+                [
+                  3,
+                  14
+                ],
+                [
+                  5,
+                  12
+                ]
+              ]
+            },
+            "nfDb": {
+              "kind": "fixed",
+              "value": 3
+            }
+          }
+        },
+        {
+          "id": "pcb-amp",
+          "from": "pcb:RF_OUT",
+          "to": "amp:in",
+          "kind": "connection",
+          "connection": {
+            "id": "pcb-amp",
+            "from": {
+              "instanceId": "pcb",
+              "portId": "RF_OUT"
+            },
+            "to": {
+              "instanceId": "amp",
+              "portId": "in"
+            },
+            "gainDb": {
+              "kind": "fixed",
+              "value": 0
+            }
+          }
+        },
+        {
+          "id": "amp/transfer0",
+          "from": "amp:in",
+          "to": "amp:out",
+          "kind": "rf",
+          "instanceId": "amp",
+          "transfer": {
+            "from": "in",
+            "to": "out",
+            "kind": "rf",
+            "gainDb": {
+              "kind": "fixed",
+              "value": 6
+            },
+            "nfDb": {
+              "kind": "fixed",
+              "value": 4
+            }
+          }
+        }
+      ],
+      "highlightNodes": [
+        "pcb",
+        "amp"
+      ],
+      "highlightConnections": [
+        "pcb-amp"
+      ],
+      "rfGainDb": 20,
+      "nfDb": 3.1290725440434493
+    },
+    {
+      "status": "ok",
+      "errors": [],
+      "frequencyGHz": 4,
+      "stages": [
+        {
+          "label": "pcb/transfer0",
+          "kind": "rf",
+          "gainDb": 13,
+          "rfGainDb": 13
+        },
+        {
+          "label": "pcb-amp",
+          "kind": "connection",
+          "gainDb": 0,
+          "rfGainDb": 13
+        },
+        {
+          "label": "amp/transfer0",
+          "kind": "rf",
+          "gainDb": 6,
+          "rfGainDb": 19
+        }
+      ],
+      "path": [
+        {
+          "id": "pcb/transfer0",
+          "from": "pcb:RF_IN",
+          "to": "pcb:RF_OUT",
+          "kind": "rf",
+          "instanceId": "pcb",
+          "transfer": {
+            "from": "RF_IN",
+            "to": "RF_OUT",
+            "kind": "rf",
+            "gainDb": {
+              "kind": "rf",
+              "points": [
+                [
+                  1,
+                  10
+                ],
+                [
+                  3,
+                  14
+                ],
+                [
+                  5,
+                  12
+                ]
+              ]
+            },
+            "nfDb": {
+              "kind": "fixed",
+              "value": 3
+            }
+          }
+        },
+        {
+          "id": "pcb-amp",
+          "from": "pcb:RF_OUT",
+          "to": "amp:in",
+          "kind": "connection",
+          "connection": {
+            "id": "pcb-amp",
+            "from": {
+              "instanceId": "pcb",
+              "portId": "RF_OUT"
+            },
+            "to": {
+              "instanceId": "amp",
+              "portId": "in"
+            },
+            "gainDb": {
+              "kind": "fixed",
+              "value": 0
+            }
+          }
+        },
+        {
+          "id": "amp/transfer0",
+          "from": "amp:in",
+          "to": "amp:out",
+          "kind": "rf",
+          "instanceId": "amp",
+          "transfer": {
+            "from": "in",
+            "to": "out",
+            "kind": "rf",
+            "gainDb": {
+              "kind": "fixed",
+              "value": 6
+            },
+            "nfDb": {
+              "kind": "fixed",
+              "value": 4
+            }
+          }
+        }
+      ],
+      "highlightNodes": [
+        "pcb",
+        "amp"
+      ],
+      "highlightConnections": [
+        "pcb-amp"
+      ],
+      "rfGainDb": 19,
+      "nfDb": 3.161876759733649
+    },
+    {
+      "status": "ok",
+      "errors": [],
+      "frequencyGHz": 5,
+      "stages": [
+        {
+          "label": "pcb/transfer0",
+          "kind": "rf",
+          "gainDb": 12,
+          "rfGainDb": 12
+        },
+        {
+          "label": "pcb-amp",
+          "kind": "connection",
+          "gainDb": 0,
+          "rfGainDb": 12
+        },
+        {
+          "label": "amp/transfer0",
+          "kind": "rf",
+          "gainDb": 6,
+          "rfGainDb": 18
+        }
+      ],
+      "path": [
+        {
+          "id": "pcb/transfer0",
+          "from": "pcb:RF_IN",
+          "to": "pcb:RF_OUT",
+          "kind": "rf",
+          "instanceId": "pcb",
+          "transfer": {
+            "from": "RF_IN",
+            "to": "RF_OUT",
+            "kind": "rf",
+            "gainDb": {
+              "kind": "rf",
+              "points": [
+                [
+                  1,
+                  10
+                ],
+                [
+                  3,
+                  14
+                ],
+                [
+                  5,
+                  12
+                ]
+              ]
+            },
+            "nfDb": {
+              "kind": "fixed",
+              "value": 3
+            }
+          }
+        },
+        {
+          "id": "pcb-amp",
+          "from": "pcb:RF_OUT",
+          "to": "amp:in",
+          "kind": "connection",
+          "connection": {
+            "id": "pcb-amp",
+            "from": {
+              "instanceId": "pcb",
+              "portId": "RF_OUT"
+            },
+            "to": {
+              "instanceId": "amp",
+              "portId": "in"
+            },
+            "gainDb": {
+              "kind": "fixed",
+              "value": 0
+            }
+          }
+        },
+        {
+          "id": "amp/transfer0",
+          "from": "amp:in",
+          "to": "amp:out",
+          "kind": "rf",
+          "instanceId": "amp",
+          "transfer": {
+            "from": "in",
+            "to": "out",
+            "kind": "rf",
+            "gainDb": {
+              "kind": "fixed",
+              "value": 6
+            },
+            "nfDb": {
+              "kind": "fixed",
+              "value": 4
+            }
+          }
+        }
+      ],
+      "highlightNodes": [
+        "pcb",
+        "amp"
+      ],
+      "highlightConnections": [
+        "pcb-amp"
+      ],
+      "rfGainDb": 18,
+      "nfDb": 3.202825583413662
+    }
+  ]
+}

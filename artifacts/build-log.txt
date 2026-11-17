@@ -1,0 +1,15 @@
+
+> persona@0.0.1 build
+> tsc --noEmit && vite build && tsx scripts/package-artifacts.ts
+
+vite v7.3.8 building client environment for production...
+transforming...
+✓ 139 modules transformed.
+rendering chunks...
+[plugin vite:singlefile] 
+
+[plugin vite:singlefile] Inlining: index-Dt4oB-rh.js
+[plugin vite:singlefile] Inlining: style-a6Jx4b8Y.css
+dist/index.html  812.67 kB
+✓ built in 1.71s
+Packaged 849086 bytes with third-party notices: artifacts/persona-p0.html

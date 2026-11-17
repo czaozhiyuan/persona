@@ -1,0 +1,6 @@
+
+> persona@0.0.1 test:browser
+> tsx scripts/browser-smoke.ts
+
+chrome: offline file:// interactions and JSON roundtrip passed
+msedge: offline file:// interactions and JSON roundtrip passed

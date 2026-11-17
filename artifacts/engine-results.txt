@@ -1,0 +1,20 @@
+
+> persona@0.0.1 test
+> tsx --test tests/engine.test.ts
+
+✔ A5/A6: one shared fiber; -3 dB optical -> -6 dB RF; +3 dB -> +6 dB; fixed reference (3.0215ms)
+✔ A4: definition reuse, legal independent overrides, shared definition update, hierarchical path (0.9826ms)
+✔ A3: dynamic PCB port types, valid/invalid connections, explicit transfer only (0.7243ms)
+✔ A7: 1 GHz scan and independent Friis NF reference (0.7904ms)
+✔ V06: missing parameters and out-of-range RF never silently become zero; optical results survive missing RF reference (1.0693ms)
+✔ V05: unreachable and ambiguous routes reported; explicit constraint resolves ambiguity (0.3665ms)
+✔ A8/A9: JSON preserves entire project; layout edits do not change connections or the other view (2.8646ms)
+✔ channel grid and current-schema validation: CH28/CH30 are 200 GHz apart, CWDM uses standard centers (1.1202ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 149.132

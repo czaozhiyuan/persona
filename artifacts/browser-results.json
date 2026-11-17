@@ -1,0 +1,52 @@
+[
+  {
+    "channel": "chrome",
+    "version": "157.0.8103.51",
+    "url": "file:///E:/2026/Persona/artifacts/persona-p0.html",
+    "offline": true,
+    "networkRequests": [],
+    "pageErrors": [],
+    "checks": [
+      "file:// single HTML",
+      "RF -22/-28/-16",
+      "channel isolation",
+      "valid/invalid connection",
+      "physical drag and rotation",
+      "logical drag",
+      "independent coordinates",
+      "shared instance name",
+      "module overrides and common definition",
+      "1 GHz interpolation",
+      "unreachable route",
+      "JSON download / clear / file input / deep equality",
+      "missing reference displays partial validity",
+      "invalid import preserves current project"
+    ],
+    "status": "passed"
+  },
+  {
+    "channel": "msedge",
+    "version": "157.0.4341.60",
+    "url": "file:///E:/2026/Persona/artifacts/persona-p0.html",
+    "offline": true,
+    "networkRequests": [],
+    "pageErrors": [],
+    "checks": [
+      "file:// single HTML",
+      "RF -22/-28/-16",
+      "channel isolation",
+      "valid/invalid connection",
+      "physical drag and rotation",
+      "logical drag",
+      "independent coordinates",
+      "shared instance name",
+      "module overrides and common definition",
+      "1 GHz interpolation",
+      "unreachable route",
+      "JSON download / clear / file input / deep equality",
+      "missing reference displays partial validity",
+      "invalid import preserves current project"
+    ],
+    "status": "passed"
+  }
+]
