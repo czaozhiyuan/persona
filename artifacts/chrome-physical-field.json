@@ -1,0 +1,1724 @@
+{
+  "schemaVersion": 1,
+  "name": "1U · 双通道光电传输验证",
+  "chassis": {
+    "width": 440,
+    "depth": 350,
+    "height": 44.45
+  },
+  "channels": [
+    {
+      "id": "MM850",
+      "family": "MM850",
+      "label": "MM850 · 850 nm",
+      "wavelengthNm": 850
+    },
+    {
+      "id": "CWDM_1271",
+      "family": "CWDM",
+      "wavelengthNm": 1271,
+      "label": "1270 (1271 nm)"
+    },
+    {
+      "id": "CWDM_1291",
+      "family": "CWDM",
+      "wavelengthNm": 1291,
+      "label": "1290 (1291 nm)"
+    },
+    {
+      "id": "CWDM_1311",
+      "family": "CWDM",
+      "wavelengthNm": 1311,
+      "label": "1310 (1311 nm)"
+    },
+    {
+      "id": "CWDM_1331",
+      "family": "CWDM",
+      "wavelengthNm": 1331,
+      "label": "1330 (1331 nm)"
+    },
+    {
+      "id": "CWDM_1351",
+      "family": "CWDM",
+      "wavelengthNm": 1351,
+      "label": "1350 (1351 nm)"
+    },
+    {
+      "id": "CWDM_1371",
+      "family": "CWDM",
+      "wavelengthNm": 1371,
+      "label": "1370 (1371 nm)"
+    },
+    {
+      "id": "CWDM_1391",
+      "family": "CWDM",
+      "wavelengthNm": 1391,
+      "label": "1390 (1391 nm)"
+    },
+    {
+      "id": "CWDM_1411",
+      "family": "CWDM",
+      "wavelengthNm": 1411,
+      "label": "1410 (1411 nm)"
+    },
+    {
+      "id": "CWDM_1431",
+      "family": "CWDM",
+      "wavelengthNm": 1431,
+      "label": "1430 (1431 nm)"
+    },
+    {
+      "id": "CWDM_1451",
+      "family": "CWDM",
+      "wavelengthNm": 1451,
+      "label": "1450 (1451 nm)"
+    },
+    {
+      "id": "CWDM_1471",
+      "family": "CWDM",
+      "wavelengthNm": 1471,
+      "label": "1470 (1471 nm)"
+    },
+    {
+      "id": "CWDM_1491",
+      "family": "CWDM",
+      "wavelengthNm": 1491,
+      "label": "1490 (1491 nm)"
+    },
+    {
+      "id": "CWDM_1511",
+      "family": "CWDM",
+      "wavelengthNm": 1511,
+      "label": "1510 (1511 nm)"
+    },
+    {
+      "id": "CWDM_1531",
+      "family": "CWDM",
+      "wavelengthNm": 1531,
+      "label": "1530 (1531 nm)"
+    },
+    {
+      "id": "CWDM_1551",
+      "family": "CWDM",
+      "wavelengthNm": 1551,
+      "label": "1550 (1551 nm)"
+    },
+    {
+      "id": "CWDM_1571",
+      "family": "CWDM",
+      "wavelengthNm": 1571,
+      "label": "1570 (1571 nm)"
+    },
+    {
+      "id": "CWDM_1591",
+      "family": "CWDM",
+      "wavelengthNm": 1591,
+      "label": "1590 (1591 nm)"
+    },
+    {
+      "id": "CWDM_1611",
+      "family": "CWDM",
+      "wavelengthNm": 1611,
+      "label": "1610 (1611 nm)"
+    },
+    {
+      "id": "DWDM_CH1",
+      "family": "DWDM_100G",
+      "frequencyTHz": 190.1,
+      "wavelengthNm": 1577.025028932141,
+      "label": "CH1 · 190.1 THz"
+    },
+    {
+      "id": "DWDM_CH2",
+      "family": "DWDM_100G",
+      "frequencyTHz": 190.2,
+      "wavelengthNm": 1576.1958885383806,
+      "label": "CH2 · 190.2 THz"
+    },
+    {
+      "id": "DWDM_CH3",
+      "family": "DWDM_100G",
+      "frequencyTHz": 190.3,
+      "wavelengthNm": 1575.3676195480818,
+      "label": "CH3 · 190.3 THz"
+    },
+    {
+      "id": "DWDM_CH4",
+      "family": "DWDM_100G",
+      "frequencyTHz": 190.4,
+      "wavelengthNm": 1574.5402205882351,
+      "label": "CH4 · 190.4 THz"
+    },
+    {
+      "id": "DWDM_CH5",
+      "family": "DWDM_100G",
+      "frequencyTHz": 190.5,
+      "wavelengthNm": 1573.713690288714,
+      "label": "CH5 · 190.5 THz"
+    },
+    {
+      "id": "DWDM_CH6",
+      "family": "DWDM_100G",
+      "frequencyTHz": 190.6,
+      "wavelengthNm": 1572.8880272822664,
+      "label": "CH6 · 190.6 THz"
+    },
+    {
+      "id": "DWDM_CH7",
+      "family": "DWDM_100G",
+      "frequencyTHz": 190.7,
+      "wavelengthNm": 1572.0632302045096,
+      "label": "CH7 · 190.7 THz"
+    },
+    {
+      "id": "DWDM_CH8",
+      "family": "DWDM_100G",
+      "frequencyTHz": 190.8,
+      "wavelengthNm": 1571.2392976939202,
+      "label": "CH8 · 190.8 THz"
+    },
+    {
+      "id": "DWDM_CH9",
+      "family": "DWDM_100G",
+      "frequencyTHz": 190.9,
+      "wavelengthNm": 1570.416228391828,
+      "label": "CH9 · 190.9 THz"
+    },
+    {
+      "id": "DWDM_CH10",
+      "family": "DWDM_100G",
+      "frequencyTHz": 191,
+      "wavelengthNm": 1569.5940209424084,
+      "label": "CH10 · 191.0 THz"
+    },
+    {
+      "id": "DWDM_CH11",
+      "family": "DWDM_100G",
+      "frequencyTHz": 191.1,
+      "wavelengthNm": 1568.7726739926738,
+      "label": "CH11 · 191.1 THz"
+    },
+    {
+      "id": "DWDM_CH12",
+      "family": "DWDM_100G",
+      "frequencyTHz": 191.2,
+      "wavelengthNm": 1567.9521861924686,
+      "label": "CH12 · 191.2 THz"
+    },
+    {
+      "id": "DWDM_CH13",
+      "family": "DWDM_100G",
+      "frequencyTHz": 191.3,
+      "wavelengthNm": 1567.1325561944589,
+      "label": "CH13 · 191.3 THz"
+    },
+    {
+      "id": "DWDM_CH14",
+      "family": "DWDM_100G",
+      "frequencyTHz": 191.4,
+      "wavelengthNm": 1566.3137826541274,
+      "label": "CH14 · 191.4 THz"
+    },
+    {
+      "id": "DWDM_CH15",
+      "family": "DWDM_100G",
+      "frequencyTHz": 191.5,
+      "wavelengthNm": 1565.495864229765,
+      "label": "CH15 · 191.5 THz"
+    },
+    {
+      "id": "DWDM_CH16",
+      "family": "DWDM_100G",
+      "frequencyTHz": 191.6,
+      "wavelengthNm": 1564.6787995824634,
+      "label": "CH16 · 191.6 THz"
+    },
+    {
+      "id": "DWDM_CH17",
+      "family": "DWDM_100G",
+      "frequencyTHz": 191.7,
+      "wavelengthNm": 1563.8625873761084,
+      "label": "CH17 · 191.7 THz"
+    },
+    {
+      "id": "DWDM_CH18",
+      "family": "DWDM_100G",
+      "frequencyTHz": 191.8,
+      "wavelengthNm": 1563.0472262773721,
+      "label": "CH18 · 191.8 THz"
+    },
+    {
+      "id": "DWDM_CH19",
+      "family": "DWDM_100G",
+      "frequencyTHz": 191.9,
+      "wavelengthNm": 1562.232714955706,
+      "label": "CH19 · 191.9 THz"
+    },
+    {
+      "id": "DWDM_CH20",
+      "family": "DWDM_100G",
+      "frequencyTHz": 192,
+      "wavelengthNm": 1561.4190520833333,
+      "label": "CH20 · 192.0 THz"
+    },
+    {
+      "id": "DWDM_CH21",
+      "family": "DWDM_100G",
+      "frequencyTHz": 192.1,
+      "wavelengthNm": 1560.606236335242,
+      "label": "CH21 · 192.1 THz"
+    },
+    {
+      "id": "DWDM_CH22",
+      "family": "DWDM_100G",
+      "frequencyTHz": 192.2,
+      "wavelengthNm": 1559.794266389178,
+      "label": "CH22 · 192.2 THz"
+    },
+    {
+      "id": "DWDM_CH23",
+      "family": "DWDM_100G",
+      "frequencyTHz": 192.3,
+      "wavelengthNm": 1558.983140925637,
+      "label": "CH23 · 192.3 THz"
+    },
+    {
+      "id": "DWDM_CH24",
+      "family": "DWDM_100G",
+      "frequencyTHz": 192.4,
+      "wavelengthNm": 1558.1728586278584,
+      "label": "CH24 · 192.4 THz"
+    },
+    {
+      "id": "DWDM_CH25",
+      "family": "DWDM_100G",
+      "frequencyTHz": 192.5,
+      "wavelengthNm": 1557.3634181818181,
+      "label": "CH25 · 192.5 THz"
+    },
+    {
+      "id": "DWDM_CH26",
+      "family": "DWDM_100G",
+      "frequencyTHz": 192.6,
+      "wavelengthNm": 1556.5548182762202,
+      "label": "CH26 · 192.6 THz"
+    },
+    {
+      "id": "DWDM_CH27",
+      "family": "DWDM_100G",
+      "frequencyTHz": 192.7,
+      "wavelengthNm": 1555.747057602491,
+      "label": "CH27 · 192.7 THz"
+    },
+    {
+      "id": "DWDM_CH28",
+      "family": "DWDM_100G",
+      "frequencyTHz": 192.8,
+      "wavelengthNm": 1554.9401348547717,
+      "label": "CH28 · 192.8 THz"
+    },
+    {
+      "id": "DWDM_CH29",
+      "family": "DWDM_100G",
+      "frequencyTHz": 192.9,
+      "wavelengthNm": 1554.1340487299117,
+      "label": "CH29 · 192.9 THz"
+    },
+    {
+      "id": "DWDM_CH30",
+      "family": "DWDM_100G",
+      "frequencyTHz": 193,
+      "wavelengthNm": 1553.328797927461,
+      "label": "CH30 · 193.0 THz"
+    },
+    {
+      "id": "DWDM_CH31",
+      "family": "DWDM_100G",
+      "frequencyTHz": 193.1,
+      "wavelengthNm": 1552.5243811496634,
+      "label": "CH31 · 193.1 THz"
+    },
+    {
+      "id": "DWDM_CH32",
+      "family": "DWDM_100G",
+      "frequencyTHz": 193.2,
+      "wavelengthNm": 1551.7207971014493,
+      "label": "CH32 · 193.2 THz"
+    },
+    {
+      "id": "DWDM_CH33",
+      "family": "DWDM_100G",
+      "frequencyTHz": 193.3,
+      "wavelengthNm": 1550.918044490429,
+      "label": "CH33 · 193.3 THz"
+    },
+    {
+      "id": "DWDM_CH34",
+      "family": "DWDM_100G",
+      "frequencyTHz": 193.4,
+      "wavelengthNm": 1550.116122026887,
+      "label": "CH34 · 193.4 THz"
+    },
+    {
+      "id": "DWDM_CH35",
+      "family": "DWDM_100G",
+      "frequencyTHz": 193.5,
+      "wavelengthNm": 1549.3150284237724,
+      "label": "CH35 · 193.5 THz"
+    },
+    {
+      "id": "DWDM_CH36",
+      "family": "DWDM_100G",
+      "frequencyTHz": 193.6,
+      "wavelengthNm": 1548.514762396694,
+      "label": "CH36 · 193.6 THz"
+    },
+    {
+      "id": "DWDM_CH37",
+      "family": "DWDM_100G",
+      "frequencyTHz": 193.7,
+      "wavelengthNm": 1547.7153226639132,
+      "label": "CH37 · 193.7 THz"
+    },
+    {
+      "id": "DWDM_CH38",
+      "family": "DWDM_100G",
+      "frequencyTHz": 193.8,
+      "wavelengthNm": 1546.9167079463361,
+      "label": "CH38 · 193.8 THz"
+    },
+    {
+      "id": "DWDM_CH39",
+      "family": "DWDM_100G",
+      "frequencyTHz": 193.9,
+      "wavelengthNm": 1546.118916967509,
+      "label": "CH39 · 193.9 THz"
+    },
+    {
+      "id": "DWDM_CH40",
+      "family": "DWDM_100G",
+      "frequencyTHz": 194,
+      "wavelengthNm": 1545.3219484536082,
+      "label": "CH40 · 194.0 THz"
+    },
+    {
+      "id": "DWDM_CH41",
+      "family": "DWDM_100G",
+      "frequencyTHz": 194.1,
+      "wavelengthNm": 1544.5258011334363,
+      "label": "CH41 · 194.1 THz"
+    },
+    {
+      "id": "DWDM_CH42",
+      "family": "DWDM_100G",
+      "frequencyTHz": 194.2,
+      "wavelengthNm": 1543.730473738414,
+      "label": "CH42 · 194.2 THz"
+    },
+    {
+      "id": "DWDM_CH43",
+      "family": "DWDM_100G",
+      "frequencyTHz": 194.3,
+      "wavelengthNm": 1542.935965002573,
+      "label": "CH43 · 194.3 THz"
+    },
+    {
+      "id": "DWDM_CH44",
+      "family": "DWDM_100G",
+      "frequencyTHz": 194.4,
+      "wavelengthNm": 1542.1422736625514,
+      "label": "CH44 · 194.4 THz"
+    },
+    {
+      "id": "DWDM_CH45",
+      "family": "DWDM_100G",
+      "frequencyTHz": 194.5,
+      "wavelengthNm": 1541.3493984575834,
+      "label": "CH45 · 194.5 THz"
+    },
+    {
+      "id": "DWDM_CH46",
+      "family": "DWDM_100G",
+      "frequencyTHz": 194.6,
+      "wavelengthNm": 1540.5573381294964,
+      "label": "CH46 · 194.6 THz"
+    },
+    {
+      "id": "DWDM_CH47",
+      "family": "DWDM_100G",
+      "frequencyTHz": 194.7,
+      "wavelengthNm": 1539.7660914227015,
+      "label": "CH47 · 194.7 THz"
+    },
+    {
+      "id": "DWDM_CH48",
+      "family": "DWDM_100G",
+      "frequencyTHz": 194.8,
+      "wavelengthNm": 1538.9756570841887,
+      "label": "CH48 · 194.8 THz"
+    },
+    {
+      "id": "DWDM_CH49",
+      "family": "DWDM_100G",
+      "frequencyTHz": 194.9,
+      "wavelengthNm": 1538.1860338635197,
+      "label": "CH49 · 194.9 THz"
+    },
+    {
+      "id": "DWDM_CH50",
+      "family": "DWDM_100G",
+      "frequencyTHz": 195,
+      "wavelengthNm": 1537.3972205128205,
+      "label": "CH50 · 195.0 THz"
+    },
+    {
+      "id": "DWDM_CH51",
+      "family": "DWDM_100G",
+      "frequencyTHz": 195.1,
+      "wavelengthNm": 1536.609215786776,
+      "label": "CH51 · 195.1 THz"
+    },
+    {
+      "id": "DWDM_CH52",
+      "family": "DWDM_100G",
+      "frequencyTHz": 195.2,
+      "wavelengthNm": 1535.822018442623,
+      "label": "CH52 · 195.2 THz"
+    },
+    {
+      "id": "DWDM_CH53",
+      "family": "DWDM_100G",
+      "frequencyTHz": 195.3,
+      "wavelengthNm": 1535.0356272401432,
+      "label": "CH53 · 195.3 THz"
+    },
+    {
+      "id": "DWDM_CH54",
+      "family": "DWDM_100G",
+      "frequencyTHz": 195.4,
+      "wavelengthNm": 1534.250040941658,
+      "label": "CH54 · 195.4 THz"
+    },
+    {
+      "id": "DWDM_CH55",
+      "family": "DWDM_100G",
+      "frequencyTHz": 195.5,
+      "wavelengthNm": 1533.4652583120203,
+      "label": "CH55 · 195.5 THz"
+    },
+    {
+      "id": "DWDM_CH56",
+      "family": "DWDM_100G",
+      "frequencyTHz": 195.6,
+      "wavelengthNm": 1532.6812781186093,
+      "label": "CH56 · 195.6 THz"
+    },
+    {
+      "id": "DWDM_CH57",
+      "family": "DWDM_100G",
+      "frequencyTHz": 195.7,
+      "wavelengthNm": 1531.8980991313235,
+      "label": "CH57 · 195.7 THz"
+    },
+    {
+      "id": "DWDM_CH58",
+      "family": "DWDM_100G",
+      "frequencyTHz": 195.8,
+      "wavelengthNm": 1531.115720122574,
+      "label": "CH58 · 195.8 THz"
+    },
+    {
+      "id": "DWDM_CH59",
+      "family": "DWDM_100G",
+      "frequencyTHz": 195.9,
+      "wavelengthNm": 1530.3341398672792,
+      "label": "CH59 · 195.9 THz"
+    },
+    {
+      "id": "DWDM_CH60",
+      "family": "DWDM_100G",
+      "frequencyTHz": 196,
+      "wavelengthNm": 1529.553357142857,
+      "label": "CH60 · 196.0 THz"
+    },
+    {
+      "id": "DWDM_CH61",
+      "family": "DWDM_100G",
+      "frequencyTHz": 196.1,
+      "wavelengthNm": 1528.7733707292198,
+      "label": "CH61 · 196.1 THz"
+    },
+    {
+      "id": "DWDM_CH62",
+      "family": "DWDM_100G",
+      "frequencyTHz": 196.2,
+      "wavelengthNm": 1527.9941794087665,
+      "label": "CH62 · 196.2 THz"
+    },
+    {
+      "id": "DWDM_CH63",
+      "family": "DWDM_100G",
+      "frequencyTHz": 196.3,
+      "wavelengthNm": 1527.2157819663778,
+      "label": "CH63 · 196.3 THz"
+    },
+    {
+      "id": "DWDM_CH64",
+      "family": "DWDM_100G",
+      "frequencyTHz": 196.4,
+      "wavelengthNm": 1526.4381771894093,
+      "label": "CH64 · 196.4 THz"
+    },
+    {
+      "id": "DWDM_CH65",
+      "family": "DWDM_100G",
+      "frequencyTHz": 196.5,
+      "wavelengthNm": 1525.6613638676845,
+      "label": "CH65 · 196.5 THz"
+    },
+    {
+      "id": "DWDM_CH66",
+      "family": "DWDM_100G",
+      "frequencyTHz": 196.6,
+      "wavelengthNm": 1524.8853407934894,
+      "label": "CH66 · 196.6 THz"
+    },
+    {
+      "id": "DWDM_CH67",
+      "family": "DWDM_100G",
+      "frequencyTHz": 196.7,
+      "wavelengthNm": 1524.110106761566,
+      "label": "CH67 · 196.7 THz"
+    },
+    {
+      "id": "DWDM_CH68",
+      "family": "DWDM_100G",
+      "frequencyTHz": 196.8,
+      "wavelengthNm": 1523.3356605691056,
+      "label": "CH68 · 196.8 THz"
+    },
+    {
+      "id": "DWDM_CH69",
+      "family": "DWDM_100G",
+      "frequencyTHz": 196.9,
+      "wavelengthNm": 1522.5620010157438,
+      "label": "CH69 · 196.9 THz"
+    },
+    {
+      "id": "DWDM_CH70",
+      "family": "DWDM_100G",
+      "frequencyTHz": 197,
+      "wavelengthNm": 1521.7891269035533,
+      "label": "CH70 · 197.0 THz"
+    },
+    {
+      "id": "DWDM_CH71",
+      "family": "DWDM_100G",
+      "frequencyTHz": 197.1,
+      "wavelengthNm": 1521.017037037037,
+      "label": "CH71 · 197.1 THz"
+    },
+    {
+      "id": "DWDM_CH72",
+      "family": "DWDM_100G",
+      "frequencyTHz": 197.2,
+      "wavelengthNm": 1520.2457302231237,
+      "label": "CH72 · 197.2 THz"
+    },
+    {
+      "id": "DWDM_CH73",
+      "family": "DWDM_100G",
+      "frequencyTHz": 197.3,
+      "wavelengthNm": 1519.4752052711606,
+      "label": "CH73 · 197.3 THz"
+    }
+  ],
+  "components": [
+    {
+      "id": "laser",
+      "name": "激光器",
+      "ports": [
+        {
+          "id": "opt",
+          "type": "OPTICAL",
+          "direction": "out"
+        }
+      ],
+      "transfers": [],
+      "params": {
+        "powerDbm": {
+          "kind": "fixed",
+          "value": 6
+        },
+        "channel": "DWDM_CH28"
+      },
+      "size": {
+        "width": 40,
+        "depth": 28
+      }
+    },
+    {
+      "id": "mzm",
+      "name": "MZM",
+      "ports": [
+        {
+          "id": "rf",
+          "type": "RF",
+          "direction": "in"
+        },
+        {
+          "id": "laser",
+          "type": "OPTICAL",
+          "direction": "in"
+        },
+        {
+          "id": "opt",
+          "type": "OPTICAL",
+          "direction": "out"
+        }
+      ],
+      "transfers": [
+        {
+          "from": "rf",
+          "to": "opt",
+          "kind": "eo",
+          "supplyPort": "laser"
+        }
+      ],
+      "params": {
+        "opticalGainDb": {
+          "kind": "fixed",
+          "value": -4
+        },
+        "channel": "DWDM_CH28"
+      },
+      "size": {
+        "width": 40,
+        "depth": 28
+      }
+    },
+    {
+      "id": "pd",
+      "name": "PD",
+      "ports": [
+        {
+          "id": "opt",
+          "type": "OPTICAL",
+          "direction": "in"
+        },
+        {
+          "id": "rf",
+          "type": "RF",
+          "direction": "out"
+        }
+      ],
+      "transfers": [
+        {
+          "from": "opt",
+          "to": "rf",
+          "kind": "oe"
+        }
+      ],
+      "params": {
+        "channel": "DWDM_CH28"
+      },
+      "size": {
+        "width": 40,
+        "depth": 28
+      }
+    },
+    {
+      "id": "rfSource",
+      "name": "RF 输入",
+      "ports": [
+        {
+          "id": "rf",
+          "type": "RF",
+          "direction": "out"
+        }
+      ],
+      "transfers": [],
+      "params": {},
+      "size": {
+        "width": 40,
+        "depth": 28
+      }
+    },
+    {
+      "id": "rfSink",
+      "name": "RF 输出",
+      "ports": [
+        {
+          "id": "rf",
+          "type": "RF",
+          "direction": "in"
+        }
+      ],
+      "transfers": [],
+      "params": {},
+      "size": {
+        "width": 40,
+        "depth": 28
+      }
+    },
+    {
+      "id": "mux",
+      "name": "MUX",
+      "ports": [
+        {
+          "id": "ch28",
+          "type": "OPTICAL",
+          "direction": "in",
+          "channels": [
+            "DWDM_CH28"
+          ]
+        },
+        {
+          "id": "ch30",
+          "type": "OPTICAL",
+          "direction": "in",
+          "channels": [
+            "DWDM_CH30"
+          ]
+        },
+        {
+          "id": "line",
+          "type": "OPTICAL",
+          "direction": "out"
+        }
+      ],
+      "transfers": [
+        {
+          "from": "ch28",
+          "to": "line",
+          "kind": "optical",
+          "channels": [
+            "DWDM_CH28"
+          ],
+          "gainDb": {
+            "kind": "channel",
+            "values": {
+              "DWDM_CH28": -1,
+              "DWDM_CH30": -1
+            }
+          }
+        },
+        {
+          "from": "ch30",
+          "to": "line",
+          "kind": "optical",
+          "channels": [
+            "DWDM_CH30"
+          ],
+          "gainDb": {
+            "kind": "channel",
+            "values": {
+              "DWDM_CH28": -1,
+              "DWDM_CH30": -1
+            }
+          }
+        }
+      ],
+      "params": {},
+      "size": {
+        "width": 40,
+        "depth": 28
+      }
+    },
+    {
+      "id": "demux",
+      "name": "DEMUX",
+      "ports": [
+        {
+          "id": "line",
+          "type": "OPTICAL",
+          "direction": "in"
+        },
+        {
+          "id": "ch28",
+          "type": "OPTICAL",
+          "direction": "out",
+          "channels": [
+            "DWDM_CH28"
+          ]
+        },
+        {
+          "id": "ch30",
+          "type": "OPTICAL",
+          "direction": "out",
+          "channels": [
+            "DWDM_CH30"
+          ]
+        }
+      ],
+      "transfers": [
+        {
+          "from": "line",
+          "to": "ch28",
+          "kind": "optical",
+          "channels": [
+            "DWDM_CH28"
+          ],
+          "gainDb": {
+            "kind": "channel",
+            "values": {
+              "DWDM_CH28": -1,
+              "DWDM_CH30": -1
+            }
+          }
+        },
+        {
+          "from": "line",
+          "to": "ch30",
+          "kind": "optical",
+          "channels": [
+            "DWDM_CH30"
+          ],
+          "gainDb": {
+            "kind": "channel",
+            "values": {
+              "DWDM_CH28": -1,
+              "DWDM_CH30": -1
+            }
+          }
+        }
+      ],
+      "params": {},
+      "size": {
+        "width": 40,
+        "depth": 28
+      }
+    },
+    {
+      "id": "attenuator",
+      "name": "光增益 / 衰减",
+      "ports": [
+        {
+          "id": "in",
+          "type": "OPTICAL",
+          "direction": "in"
+        },
+        {
+          "id": "out",
+          "type": "OPTICAL",
+          "direction": "out"
+        }
+      ],
+      "transfers": [
+        {
+          "from": "in",
+          "to": "out",
+          "kind": "optical",
+          "gainDb": {
+            "kind": "channel",
+            "values": {
+              "DWDM_CH28": 0,
+              "DWDM_CH30": 0
+            }
+          }
+        }
+      ],
+      "params": {},
+      "size": {
+        "width": 40,
+        "depth": 28
+      }
+    },
+    {
+      "id": "pcb",
+      "name": "PCB 黑盒",
+      "ports": [
+        {
+          "id": "RF_IN",
+          "type": "RF",
+          "direction": "in"
+        },
+        {
+          "id": "RF_OUT",
+          "type": "RF",
+          "direction": "out"
+        },
+        {
+          "id": "OPT_IN",
+          "type": "OPTICAL",
+          "direction": "in"
+        },
+        {
+          "id": "OPT_OUT",
+          "type": "OPTICAL",
+          "direction": "out"
+        },
+        {
+          "id": "DC_IN",
+          "type": "DC_POWER",
+          "direction": "in"
+        },
+        {
+          "id": "CTRL_IN",
+          "type": "CONTROL",
+          "direction": "in"
+        },
+        {
+          "id": "RF_SPARE",
+          "type": "RF",
+          "direction": "out"
+        }
+      ],
+      "transfers": [
+        {
+          "from": "RF_IN",
+          "to": "RF_OUT",
+          "kind": "rf",
+          "gainDb": {
+            "kind": "rf",
+            "points": [
+              [
+                1,
+                10
+              ],
+              [
+                3,
+                14
+              ],
+              [
+                5,
+                12
+              ]
+            ]
+          },
+          "nfDb": {
+            "kind": "fixed",
+            "value": 3
+          }
+        },
+        {
+          "from": "OPT_IN",
+          "to": "OPT_OUT",
+          "kind": "optical",
+          "gainDb": {
+            "kind": "channel",
+            "values": {
+              "DWDM_CH28": -1.5,
+              "DWDM_CH30": -2
+            }
+          }
+        }
+      ],
+      "params": {},
+      "size": {
+        "width": 100,
+        "depth": 60
+      }
+    },
+    {
+      "id": "amp",
+      "name": "RF 放大器",
+      "ports": [
+        {
+          "id": "in",
+          "type": "RF",
+          "direction": "in"
+        },
+        {
+          "id": "out",
+          "type": "RF",
+          "direction": "out"
+        }
+      ],
+      "transfers": [
+        {
+          "from": "in",
+          "to": "out",
+          "kind": "rf",
+          "gainDb": {
+            "kind": "fixed",
+            "value": 6
+          },
+          "nfDb": {
+            "kind": "fixed",
+            "value": 4
+          }
+        }
+      ],
+      "params": {},
+      "size": {
+        "width": 40,
+        "depth": 28
+      }
+    },
+    {
+      "id": "power",
+      "name": "DC 电源",
+      "ports": [
+        {
+          "id": "out",
+          "type": "DC_POWER",
+          "direction": "out"
+        }
+      ],
+      "transfers": [],
+      "params": {},
+      "size": {
+        "width": 60,
+        "depth": 40
+      }
+    },
+    {
+      "id": "control",
+      "name": "控制器",
+      "ports": [
+        {
+          "id": "out",
+          "type": "CONTROL",
+          "direction": "out"
+        }
+      ],
+      "transfers": [],
+      "params": {},
+      "size": {
+        "width": 40,
+        "depth": 28
+      }
+    }
+  ],
+  "modules": [
+    {
+      "id": "TX_Module",
+      "name": "TX_Module",
+      "ports": [
+        {
+          "id": "rf",
+          "type": "RF",
+          "direction": "in"
+        },
+        {
+          "id": "opt",
+          "type": "OPTICAL",
+          "direction": "out"
+        }
+      ],
+      "instances": [
+        {
+          "id": "laser",
+          "name": "激光器",
+          "definitionId": "laser",
+          "overrides": {}
+        },
+        {
+          "id": "mzm",
+          "name": "MZM",
+          "definitionId": "mzm",
+          "overrides": {}
+        }
+      ],
+      "connections": [
+        {
+          "id": "laser-feed",
+          "from": {
+            "instanceId": "laser",
+            "portId": "opt"
+          },
+          "to": {
+            "instanceId": "mzm",
+            "portId": "laser"
+          },
+          "gainDb": {
+            "kind": "fixed",
+            "value": 0
+          }
+        }
+      ],
+      "mappings": [
+        {
+          "portId": "rf",
+          "target": {
+            "instanceId": "mzm",
+            "portId": "rf"
+          }
+        },
+        {
+          "portId": "opt",
+          "target": {
+            "instanceId": "mzm",
+            "portId": "opt"
+          }
+        }
+      ],
+      "overrides": {
+        "laserPowerDbm": [
+          {
+            "instanceId": "laser",
+            "parameter": "powerDbm"
+          }
+        ],
+        "channel": [
+          {
+            "instanceId": "laser",
+            "parameter": "channel"
+          },
+          {
+            "instanceId": "mzm",
+            "parameter": "channel"
+          }
+        ]
+      }
+    }
+  ],
+  "instances": [
+    {
+      "id": "input28",
+      "name": "RF 输入 28",
+      "definitionId": "rfSource",
+      "overrides": {}
+    },
+    {
+      "id": "input30",
+      "name": "RF 输入 30",
+      "definitionId": "rfSource",
+      "overrides": {}
+    },
+    {
+      "id": "tx28",
+      "name": "发射模块 CH28",
+      "definitionId": "TX_Module",
+      "overrides": {}
+    },
+    {
+      "id": "tx30",
+      "name": "发射模块 CH30",
+      "definitionId": "TX_Module",
+      "overrides": {
+        "channel": "DWDM_CH30",
+        "laserPowerDbm": {
+          "kind": "fixed",
+          "value": 8
+        }
+      }
+    },
+    {
+      "id": "mux",
+      "name": "WDM 合波器",
+      "definitionId": "mux",
+      "overrides": {}
+    },
+    {
+      "id": "attenuator",
+      "name": "通道光增益 / 衰减",
+      "definitionId": "attenuator",
+      "overrides": {}
+    },
+    {
+      "id": "demux",
+      "name": "WDM 分波器",
+      "definitionId": "demux",
+      "overrides": {}
+    },
+    {
+      "id": "pd28",
+      "name": "接收器 28 / 已修改",
+      "definitionId": "pd",
+      "overrides": {
+        "channel": "DWDM_CH28"
+      }
+    },
+    {
+      "id": "pd30",
+      "name": "PD CH30",
+      "definitionId": "pd",
+      "overrides": {
+        "channel": "DWDM_CH30"
+      }
+    },
+    {
+      "id": "output28",
+      "name": "RF 输出 28",
+      "definitionId": "rfSink",
+      "overrides": {}
+    },
+    {
+      "id": "output30",
+      "name": "RF 输出 30",
+      "definitionId": "rfSink",
+      "overrides": {}
+    },
+    {
+      "id": "pcb",
+      "name": "多端口 PCB",
+      "definitionId": "pcb",
+      "overrides": {}
+    },
+    {
+      "id": "amp",
+      "name": "RF 后级",
+      "definitionId": "amp",
+      "overrides": {}
+    },
+    {
+      "id": "power",
+      "name": "电源",
+      "definitionId": "power",
+      "overrides": {}
+    },
+    {
+      "id": "control",
+      "name": "控制器",
+      "definitionId": "control",
+      "overrides": {}
+    }
+  ],
+  "connections": [
+    {
+      "id": "rf-in28",
+      "from": {
+        "instanceId": "input28",
+        "portId": "rf"
+      },
+      "to": {
+        "instanceId": "tx28",
+        "portId": "rf"
+      },
+      "gainDb": {
+        "kind": "fixed",
+        "value": 0
+      }
+    },
+    {
+      "id": "rf-in30",
+      "from": {
+        "instanceId": "input30",
+        "portId": "rf"
+      },
+      "to": {
+        "instanceId": "tx30",
+        "portId": "rf"
+      },
+      "gainDb": {
+        "kind": "fixed",
+        "value": 0
+      }
+    },
+    {
+      "id": "tx-mux28",
+      "from": {
+        "instanceId": "tx28",
+        "portId": "opt"
+      },
+      "to": {
+        "instanceId": "mux",
+        "portId": "ch28"
+      },
+      "gainDb": {
+        "kind": "fixed",
+        "value": 0
+      }
+    },
+    {
+      "id": "tx-mux30",
+      "from": {
+        "instanceId": "tx30",
+        "portId": "opt"
+      },
+      "to": {
+        "instanceId": "mux",
+        "portId": "ch30"
+      },
+      "gainDb": {
+        "kind": "fixed",
+        "value": 0
+      }
+    },
+    {
+      "id": "mux-attenuator",
+      "from": {
+        "instanceId": "mux",
+        "portId": "line"
+      },
+      "to": {
+        "instanceId": "attenuator",
+        "portId": "in"
+      },
+      "gainDb": {
+        "kind": "fixed",
+        "value": 0
+      }
+    },
+    {
+      "id": "shared-fiber",
+      "from": {
+        "instanceId": "attenuator",
+        "portId": "out"
+      },
+      "to": {
+        "instanceId": "demux",
+        "portId": "line"
+      },
+      "gainDb": {
+        "kind": "fixed",
+        "value": -2
+      }
+    },
+    {
+      "id": "demux-pd28",
+      "from": {
+        "instanceId": "demux",
+        "portId": "ch28"
+      },
+      "to": {
+        "instanceId": "pd28",
+        "portId": "opt"
+      },
+      "gainDb": {
+        "kind": "fixed",
+        "value": 0
+      }
+    },
+    {
+      "id": "demux-pd30",
+      "from": {
+        "instanceId": "demux",
+        "portId": "ch30"
+      },
+      "to": {
+        "instanceId": "pd30",
+        "portId": "opt"
+      },
+      "gainDb": {
+        "kind": "fixed",
+        "value": 0
+      }
+    },
+    {
+      "id": "rf-out28",
+      "from": {
+        "instanceId": "pd28",
+        "portId": "rf"
+      },
+      "to": {
+        "instanceId": "output28",
+        "portId": "rf"
+      },
+      "gainDb": {
+        "kind": "fixed",
+        "value": 0
+      }
+    },
+    {
+      "id": "rf-out30",
+      "from": {
+        "instanceId": "pd30",
+        "portId": "rf"
+      },
+      "to": {
+        "instanceId": "output30",
+        "portId": "rf"
+      },
+      "gainDb": {
+        "kind": "fixed",
+        "value": 0
+      }
+    },
+    {
+      "id": "pcb-amp",
+      "from": {
+        "instanceId": "pcb",
+        "portId": "RF_OUT"
+      },
+      "to": {
+        "instanceId": "amp",
+        "portId": "in"
+      },
+      "gainDb": {
+        "kind": "fixed",
+        "value": 0
+      }
+    },
+    {
+      "id": "dc-pcb",
+      "from": {
+        "instanceId": "power",
+        "portId": "out"
+      },
+      "to": {
+        "instanceId": "pcb",
+        "portId": "DC_IN"
+      },
+      "gainDb": {
+        "kind": "fixed",
+        "value": 0
+      }
+    },
+    {
+      "id": "ctrl-pcb",
+      "from": {
+        "instanceId": "control",
+        "portId": "out"
+      },
+      "to": {
+        "instanceId": "pcb",
+        "portId": "CTRL_IN"
+      },
+      "gainDb": {
+        "kind": "fixed",
+        "value": 0
+      }
+    },
+    {
+      "id": "tx-pcb-opt",
+      "from": {
+        "instanceId": "tx28",
+        "portId": "opt"
+      },
+      "to": {
+        "instanceId": "pcb",
+        "portId": "OPT_IN"
+      },
+      "gainDb": {
+        "kind": "fixed",
+        "value": 0
+      }
+    },
+    {
+      "id": "connection-4eace3dc-2aec-4244-a44b-4925c5b2869c",
+      "from": {
+        "instanceId": "input28",
+        "portId": "rf"
+      },
+      "to": {
+        "instanceId": "pcb",
+        "portId": "RF_IN"
+      },
+      "gainDb": {
+        "kind": "fixed",
+        "value": 0
+      }
+    }
+  ],
+  "links": [
+    {
+      "id": "link28",
+      "name": "RF_CH28",
+      "from": {
+        "instanceId": "input28",
+        "portId": "rf"
+      },
+      "to": {
+        "instanceId": "output28",
+        "portId": "rf"
+      },
+      "channelId": "DWDM_CH28",
+      "viaConnectionIds": [
+        "shared-fiber"
+      ],
+      "conversion": {
+        "gainRefDb": -22,
+        "powerRefDbm": -2,
+        "k": 2
+      }
+    },
+    {
+      "id": "link30",
+      "name": "RF_CH30",
+      "from": {
+        "instanceId": "input30",
+        "portId": "rf"
+      },
+      "to": {
+        "instanceId": "output30",
+        "portId": "rf"
+      },
+      "channelId": "DWDM_CH30",
+      "viaConnectionIds": [
+        "shared-fiber"
+      ],
+      "conversion": {
+        "gainRefDb": -22,
+        "powerRefDbm": 0,
+        "k": 2
+      }
+    },
+    {
+      "id": "rf-scan",
+      "name": "PCB → RF 后级 · 扫频 / NF",
+      "from": {
+        "instanceId": "pcb",
+        "portId": "RF_IN"
+      },
+      "to": {
+        "instanceId": "amp",
+        "portId": "out"
+      }
+    },
+    {
+      "id": "unconnected",
+      "name": "未定义关系 · 应无法连通",
+      "from": {
+        "instanceId": "pcb",
+        "portId": "RF_IN"
+      },
+      "to": {
+        "instanceId": "pcb",
+        "portId": "RF_SPARE"
+      }
+    },
+    {
+      "id": "pcb-optical",
+      "name": "PCB 光端口 · 插损验证",
+      "from": {
+        "instanceId": "tx28",
+        "portId": "opt"
+      },
+      "to": {
+        "instanceId": "pcb",
+        "portId": "OPT_OUT"
+      },
+      "channelId": "DWDM_CH28"
+    }
+  ],
+  "layout": {
+    "physical": {
+      "tx28/laser": {
+        "x": 25,
+        "y": 35,
+        "rotation": 0
+      },
+      "tx28/mzm": {
+        "x": 95,
+        "y": 35,
+        "rotation": 0
+      },
+      "tx30/laser": {
+        "x": 25,
+        "y": 115,
+        "rotation": 0
+      },
+      "tx30/mzm": {
+        "x": 95,
+        "y": 115,
+        "rotation": 0
+      },
+      "mux": {
+        "x": 170,
+        "y": 70,
+        "rotation": 0
+      },
+      "attenuator": {
+        "x": 235,
+        "y": 70,
+        "rotation": 0
+      },
+      "demux": {
+        "x": 300,
+        "y": 70,
+        "rotation": 0
+      },
+      "pd28": {
+        "x": 360,
+        "y": 35,
+        "rotation": 90
+      },
+      "pd30": {
+        "x": 365,
+        "y": 115,
+        "rotation": 0
+      },
+      "pcb": {
+        "x": 120,
+        "y": 205,
+        "rotation": 0
+      },
+      "amp": {
+        "x": 290,
+        "y": 205,
+        "rotation": 0
+      },
+      "power": {
+        "x": 25,
+        "y": 270,
+        "rotation": 0
+      },
+      "control": {
+        "x": 350,
+        "y": 270,
+        "rotation": 0
+      }
+    },
+    "topology": {
+      "input28": {
+        "x": 0,
+        "y": 0
+      },
+      "input30": {
+        "x": 0,
+        "y": 200
+      },
+      "tx28": {
+        "x": 230,
+        "y": 0
+      },
+      "tx30": {
+        "x": 230,
+        "y": 200
+      },
+      "mux": {
+        "x": 470,
+        "y": 90
+      },
+      "attenuator": {
+        "x": 720,
+        "y": 90
+      },
+      "demux": {
+        "x": 970,
+        "y": 90
+      },
+      "pd28": {
+        "x": 1220,
+        "y": 0
+      },
+      "pd30": {
+        "x": 1220,
+        "y": 200
+      },
+      "output28": {
+        "x": 1450,
+        "y": 0
+      },
+      "output30": {
+        "x": 1450,
+        "y": 200
+      },
+      "pcb": {
+        "x": 470,
+        "y": 410
+      },
+      "amp": {
+        "x": 970,
+        "y": 440
+      },
+      "power": {
+        "x": 0,
+        "y": 440
+      },
+      "control": {
+        "x": 0,
+        "y": 640
+      },
+      "tx28/laser": {
+        "x": 230,
+        "y": -180
+      },
+      "tx28/mzm": {
+        "x": 470,
+        "y": -180
+      },
+      "tx30/laser": {
+        "x": 230,
+        "y": 450
+      },
+      "tx30/mzm": {
+        "x": 230,
+        "y": 650
+      }
+    }
+  }
+}

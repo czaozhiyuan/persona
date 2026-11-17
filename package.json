@@ -1,0 +1,48 @@
+{
+  "name": "persona",
+  "version": "0.0.1",
+  "description": "persona P0 offline optoelectronic design prototype",
+  "directories": {
+    "doc": "docs",
+    "example": "examples",
+    "test": "tests"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build && tsx scripts/package-artifacts.ts",
+    "test": "tsx --test tests/engine.test.ts",
+    "example": "tsx scripts/export-example.ts",
+    "test:browser": "tsx scripts/browser-smoke.ts",
+    "verify": "npm run test && npm run build && npm run example"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/czaozhiyuan/persona.git"
+  },
+  "keywords": [],
+  "author": "",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/czaozhiyuan/persona/issues"
+  },
+  "homepage": "https://github.com/czaozhiyuan/persona#readme",
+  "dependencies": {
+    "@xyflow/react": "^12.12.1",
+    "konva": "^10.9.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-konva": "^19.3.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.1",
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.8",
+    "vite-plugin-singlefile": "^2.3.4"
+  },
+  "private": true
+}
