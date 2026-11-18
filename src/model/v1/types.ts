@@ -1,3 +1,7 @@
+import type { OpticalChannelId } from './channels';
+import type { ConversionProfile, InputRating, SwitchState, Transfer } from './device';
+import type { ParameterDefinition, ParameterMapping, ParameterValue } from './parameters';
+
 /** Root-relative local instance IDs. An empty path identifies the root module. */
 export type InstancePath = readonly string[];
 
@@ -19,21 +23,30 @@ export type PortDefinition = {
   id: string;
   type: PortType;
   direction: PortDirection;
+  channelIds?: readonly OpticalChannelId[];
+  inputRating?: InputRating;
 };
 
 type DefinitionIdentity = {
   id: string;
   name: string;
   ports: readonly PortDefinition[];
+  parameters?: readonly ParameterDefinition[];
 };
 
-export type ComponentDefinition = DefinitionIdentity & { kind: 'component' };
+export type ComponentDefinition = DefinitionIdentity & {
+  kind: 'component';
+  transfers?: readonly Transfer[];
+  switchStates?: readonly SwitchState[];
+};
 
 export type Instance = {
   /** Unique within the containing module definition. */
   id: string;
   name: string;
   definitionId: string;
+  parameterOverrides?: Readonly<Record<string, ParameterValue>>;
+  switchStateId?: string;
 };
 
 /**
@@ -55,6 +68,7 @@ export type ModuleDefinition = DefinitionIdentity & {
   kind: 'module';
   instances: readonly Instance[];
   portMappings?: readonly PortMapping[];
+  parameterMappings?: readonly ParameterMapping[];
   physicalEnclosure?: PhysicalEnclosure;
 };
 
@@ -88,5 +102,6 @@ export type Project = {
   rootModuleDefinitionId: string;
   componentDefinitions: readonly ComponentDefinition[];
   moduleDefinitions: readonly ModuleDefinition[];
+  conversionProfiles?: readonly ConversionProfile[];
   layout?: LayoutState;
 };
