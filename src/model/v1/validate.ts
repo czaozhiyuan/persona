@@ -44,6 +44,20 @@ function validateAcyclic(modules: readonly ModuleDefinition[], definitions: Read
   }
 }
 
+function validatePhysicalContainment(parentByPlacement: ReadonlyMap<string, string>): void {
+  const checked = new Set<string>();
+  for (const start of parentByPlacement.keys()) {
+    const chain = new Set<string>();
+    let current: string | undefined = start;
+    while (current !== undefined && !checked.has(current)) {
+      requireValid(!chain.has(current), `Physical containment cycle at ${current}`);
+      chain.add(current);
+      current = parentByPlacement.get(current);
+    }
+    for (const key of chain) checked.add(key);
+  }
+}
+
 /** Validates typed V1 domain data. Parsing and schema validation belong to storage. */
 export function validateProject(project: Project): void {
   requireValid(project.id.trim(), 'Project ID must not be blank');
@@ -100,20 +114,22 @@ export function validateProject(project: Project): void {
     }
     return current;
   };
-  const positions = new Set<string>();
+  const parentByPlacement = new Map<string, string>();
   for (const placement of project.layout?.physical ?? []) {
     const key = JSON.stringify(placement.instancePath);
-    requireValid(definitionAtPath(placement.instancePath)?.kind === 'component',
-      `Physical placement must reference a component instance: ${key}`);
+    const placed = definitionAtPath(placement.instancePath);
+    requireValid(placement.instancePath.length && placed && (placed.kind === 'component' || placed.physicalEnclosure),
+      `Physical placement must reference a component or enclosure module instance: ${key}`);
     const enclosure = definitionAtPath(placement.enclosurePath);
     requireValid(enclosure?.kind === 'module' && enclosure.physicalEnclosure,
       `Physical placement ${key} must reference an enclosure module instance`);
-    requireValid(!positions.has(key), `Duplicate physical placement: ${key}`);
+    requireValid(!parentByPlacement.has(key), `Duplicate physical placement: ${key}`);
     requireValid(Number.isFinite(placement.xMm) && Number.isFinite(placement.yMm) && placement.rotationDeg % 90 === 0,
       `Invalid physical coordinates or rotation: ${key}`);
-    positions.add(key);
+    parentByPlacement.set(key, JSON.stringify(placement.enclosurePath));
   }
-  positions.clear();
+  validatePhysicalContainment(parentByPlacement);
+  const positions = new Set<string>();
   for (const placement of project.layout?.topology ?? []) {
     const key = JSON.stringify(placement.instancePath);
     requireValid(placement.instancePath.length && definitionAtPath(placement.instancePath),

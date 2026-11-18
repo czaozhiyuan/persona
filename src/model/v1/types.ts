@@ -59,12 +59,14 @@ export type ModuleDefinition = DefinitionIdentity & {
 };
 
 export type PhysicalPlacement = {
+  /** A component instance or a module instance with its own physical enclosure. */
   instancePath: InstancePath;
+  /** The immediate physical container, independent of the logical parent. */
   enclosurePath: InstancePath;
   /** Millimetres from the enclosure's upper-left corner; right and down are positive. */
   xMm: number;
   yMm: number;
-  /** Multiples of 90 degrees, clockwise about the device's local origin at (xMm, yMm). */
+  /** Multiples of 90 degrees, clockwise about the placed instance's local origin at (xMm, yMm). */
   rotationDeg: number;
 };
 

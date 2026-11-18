@@ -79,11 +79,45 @@ test('existing mappings must target direct children and preserve type and direct
   assert.throws(() => validateProject(wrongDirection), /preserve port type and direction/);
 });
 
-test('physical placement needs a leaf, a real enclosure and a valid quarter turn', () => {
+test('reused slot and CBB modules have independent placements in nested enclosures', () => {
+  const { physical, topology } = exampleProject.layout;
+  const [, , slotA, slotB, cbbA, cbbB] = physical;
+  assert.deepEqual(slotA.enclosurePath, ['TX_A']);
+  assert.deepEqual(slotB.enclosurePath, ['TX_B']);
+  assert.notEqual(slotA.xMm, slotB.xMm);
+  assert.deepEqual(cbbA.enclosurePath, slotA.instancePath);
+  assert.deepEqual(cbbB.enclosurePath, slotB.instancePath);
+  assert.notEqual(cbbA.xMm, cbbB.xMm);
+
+  const project: Project = {
+    ...exampleProject,
+    layout: { topology, physical: physical.map(placement =>
+      placement === slotA ? { ...placement, xMm: slotB.xMm + 10 } : placement) },
+  };
+  validateProject(project);
+  assert.deepEqual(project.layout?.physical?.[3], slotB);
+  assert.deepEqual(project.layout?.physical?.[4], cbbA);
+  assert.deepEqual(project.layout?.topology, topology);
+});
+
+test('physical placement needs a real instance, an enclosure and a valid quarter turn', () => {
   const placement = exampleProject.layout.physical[0];
+  const logicalModule = ['TX_A', 'TX_SLOT', 'TX_CBB', 'MZM_MODULE'];
   const validatePlacement = (change: Partial<PhysicalPlacement>) =>
     validateProject({ ...exampleProject, layout: { physical: [{ ...placement, ...change }] } });
-  assert.throws(() => validatePlacement({ instancePath: ['TX_A'] }), /component instance/);
-  assert.throws(() => validatePlacement({ enclosurePath: ['TX_A', 'TX_SLOT'] }), /enclosure module instance/);
+  assert.throws(() => validatePlacement({ instancePath: ['TX_A', 'UNKNOWN_SLOT'] }), /component or enclosure module instance/);
+  assert.throws(() => validatePlacement({ instancePath: logicalModule }), /component or enclosure module instance/);
+  assert.throws(() => validatePlacement({ enclosurePath: logicalModule }), /enclosure module instance/);
   assert.throws(() => validatePlacement({ rotationDeg: 45 }), /Invalid physical coordinates or rotation/);
+});
+
+test('physical containment can differ from logical parentage but cannot form cycles', () => {
+  const [, , slotA, slotB] = exampleProject.layout.physical;
+  const inSlot = (placement: PhysicalPlacement, container: PhysicalPlacement): PhysicalPlacement =>
+    ({ ...placement, enclosurePath: container.instancePath });
+  const validatePlacements = (...physical: PhysicalPlacement[]) =>
+    validateProject({ ...exampleProject, layout: { physical } });
+  validatePlacements(inSlot(slotA, slotB), slotB);
+  assert.throws(() => validatePlacements(inSlot(slotA, slotA)), /Physical containment cycle/);
+  assert.throws(() => validatePlacements(inSlot(slotA, slotB), inSlot(slotB, slotA)), /Physical containment cycle/);
 });

@@ -27,11 +27,13 @@ export const exampleProject = {
     },
     {
       kind: 'module', id: 'slot', name: 'TX slot', ports: [opticalOut],
+      physicalEnclosure: { widthMm: 175, depthMm: 220, heightMm: 40 },
       instances: [{ id: 'TX_CBB', name: 'TX CBB', definitionId: 'cbb' }],
       portMappings: [{ portId: 'OPT_OUT', target: { instanceId: 'TX_CBB', portId: 'OPT_OUT' } }],
     },
     {
       kind: 'module', id: 'cbb', name: 'TX CBB', ports: [opticalOut],
+      physicalEnclosure: { widthMm: 90, depthMm: 120, heightMm: 25 },
       instances: [{ id: 'MZM_MODULE', name: 'MZM module', definitionId: 'mzm' }],
       portMappings: [{ portId: 'OPT_OUT', target: { instanceId: 'MZM_MODULE', portId: 'OPT_OUT' } }],
     },
@@ -43,8 +45,12 @@ export const exampleProject = {
   ],
   layout: {
     physical: [
-      { instancePath: pathA, enclosurePath: ['TX_A'], xMm: 20, yMm: 30, rotationDeg: 0 },
-      { instancePath: pathB, enclosurePath: ['TX_B'], xMm: 55, yMm: 40, rotationDeg: 90 },
+      { instancePath: pathA, enclosurePath: ['TX_A', 'TX_SLOT', 'TX_CBB'], xMm: 20, yMm: 30, rotationDeg: 0 },
+      { instancePath: pathB, enclosurePath: ['TX_B', 'TX_SLOT', 'TX_CBB'], xMm: 35, yMm: 40, rotationDeg: 90 },
+      { instancePath: ['TX_A', 'TX_SLOT'], enclosurePath: ['TX_A'], xMm: 10, yMm: 25, rotationDeg: 0 },
+      { instancePath: ['TX_B', 'TX_SLOT'], enclosurePath: ['TX_B'], xMm: 70, yMm: 55, rotationDeg: 0 },
+      { instancePath: ['TX_A', 'TX_SLOT', 'TX_CBB'], enclosurePath: ['TX_A', 'TX_SLOT'], xMm: 15, yMm: 40, rotationDeg: 90 },
+      { instancePath: ['TX_B', 'TX_SLOT', 'TX_CBB'], enclosurePath: ['TX_B', 'TX_SLOT'], xMm: 35, yMm: 60, rotationDeg: 0 },
     ],
     topology: [
       { instancePath: ['TX_A'], x: 40, y: 80 },
