@@ -1,0 +1,1256 @@
+{
+  "format": "persona-project",
+  "schemaVersion": 1,
+  "project": {
+    "id": "v1-example",
+    "name": "V1 optical system and layouts",
+    "rootModuleDefinitionId": "system",
+    "componentDefinitions": [
+      {
+        "kind": "component",
+        "id": "rf-source",
+        "name": "RF source",
+        "ports": [
+          {
+            "id": "OUT",
+            "type": "RF",
+            "direction": "out"
+          }
+        ]
+      },
+      {
+        "kind": "component",
+        "id": "mzm",
+        "name": "MZM",
+        "ports": [
+          {
+            "id": "RF_IN",
+            "type": "RF",
+            "direction": "in"
+          },
+          {
+            "id": "SUPPLY",
+            "type": "OPTICAL",
+            "direction": "in",
+            "channelIds": [
+              "DWDM_CH28",
+              "DWDM_CH30"
+            ]
+          },
+          {
+            "id": "OUT",
+            "type": "OPTICAL",
+            "direction": "out",
+            "channelIds": [
+              "DWDM_CH28",
+              "DWDM_CH30"
+            ]
+          }
+        ],
+        "transfers": [
+          {
+            "kind": "eo",
+            "fromPortId": "RF_IN",
+            "toPortId": "OUT",
+            "supplyPortId": "SUPPLY"
+          }
+        ]
+      },
+      {
+        "kind": "component",
+        "id": "pd",
+        "name": "PD",
+        "ports": [
+          {
+            "id": "IN",
+            "type": "OPTICAL",
+            "direction": "in",
+            "channelIds": [
+              "DWDM_CH28",
+              "DWDM_CH30"
+            ]
+          },
+          {
+            "id": "RF_OUT",
+            "type": "RF",
+            "direction": "out"
+          }
+        ],
+        "transfers": [
+          {
+            "kind": "oe",
+            "fromPortId": "IN",
+            "toPortId": "RF_OUT"
+          }
+        ]
+      },
+      {
+        "kind": "component",
+        "id": "layoutDemo-mzm-optical",
+        "name": "MZM optical component",
+        "ports": [
+          {
+            "id": "OPT_OUT",
+            "type": "OPTICAL",
+            "direction": "out"
+          }
+        ]
+      },
+      {
+        "kind": "component",
+        "id": "deviceDemo-rf-pcb",
+        "name": "RF PCB",
+        "ports": [
+          {
+            "id": "RF_IN",
+            "type": "RF",
+            "direction": "in",
+            "inputRating": {
+              "unit": "dBm",
+              "max": 10
+            }
+          },
+          {
+            "id": "RF_OUT",
+            "type": "RF",
+            "direction": "out"
+          },
+          {
+            "id": "CTRL",
+            "type": "CONTROL",
+            "direction": "in"
+          }
+        ],
+        "transfers": [
+          {
+            "kind": "rf",
+            "fromPortId": "RF_IN",
+            "toPortId": "RF_OUT",
+            "gainDb": {
+              "kind": "rfCurve",
+              "points": [
+                [
+                  0,
+                  0
+                ],
+                [
+                  67,
+                  -2
+                ]
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "kind": "component",
+        "id": "deviceDemo-mzm",
+        "name": "Optically supplied MZM",
+        "ports": [
+          {
+            "id": "RF_IN",
+            "type": "RF",
+            "direction": "in"
+          },
+          {
+            "id": "LASER_IN",
+            "type": "OPTICAL",
+            "direction": "in",
+            "channelIds": [
+              "DWDM_CH30"
+            ]
+          },
+          {
+            "id": "OPT_OUT",
+            "type": "OPTICAL",
+            "direction": "out",
+            "channelIds": [
+              "DWDM_CH30"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "id": "modulatorGain",
+            "name": "Modulator gain",
+            "kind": "numeric",
+            "unit": "dB",
+            "valueKind": "fixed",
+            "range": {
+              "min": -20,
+              "max": 0
+            },
+            "defaultValue": {
+              "kind": "fixed",
+              "value": -3
+            },
+            "overridable": true
+          }
+        ],
+        "transfers": [
+          {
+            "kind": "eo",
+            "fromPortId": "RF_IN",
+            "toPortId": "OPT_OUT",
+            "supplyPortId": "LASER_IN",
+            "channelIds": [
+              "DWDM_CH30"
+            ],
+            "gainDb": {
+              "kind": "parameter",
+              "parameterId": "modulatorGain"
+            }
+          }
+        ]
+      },
+      {
+        "kind": "component",
+        "id": "deviceDemo-pd850",
+        "name": "850 nm PD",
+        "ports": [
+          {
+            "id": "OPT_IN",
+            "type": "OPTICAL",
+            "direction": "in",
+            "channelIds": [
+              "MM850"
+            ]
+          },
+          {
+            "id": "RF_OUT",
+            "type": "RF",
+            "direction": "out"
+          }
+        ],
+        "transfers": [
+          {
+            "kind": "oe",
+            "fromPortId": "OPT_IN",
+            "toPortId": "RF_OUT"
+          }
+        ]
+      },
+      {
+        "kind": "component",
+        "id": "deviceDemo-mux",
+        "name": "CWDM/DWDM optical multiplexer",
+        "ports": [
+          {
+            "id": "IN_1371",
+            "type": "OPTICAL",
+            "direction": "in",
+            "channelIds": [
+              "CWDM_1371"
+            ]
+          },
+          {
+            "id": "IN_28",
+            "type": "OPTICAL",
+            "direction": "in",
+            "channelIds": [
+              "DWDM_CH28"
+            ]
+          },
+          {
+            "id": "IN_30",
+            "type": "OPTICAL",
+            "direction": "in",
+            "channelIds": [
+              "DWDM_CH30"
+            ]
+          },
+          {
+            "id": "COMMON",
+            "type": "OPTICAL",
+            "direction": "out",
+            "channelIds": [
+              "CWDM_1371",
+              "DWDM_CH28",
+              "DWDM_CH30"
+            ]
+          }
+        ],
+        "transfers": [
+          {
+            "kind": "optical",
+            "fromPortId": "IN_1371",
+            "toPortId": "COMMON",
+            "channelIds": [
+              "CWDM_1371"
+            ]
+          },
+          {
+            "kind": "optical",
+            "fromPortId": "IN_28",
+            "toPortId": "COMMON",
+            "channelIds": [
+              "DWDM_CH28"
+            ]
+          },
+          {
+            "kind": "optical",
+            "fromPortId": "IN_30",
+            "toPortId": "COMMON",
+            "channelIds": [
+              "DWDM_CH30"
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "component",
+        "id": "deviceDemo-demux",
+        "name": "DWDM optical demultiplexer",
+        "ports": [
+          {
+            "id": "COMMON",
+            "type": "OPTICAL",
+            "direction": "in",
+            "channelIds": [
+              "DWDM_CH28",
+              "DWDM_CH30"
+            ]
+          },
+          {
+            "id": "OUT_28",
+            "type": "OPTICAL",
+            "direction": "out",
+            "channelIds": [
+              "DWDM_CH28"
+            ]
+          },
+          {
+            "id": "OUT_30",
+            "type": "OPTICAL",
+            "direction": "out",
+            "channelIds": [
+              "DWDM_CH30"
+            ]
+          }
+        ],
+        "transfers": [
+          {
+            "kind": "optical",
+            "fromPortId": "COMMON",
+            "toPortId": "OUT_28",
+            "channelIds": [
+              "DWDM_CH28"
+            ]
+          },
+          {
+            "kind": "optical",
+            "fromPortId": "COMMON",
+            "toPortId": "OUT_30",
+            "channelIds": [
+              "DWDM_CH30"
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "component",
+        "id": "deviceDemo-switch",
+        "name": "Optical 1×2 switch",
+        "ports": [
+          {
+            "id": "IN",
+            "type": "OPTICAL",
+            "direction": "in",
+            "channelIds": [
+              "DWDM_CH28",
+              "DWDM_CH30"
+            ]
+          },
+          {
+            "id": "OUT_A",
+            "type": "OPTICAL",
+            "direction": "out",
+            "channelIds": [
+              "DWDM_CH28",
+              "DWDM_CH30"
+            ]
+          },
+          {
+            "id": "OUT_B",
+            "type": "OPTICAL",
+            "direction": "out",
+            "channelIds": [
+              "DWDM_CH28",
+              "DWDM_CH30"
+            ]
+          }
+        ],
+        "switchStates": [
+          {
+            "id": "a",
+            "name": "Select A",
+            "routes": [
+              {
+                "fromPortId": "IN",
+                "toPortId": "OUT_A",
+                "gainDb": {
+                  "kind": "fixed",
+                  "value": -1
+                }
+              }
+            ]
+          },
+          {
+            "id": "b",
+            "name": "Select B",
+            "routes": [
+              {
+                "fromPortId": "IN",
+                "toPortId": "OUT_B",
+                "gainDb": {
+                  "kind": "channelTable",
+                  "values": {
+                    "DWDM_CH28": -1.2,
+                    "DWDM_CH30": -1.5
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "moduleDefinitions": [
+      {
+        "kind": "module",
+        "id": "system",
+        "name": "System",
+        "ports": [],
+        "instances": [
+          {
+            "id": "TX_A",
+            "name": "Transmitter A",
+            "definitionId": "tx"
+          },
+          {
+            "id": "TX_B",
+            "name": "Transmitter B",
+            "definitionId": "tx"
+          },
+          {
+            "id": "RX_A",
+            "name": "Receiver A",
+            "definitionId": "rx"
+          },
+          {
+            "id": "RX_B",
+            "name": "Receiver B",
+            "definitionId": "rx"
+          },
+          {
+            "id": "layoutDemo",
+            "name": "Nested chassis layouts",
+            "definitionId": "layoutDemo-System"
+          },
+          {
+            "id": "deviceDemo",
+            "name": "Device configuration",
+            "definitionId": "deviceDemo-system"
+          }
+        ],
+        "connections": [
+          {
+            "id": "spare",
+            "from": {
+              "instanceId": "TX_B",
+              "portId": "OPT_OUT"
+            },
+            "to": {
+              "instanceId": "RX_B",
+              "portId": "OPT_IN"
+            },
+            "mediaKind": "OPTICAL_FIBER"
+          },
+          {
+            "id": "control",
+            "from": {
+              "instanceId": "TX_B",
+              "portId": "CONTROL_OUT"
+            },
+            "to": {
+              "instanceId": "RX_B",
+              "portId": "CONTROL_IN"
+            },
+            "mediaKind": "RJ45_CABLE"
+          }
+        ],
+        "cableBundles": [
+          {
+            "id": "mpo-12",
+            "coreCount": 12,
+            "cores": [
+              {
+                "id": "wdm",
+                "a": {
+                  "pin": 1,
+                  "endpoint": {
+                    "instanceId": "TX_A",
+                    "portId": "OPT_OUT"
+                  }
+                },
+                "b": {
+                  "pin": 12,
+                  "endpoint": {
+                    "instanceId": "RX_A",
+                    "portId": "OPT_IN"
+                  }
+                }
+              },
+              {
+                "id": "return",
+                "a": {
+                  "pin": 2,
+                  "endpoint": {
+                    "instanceId": "TX_A",
+                    "portId": "RETURN_IN"
+                  }
+                },
+                "b": {
+                  "pin": 11,
+                  "endpoint": {
+                    "instanceId": "RX_A",
+                    "portId": "RETURN_OUT"
+                  }
+                }
+              },
+              {
+                "id": "open",
+                "a": {
+                  "pin": 3,
+                  "endpoint": {
+                    "instanceId": "TX_A",
+                    "portId": "TEST_OUT"
+                  }
+                },
+                "b": {
+                  "pin": 10
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "module",
+        "id": "tx",
+        "name": "Transmitter chassis",
+        "ports": [
+          {
+            "id": "OPT_OUT",
+            "type": "OPTICAL",
+            "direction": "out",
+            "channelIds": [
+              "DWDM_CH28",
+              "DWDM_CH30"
+            ]
+          },
+          {
+            "id": "RETURN_IN",
+            "type": "OPTICAL",
+            "direction": "in",
+            "channelIds": [
+              "DWDM_CH28",
+              "DWDM_CH30"
+            ]
+          },
+          {
+            "id": "TEST_OUT",
+            "type": "OPTICAL",
+            "direction": "out",
+            "channelIds": [
+              "DWDM_CH28"
+            ]
+          },
+          {
+            "id": "CONTROL_OUT",
+            "type": "CONTROL",
+            "direction": "out"
+          }
+        ],
+        "instances": [
+          {
+            "id": "source",
+            "name": "RF source",
+            "definitionId": "rf-source"
+          },
+          {
+            "id": "mzm",
+            "name": "MZM",
+            "definitionId": "mzm"
+          }
+        ],
+        "portMappings": [
+          {
+            "portId": "OPT_OUT",
+            "target": {
+              "instanceId": "mzm",
+              "portId": "OUT"
+            }
+          }
+        ],
+        "connections": [
+          {
+            "id": "rf-feed",
+            "from": {
+              "instanceId": "source",
+              "portId": "OUT"
+            },
+            "to": {
+              "instanceId": "mzm",
+              "portId": "RF_IN"
+            },
+            "mediaKind": "RF_COAX"
+          }
+        ]
+      },
+      {
+        "kind": "module",
+        "id": "rx",
+        "name": "Receiver chassis awaiting internal mapping",
+        "ports": [
+          {
+            "id": "OPT_IN",
+            "type": "OPTICAL",
+            "direction": "in",
+            "channelIds": [
+              "DWDM_CH28",
+              "DWDM_CH30"
+            ]
+          },
+          {
+            "id": "RETURN_OUT",
+            "type": "OPTICAL",
+            "direction": "out",
+            "channelIds": [
+              "DWDM_CH28",
+              "DWDM_CH30"
+            ]
+          },
+          {
+            "id": "MM_IN",
+            "type": "OPTICAL",
+            "direction": "in",
+            "channelIds": [
+              "MM850"
+            ]
+          },
+          {
+            "id": "CONTROL_IN",
+            "type": "CONTROL",
+            "direction": "in"
+          }
+        ],
+        "instances": [
+          {
+            "id": "pd",
+            "name": "PD",
+            "definitionId": "pd"
+          }
+        ]
+      },
+      {
+        "kind": "module",
+        "id": "layoutDemo-System",
+        "name": "System",
+        "ports": [],
+        "instances": [
+          {
+            "id": "TX_A",
+            "name": "Transmitter A",
+            "definitionId": "layoutDemo-TX_CHASSIS"
+          },
+          {
+            "id": "TX_B",
+            "name": "Transmitter B",
+            "definitionId": "layoutDemo-TX_CHASSIS"
+          }
+        ]
+      },
+      {
+        "kind": "module",
+        "id": "layoutDemo-TX_CHASSIS",
+        "name": "TX chassis",
+        "ports": [
+          {
+            "id": "OPT_OUT",
+            "type": "OPTICAL",
+            "direction": "out"
+          }
+        ],
+        "physicalEnclosure": {
+          "widthMm": 440,
+          "depthMm": 350,
+          "heightMm": 44.45
+        },
+        "instances": [
+          {
+            "id": "TX_SLOT",
+            "name": "TX slot",
+            "definitionId": "layoutDemo-slot"
+          }
+        ],
+        "portMappings": [
+          {
+            "portId": "OPT_OUT",
+            "target": {
+              "instanceId": "TX_SLOT",
+              "portId": "OPT_OUT"
+            }
+          }
+        ]
+      },
+      {
+        "kind": "module",
+        "id": "layoutDemo-slot",
+        "name": "TX slot",
+        "ports": [
+          {
+            "id": "OPT_OUT",
+            "type": "OPTICAL",
+            "direction": "out"
+          }
+        ],
+        "physicalEnclosure": {
+          "widthMm": 175,
+          "depthMm": 220,
+          "heightMm": 40
+        },
+        "instances": [
+          {
+            "id": "TX_CBB",
+            "name": "TX CBB",
+            "definitionId": "layoutDemo-cbb"
+          }
+        ],
+        "portMappings": [
+          {
+            "portId": "OPT_OUT",
+            "target": {
+              "instanceId": "TX_CBB",
+              "portId": "OPT_OUT"
+            }
+          }
+        ]
+      },
+      {
+        "kind": "module",
+        "id": "layoutDemo-cbb",
+        "name": "TX CBB",
+        "ports": [
+          {
+            "id": "OPT_OUT",
+            "type": "OPTICAL",
+            "direction": "out"
+          }
+        ],
+        "physicalEnclosure": {
+          "widthMm": 90,
+          "depthMm": 120,
+          "heightMm": 25
+        },
+        "instances": [
+          {
+            "id": "MZM_MODULE",
+            "name": "MZM module",
+            "definitionId": "layoutDemo-mzm"
+          }
+        ],
+        "portMappings": [
+          {
+            "portId": "OPT_OUT",
+            "target": {
+              "instanceId": "MZM_MODULE",
+              "portId": "OPT_OUT"
+            }
+          }
+        ]
+      },
+      {
+        "kind": "module",
+        "id": "layoutDemo-mzm",
+        "name": "MZM module",
+        "ports": [
+          {
+            "id": "OPT_OUT",
+            "type": "OPTICAL",
+            "direction": "out"
+          }
+        ],
+        "instances": [
+          {
+            "id": "MZM_OPTICAL",
+            "name": "MZM optical component",
+            "definitionId": "layoutDemo-mzm-optical"
+          }
+        ],
+        "portMappings": [
+          {
+            "portId": "OPT_OUT",
+            "target": {
+              "instanceId": "MZM_OPTICAL",
+              "portId": "OPT_OUT"
+            }
+          }
+        ]
+      },
+      {
+        "kind": "module",
+        "id": "deviceDemo-system",
+        "name": "System",
+        "ports": [],
+        "instances": [
+          {
+            "id": "board",
+            "name": "Transceiver board",
+            "definitionId": "deviceDemo-board",
+            "parameterOverrides": {
+              "modulatorGain": {
+                "kind": "fixed",
+                "value": -4
+              },
+              "mode": "normal"
+            }
+          },
+          {
+            "id": "rf",
+            "name": "RF PCB",
+            "definitionId": "deviceDemo-rf-pcb"
+          },
+          {
+            "id": "mux",
+            "name": "MUX",
+            "definitionId": "deviceDemo-mux"
+          },
+          {
+            "id": "demux",
+            "name": "DEMUX",
+            "definitionId": "deviceDemo-demux"
+          },
+          {
+            "id": "swA",
+            "name": "Switch A",
+            "definitionId": "deviceDemo-switch",
+            "switchStateId": "a"
+          },
+          {
+            "id": "swB",
+            "name": "Switch B",
+            "definitionId": "deviceDemo-switch",
+            "switchStateId": "b"
+          }
+        ]
+      },
+      {
+        "kind": "module",
+        "id": "deviceDemo-board",
+        "name": "Independent TX and RX board",
+        "ports": [
+          {
+            "id": "TX_OUT",
+            "type": "OPTICAL",
+            "direction": "out",
+            "channelIds": [
+              "DWDM_CH30"
+            ]
+          },
+          {
+            "id": "RX_IN",
+            "type": "OPTICAL",
+            "direction": "in",
+            "channelIds": [
+              "MM850"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "id": "modulatorGain",
+            "name": "Modulator gain",
+            "kind": "numeric",
+            "unit": "dB",
+            "valueKind": "fixed",
+            "range": {
+              "min": -20,
+              "max": 0
+            },
+            "defaultValue": {
+              "kind": "fixed",
+              "value": -3
+            },
+            "overridable": true
+          },
+          {
+            "kind": "enum",
+            "id": "mode",
+            "name": "Board mode",
+            "options": [
+              "normal",
+              "standby"
+            ],
+            "defaultValue": "standby",
+            "overridable": true
+          }
+        ],
+        "instances": [
+          {
+            "id": "TX_CH30",
+            "name": "TX CH30",
+            "definitionId": "deviceDemo-tx30"
+          },
+          {
+            "id": "RX_850",
+            "name": "RX 850",
+            "definitionId": "deviceDemo-rx850"
+          }
+        ],
+        "portMappings": [
+          {
+            "portId": "TX_OUT",
+            "target": {
+              "instanceId": "TX_CH30",
+              "portId": "OUT"
+            }
+          },
+          {
+            "portId": "RX_IN",
+            "target": {
+              "instanceId": "RX_850",
+              "portId": "IN"
+            }
+          }
+        ],
+        "parameterMappings": [
+          {
+            "parameterId": "modulatorGain",
+            "target": {
+              "instanceId": "TX_CH30",
+              "parameterId": "modulatorGain"
+            }
+          }
+        ]
+      },
+      {
+        "kind": "module",
+        "id": "deviceDemo-tx30",
+        "name": "CH30 transmitter",
+        "ports": [
+          {
+            "id": "OUT",
+            "type": "OPTICAL",
+            "direction": "out",
+            "channelIds": [
+              "DWDM_CH30"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "id": "modulatorGain",
+            "name": "Modulator gain",
+            "kind": "numeric",
+            "unit": "dB",
+            "valueKind": "fixed",
+            "range": {
+              "min": -20,
+              "max": 0
+            },
+            "defaultValue": {
+              "kind": "fixed",
+              "value": -3
+            },
+            "overridable": true
+          }
+        ],
+        "instances": [
+          {
+            "id": "mzm",
+            "name": "MZM",
+            "definitionId": "deviceDemo-mzm"
+          }
+        ],
+        "portMappings": [
+          {
+            "portId": "OUT",
+            "target": {
+              "instanceId": "mzm",
+              "portId": "OPT_OUT"
+            }
+          }
+        ],
+        "parameterMappings": [
+          {
+            "parameterId": "modulatorGain",
+            "target": {
+              "instanceId": "mzm",
+              "parameterId": "modulatorGain"
+            }
+          }
+        ]
+      },
+      {
+        "kind": "module",
+        "id": "deviceDemo-rx850",
+        "name": "850 nm receiver",
+        "ports": [
+          {
+            "id": "IN",
+            "type": "OPTICAL",
+            "direction": "in",
+            "channelIds": [
+              "MM850"
+            ]
+          }
+        ],
+        "instances": [
+          {
+            "id": "pd",
+            "name": "850 nm PD",
+            "definitionId": "deviceDemo-pd850"
+          }
+        ],
+        "portMappings": [
+          {
+            "portId": "IN",
+            "target": {
+              "instanceId": "pd",
+              "portId": "OPT_IN"
+            }
+          }
+        ]
+      }
+    ],
+    "conversionProfiles": [
+      {
+        "id": "reference",
+        "name": "Reference",
+        "rfGainRefDb": {
+          "kind": "fixed",
+          "value": -22
+        },
+        "pdPowerRefDbm": -2
+      }
+    ],
+    "namedLinks": [
+      {
+        "id": "draft",
+        "name": "Optical budget"
+      },
+      {
+        "id": "tx-only",
+        "name": "Optical budget",
+        "from": {
+          "instancePath": [
+            "TX_A"
+          ],
+          "portId": "OPT_OUT"
+        }
+      },
+      {
+        "id": "full",
+        "name": "End-to-end budget",
+        "channelId": "DWDM_CH28",
+        "from": {
+          "instancePath": [
+            "TX_A",
+            "source"
+          ],
+          "portId": "OUT"
+        },
+        "to": {
+          "instancePath": [
+            "RX_A",
+            "pd"
+          ],
+          "portId": "RF_OUT"
+        },
+        "via": [
+          {
+            "scopePath": [
+              "TX_A"
+            ],
+            "connectionId": "rf-feed"
+          },
+          {
+            "scopePath": [],
+            "bundleId": "mpo-12",
+            "coreId": "wdm"
+          }
+        ],
+        "conversionBindings": [
+          {
+            "id": "span-1",
+            "profileId": "reference",
+            "eo": {
+              "instancePath": [
+                "TX_A",
+                "mzm"
+              ],
+              "fromPortId": "RF_IN",
+              "toPortId": "OUT"
+            },
+            "oe": {
+              "instancePath": [
+                "RX_A",
+                "pd"
+              ],
+              "fromPortId": "IN",
+              "toPortId": "RF_OUT"
+            },
+            "overrides": {
+              "k": 1.8
+            }
+          }
+        ]
+      },
+      {
+        "id": "wdm30",
+        "name": "CH30 on the same core",
+        "channelId": "DWDM_CH30",
+        "from": {
+          "instancePath": [
+            "TX_A"
+          ],
+          "portId": "OPT_OUT"
+        },
+        "to": {
+          "instancePath": [
+            "RX_A"
+          ],
+          "portId": "OPT_IN"
+        },
+        "via": [
+          {
+            "scopePath": [],
+            "bundleId": "mpo-12",
+            "coreId": "wdm"
+          }
+        ]
+      }
+    ],
+    "layout": {
+      "physical": [
+        {
+          "instancePath": [
+            "layoutDemo",
+            "TX_A",
+            "TX_SLOT",
+            "TX_CBB",
+            "MZM_MODULE",
+            "MZM_OPTICAL"
+          ],
+          "enclosurePath": [
+            "layoutDemo",
+            "TX_A",
+            "TX_SLOT",
+            "TX_CBB"
+          ],
+          "xMm": 20,
+          "yMm": 30,
+          "rotationDeg": 0
+        },
+        {
+          "instancePath": [
+            "layoutDemo",
+            "TX_B",
+            "TX_SLOT",
+            "TX_CBB",
+            "MZM_MODULE",
+            "MZM_OPTICAL"
+          ],
+          "enclosurePath": [
+            "layoutDemo",
+            "TX_B",
+            "TX_SLOT",
+            "TX_CBB"
+          ],
+          "xMm": 35,
+          "yMm": 40,
+          "rotationDeg": 90
+        },
+        {
+          "instancePath": [
+            "layoutDemo",
+            "TX_A",
+            "TX_SLOT"
+          ],
+          "enclosurePath": [
+            "layoutDemo",
+            "TX_A"
+          ],
+          "xMm": 10,
+          "yMm": 25,
+          "rotationDeg": 0
+        },
+        {
+          "instancePath": [
+            "layoutDemo",
+            "TX_B",
+            "TX_SLOT"
+          ],
+          "enclosurePath": [
+            "layoutDemo",
+            "TX_B"
+          ],
+          "xMm": 70,
+          "yMm": 55,
+          "rotationDeg": 0
+        },
+        {
+          "instancePath": [
+            "layoutDemo",
+            "TX_A",
+            "TX_SLOT",
+            "TX_CBB"
+          ],
+          "enclosurePath": [
+            "layoutDemo",
+            "TX_A",
+            "TX_SLOT"
+          ],
+          "xMm": 15,
+          "yMm": 40,
+          "rotationDeg": 90
+        },
+        {
+          "instancePath": [
+            "layoutDemo",
+            "TX_B",
+            "TX_SLOT",
+            "TX_CBB"
+          ],
+          "enclosurePath": [
+            "layoutDemo",
+            "TX_B",
+            "TX_SLOT"
+          ],
+          "xMm": 35,
+          "yMm": 60,
+          "rotationDeg": 0
+        }
+      ],
+      "topology": [
+        {
+          "instancePath": [
+            "layoutDemo",
+            "TX_A"
+          ],
+          "x": 40,
+          "y": 80
+        },
+        {
+          "instancePath": [
+            "layoutDemo",
+            "TX_B"
+          ],
+          "x": 300,
+          "y": 80
+        }
+      ]
+    }
+  }
+}
