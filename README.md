@@ -44,3 +44,7 @@ npm run verify
 | `artifacts/` | 单 HTML、日志、下载文件、截图与构建信息；npm 缓存不进入版本控制 |
 
 [P0 验证报告](docs/P0_验证报告.md)保留当时的结果和验证范围，供查阅技术可行性结论。
+
+## V1 工作台预览
+
+安装依赖后运行 `npm run dev`，在 Vite 显示的地址后加 `/v1.html`（例如 `http://localhost:5173/v1.html`）。工作台默认加载 V1 示例，也可新建空工程。
