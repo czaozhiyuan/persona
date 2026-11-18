@@ -1,10 +1,10 @@
 # persona · P0 技术验证原型
 
-光电传输设备的 1U 机箱布局、逻辑拓扑、命名链路与经验预算薄原型。依据 [P0 任务书](docs/P0_技术验证任务书.md) 实现，不代表 V1 正式架构。
+P0 是已完成的技术可行性验证，覆盖 React Flow 逻辑拓扑、Konva 机箱布局、Vite 单 HTML 构建和离线运行。V1 按[已确认的架构](docs/architecture/V1_架构设计.md)独立实现，以 V1 的工程格式、示例和验收用例为依据。
 
 直接使用：[打开单文件 HTML](artifacts/persona-p0.html)。也可以在资源管理器中用 Chrome/Edge 打开 `artifacts/persona-p0.html`，运行时不需要 Node、服务端或网络。
 
-## 构建与验证
+## 构建
 
 实测环境：Windows x64，Node **24.14.0**，npm **11.9.0**。依赖精确版本由 `package-lock.json` 固定。
 
@@ -12,10 +12,9 @@
 cd E:\2026\Persona
 npm ci --cache ./artifacts/npm-cache --registry https://registry.npmjs.org
 npm run verify
-npm run test:browser
 ```
 
-`verify` 依次执行 8 项纯数据层测试、TypeScript 类型检查、Vite 单文件构建和示例 JSON 生成。浏览器脚本使用本机安装的 Chrome 和 Edge；不下载额外 Chromium、不启动 HTTP 服务。它以 headless 模式运行，将浏览器上下文设为 offline，并保存截图和 JSON 下载证据。安装依赖需要网络，使用生成的 HTML 不需要网络。
+`verify` 执行 TypeScript 类型检查、Vite 单文件构建和示例 JSON 生成。安装依赖需要网络，使用生成的 HTML 不需要网络。
 
 构建产生 `dist/index.html`，并生成相同内容的 `artifacts/persona-p0.html`、SHA256、构建信息和第三方许可声明。HTML 本身含完整运行资源与许可声明，单独复制即可运行。`npm run dev` 仅供源码开发，交付物不依赖开发服务器。
 
@@ -44,4 +43,4 @@ npm run test:browser
 | `docs/P1-P5_架构建议.md` | 后续阶段需要冻结的数据边界 |
 | `artifacts/` | 单 HTML、日志、下载文件、截图与构建信息；npm 缓存不进入版本控制 |
 
-本次自动验证覆盖 A1–A9；A1 的浏览器 offline 测试已通过，**系统断网后的人工双击与原生文件对话框验收尚未执行**。详见验证报告，不能将自动化结果当作人工验收记录。
+[P0 验证报告](docs/P0_验证报告.md)保留当时的结果和验证范围，供查阅技术可行性结论。
