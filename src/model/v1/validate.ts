@@ -1,21 +1,11 @@
 import type { Instance, InstancePath, ModuleDefinition, PortDefinition, Project } from './types';
+import type { ParameterDefinition } from './parameters';
+import { channelSetsOverlap, validateConversionProfile, validateDevice, validatePortConstraints } from './validate-device';
+import { parameterCanFeed, validateParameterDefinition, validateParameterValue } from './validate-parameters';
+import { indexById, requireValid } from './validation';
 
 type Definition = Project['componentDefinitions'][number] | ModuleDefinition;
 const portTypes = new Set(['RF', 'OPTICAL', 'DC_POWER', 'CONTROL']);
-
-function requireValid(condition: unknown, message: string): asserts condition {
-  if (!condition) throw new Error(message);
-}
-
-function indexById<T extends { id: string }>(items: readonly T[], context: string): Map<string, T> {
-  const index = new Map<string, T>();
-  for (const item of items) {
-    requireValid(item.id.trim(), `${context}: ID must not be blank`);
-    requireValid(!index.has(item.id), `${context}: duplicate ID "${item.id}"`);
-    index.set(item.id, item);
-  }
-  return index;
-}
 
 function validateAcyclic(modules: readonly ModuleDefinition[], definitions: ReadonlyMap<string, Definition>): void {
   const complete = new Set<string>();
@@ -66,22 +56,46 @@ export function validateProject(project: Project): void {
   requireValid(root?.kind === 'module', `Root definition "${project.rootModuleDefinitionId}" must reference a module`);
 
   const portsByDefinition = new Map<string, Map<string, PortDefinition>>();
+  const paramsByDefinition = new Map<string, Map<string, ParameterDefinition>>();
   const childrenByModule = new Map<string, Map<string, Instance>>();
   for (const definition of definitions.values()) {
     const ports = indexById(definition.ports, `Ports of "${definition.id}"`);
     for (const port of ports.values()) {
       requireValid(portTypes.has(port.type) && (port.direction === 'in' || port.direction === 'out'),
         `Invalid type or direction for port "${port.id}" in "${definition.id}"`);
+      validatePortConstraints(port, `Port "${port.id}" in "${definition.id}"`);
     }
     portsByDefinition.set(definition.id, ports);
+    const parameters = indexById(definition.parameters ?? [], `Parameters of "${definition.id}"`);
+    for (const parameter of parameters.values()) {
+      validateParameterDefinition(parameter, `Parameter "${parameter.id}" in "${definition.id}"`);
+    }
+    paramsByDefinition.set(definition.id, parameters);
+    if (definition.kind === 'component') validateDevice(definition, ports, parameters);
+  }
+  for (const profile of indexById(project.conversionProfiles ?? [], 'Conversion profiles').values()) {
+    validateConversionProfile(profile);
   }
 
   for (const module of project.moduleDefinitions) {
     const children = indexById(module.instances, `Instances in "${module.id}"`);
     childrenByModule.set(module.id, children);
     for (const instance of children.values()) {
-      requireValid(definitions.has(instance.definitionId),
+      const definition = definitions.get(instance.definitionId);
+      requireValid(definition,
         `Instance "${instance.id}" in "${module.id}" references unknown definition "${instance.definitionId}"`);
+      const context = `Instance "${instance.id}" in "${module.id}"`;
+      if (definition.kind === 'component' && definition.switchStates) {
+        requireValid(definition.switchStates.some(state => state.id === instance.switchStateId),
+          `${context}: missing or unknown switch state "${instance.switchStateId}"`);
+      } else {
+        requireValid(instance.switchStateId === undefined, `${context}: only optical switch instances accept switch states`);
+      }
+      for (const [id, value] of Object.entries(instance.parameterOverrides ?? {})) {
+        const parameter = paramsByDefinition.get(definition.id)?.get(id);
+        requireValid(parameter?.overridable, `${context}: parameter "${id}" is not exposed for override`);
+        validateParameterValue(parameter, value, `${context}, parameter "${id}"`);
+      }
     }
     const mapped = new Set<string>();
     for (const mapping of module.portMappings ?? []) {
@@ -94,7 +108,22 @@ export function validateProject(project: Project): void {
       requireValid(target, `Mapping "${port.id}" in "${module.id}" references unknown child port "${mapping.target.portId}"`);
       requireValid(port.type === target.type && port.direction === target.direction,
         `Mapping "${port.id}" in "${module.id}" must preserve port type and direction`);
+      requireValid(channelSetsOverlap(port, target), `Mapping "${port.id}" in "${module.id}" has no shared optical channel`);
       mapped.add(port.id);
+    }
+    const mappedParameters = new Set<string>();
+    for (const mapping of module.parameterMappings ?? []) {
+      const context = `Parameter mapping "${mapping.parameterId}" in "${module.id}"`;
+      const source = paramsByDefinition.get(module.id)?.get(mapping.parameterId);
+      requireValid(source, `${context}: unknown module parameter`);
+      const child = children.get(mapping.target.instanceId);
+      requireValid(child, `${context}: must target a direct child`);
+      const target = paramsByDefinition.get(child.definitionId)?.get(mapping.target.parameterId);
+      requireValid(target?.overridable, `${context}: child parameter is not exposed for override`);
+      requireValid(parameterCanFeed(source, target), `${context}: incompatible parameter types, units or accepted values`);
+      const key = JSON.stringify([child.id, target.id]);
+      requireValid(!mappedParameters.has(key), `${context}: child parameter has multiple mappings`);
+      mappedParameters.add(key);
     }
     if (module.physicalEnclosure) {
       const { widthMm, depthMm, heightMm } = module.physicalEnclosure;
