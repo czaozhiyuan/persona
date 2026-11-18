@@ -1,4 +1,5 @@
 import { useState, useSyncExternalStore } from 'react';
+import { TopologyEditor } from '../../editors/topology/v1/topology-editor';
 import type { Project } from '../../model/v1/types';
 import type { ProjectStore } from '../../state/v1/project-store';
 
@@ -9,7 +10,8 @@ type Props = {
 };
 
 export function Workbench({ store, loadExample, newProject }: Props) {
-  const { project, selection, canUndo, canRedo } = useSyncExternalStore(store.subscribe, store.getSnapshot);
+  const state = useSyncExternalStore(store.subscribe, store.getSnapshot);
+  const { project, selection, canUndo, canRedo } = state;
   const [error, setError] = useState('');
   const active = store.resolveInstance(selection.modulePath)?.definition;
   const selected = selection.instancePath && store.resolveInstance(selection.instancePath);
@@ -38,6 +40,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
           <h1 id="workbench-title">V1 工作台</h1>
           <p>{project.name}</p>
         </section>
+        {selection.view === 'topology' && active?.kind === 'module' &&
+          <TopologyEditor key={JSON.stringify([project.id, selection.modulePath])} store={store} state={state} module={active} />}
         <div className="columns">
           <section className="panel" aria-labelledby="module-title">
             <div className="panel-header">
