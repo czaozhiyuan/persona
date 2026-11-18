@@ -1,6 +1,7 @@
 import type { OpticalChannelId } from './channels';
 import type { ConversionProfile, InputRating, SwitchState, Transfer } from './device';
 import type { ParameterDefinition, ParameterMapping, ParameterValue } from './parameters';
+import type { CableBundle, Connection, LocalEndpointRef, NamedLink } from './topology';
 
 /** Root-relative local instance IDs. An empty path identifies the root module. */
 export type InstancePath = readonly string[];
@@ -55,7 +56,7 @@ export type Instance = {
  */
 export type PortMapping = {
   portId: string;
-  target: { instanceId: string; portId: string };
+  target: LocalEndpointRef;
 };
 
 export type PhysicalEnclosure = {
@@ -67,6 +68,8 @@ export type PhysicalEnclosure = {
 export type ModuleDefinition = DefinitionIdentity & {
   kind: 'module';
   instances: readonly Instance[];
+  connections?: readonly Connection[];
+  cableBundles?: readonly CableBundle[];
   portMappings?: readonly PortMapping[];
   parameterMappings?: readonly ParameterMapping[];
   physicalEnclosure?: PhysicalEnclosure;
@@ -103,5 +106,6 @@ export type Project = {
   componentDefinitions: readonly ComponentDefinition[];
   moduleDefinitions: readonly ModuleDefinition[];
   conversionProfiles?: readonly ConversionProfile[];
+  namedLinks?: readonly NamedLink[];
   layout?: LayoutState;
 };

@@ -2,6 +2,7 @@ import type { Instance, InstancePath, ModuleDefinition, PortDefinition, Project 
 import type { ParameterDefinition } from './parameters';
 import { channelSetsOverlap, validateConversionProfile, validateDevice, validatePortConstraints } from './validate-device';
 import { parameterCanFeed, validateParameterDefinition, validateParameterValue } from './validate-parameters';
+import { validateModuleTopology, validateNamedLinks } from './validate-topology';
 import { indexById, requireValid } from './validation';
 
 type Definition = Project['componentDefinitions'][number] | ModuleDefinition;
@@ -73,7 +74,8 @@ export function validateProject(project: Project): void {
     paramsByDefinition.set(definition.id, parameters);
     if (definition.kind === 'component') validateDevice(definition, ports, parameters);
   }
-  for (const profile of indexById(project.conversionProfiles ?? [], 'Conversion profiles').values()) {
+  const profiles = indexById(project.conversionProfiles ?? [], 'Conversion profiles');
+  for (const profile of profiles.values()) {
     validateConversionProfile(profile);
   }
 
@@ -97,6 +99,10 @@ export function validateProject(project: Project): void {
         validateParameterValue(parameter, value, `${context}, parameter "${id}"`);
       }
     }
+    validateModuleTopology(module, endpoint => {
+      const child = children.get(endpoint.instanceId);
+      return child && portsByDefinition.get(child.definitionId)?.get(endpoint.portId);
+    });
     const mapped = new Set<string>();
     for (const mapping of module.portMappings ?? []) {
       const port = portsByDefinition.get(module.id)?.get(mapping.portId);
@@ -143,6 +149,8 @@ export function validateProject(project: Project): void {
     }
     return current;
   };
+  validateNamedLinks(project.namedLinks ?? [], profiles, definitionAtPath);
+
   const parentByPlacement = new Map<string, string>();
   for (const placement of project.layout?.physical ?? []) {
     const key = JSON.stringify(placement.instancePath);
