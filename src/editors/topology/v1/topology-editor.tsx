@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import type { ModuleDefinition, PortDirection, PortType, Project } from '../../../model/v1/types';
 import type { ProjectStore, ProjectStoreSnapshot } from '../../../state/v1/project-store';
-import { editModule, editModuleWiring, moveTopologyNode, planPortDeletion } from '../../../state/v1/topology-edits';
+import { editModule, editModuleWiring, moveTopologyNode } from '../../../state/v1/topology-edits';
+import { PortDeletionDialog } from './port-deletion-dialog';
 import { TopologyCanvas } from './topology-canvas';
 import { CableForm, ConnectionForm, MappingForm, field } from './wiring-forms';
 import type { LocalPort, UpdateWiring } from './wiring-forms';
@@ -11,7 +12,7 @@ export function TopologyEditor({ store, state, module }: { store: ProjectStore; 
   const { project, selection } = state;
   const scope = selection.modulePath;
   const [message, setMessage] = useState('');
-  const [preview, setPreview] = useState<{ base: Project; plan: NonNullable<ReturnType<typeof planPortDeletion>> }>();
+  const [preview, setPreview] = useState<{ definitionId: string; portId: string }>();
   const definitions = new Map([...project.moduleDefinitions, ...project.componentDefinitions].map(definition => [definition.id, definition]));
   const selected = selection.instancePath && store.resolveInstance(selection.instancePath)?.definition;
   const ports: LocalPort[] = module.instances.flatMap(instance => definitions.get(instance.definitionId)!.ports.map(port => ({
@@ -27,20 +28,13 @@ export function TopologyEditor({ store, state, module }: { store: ProjectStore; 
   const updateModule: UpdateWiring = change => commit(draft => editModule(draft, module.id, change));
   const updateWiring: UpdateWiring = change => commit(draft => editModuleWiring(draft, module.id, change));
 
-  function previewPort(definitionId: string, portId: string) {
-    const plan = planPortDeletion(project, definitionId, portId);
-    if (plan) {
-      setMessage('');
-      setPreview({ base: project, plan });
-    }
-  }
-
   function portRemoval(definitionId: string, heading: string) {
     const available = definitions.get(definitionId)?.ports;
     if (!available?.length) return null;
     return <form key={definitionId} onSubmit={event => {
       event.preventDefault();
-      previewPort(definitionId, field(new FormData(event.currentTarget), 'port'));
+      setMessage('');
+      setPreview({ definitionId, portId: String(new FormData(event.currentTarget).get('port')) });
     }}>
       <label>{heading}
         <select name="port" required>{available.map(port => <option key={port.id} value={port.id}>{port.id}</option>)}</select>
@@ -136,26 +130,6 @@ export function TopologyEditor({ store, state, module }: { store: ProjectStore; 
       <MappingForm module={module} ports={ports} update={updateModule} />
       <CableForm module={module} ports={ports} update={updateWiring} />
     </div>
-    {preview && <dialog ref={dialog => { if (dialog && !dialog.open) dialog.showModal(); }}
-      className="v1-topology-dialog" aria-labelledby="port-deletion-title" onCancel={() => setPreview(undefined)}>
-      <h3 id="port-deletion-title">删除共享端口的影响</h3>
-      <ul>{preview.plan.impacts.map((impact, index) => <li key={index}>
-        <strong>{impact.kind}</strong> · {impact.name} · 定义 {impact.definitionId}
-        {impact.paths.length > 0 && <ul>{impact.paths.map(path =>
-          <li key={JSON.stringify(path)}><code>{path.length ? JSON.stringify(path) : 'System []'}</code></li>)}</ul>}
-      </li>)}</ul>
-      {message && <p className="error" role="alert">{message}</p>}
-      <div className="actions">
-        <button type="button" autoFocus onClick={() => setPreview(undefined)}>取消</button>
-        <button type="button" onClick={() => {
-          if (store.getSnapshot().project !== preview.base) {
-            setMessage('当前工程已变化，请重新预览。');
-            setPreview(undefined);
-            return;
-          }
-          if (commit(() => preview.plan.project)) setPreview(undefined);
-        }}>确认删除并解绑</button>
-      </div>
-    </dialog>}
+    {preview && <PortDeletionDialog store={store} {...preview} close={() => setPreview(undefined)} />}
   </section>;
 }
