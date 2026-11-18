@@ -42,6 +42,30 @@ function readParameters(definition: Definition, instance?: Instance): Map<string
   return parameters;
 }
 
+function readChildParameters(
+  definition: Definition, instance: Instance, parent: ModuleDefinition,
+  parentParameters: ReadonlyMap<string, EffectiveParameter>, parentPath: () => InstancePath,
+): Map<string, EffectiveParameter> {
+  const parameters = readParameters(definition, instance);
+  for (const mapping of parent.parameterMappings ?? []) {
+    if (mapping.target.instanceId !== instance.id) continue;
+    const parameter = parentParameters.get(mapping.parameterId);
+    if (parameter) {
+      parameters.set(mapping.target.parameterId, {
+        value: parameter.value,
+        source: { kind: 'mapped', instancePath: parentPath(), parameterId: mapping.parameterId },
+      });
+    }
+  }
+  return parameters;
+}
+
+function selectedSwitchState(definition: Definition, instance?: Instance): SwitchState | undefined {
+  return definition.kind === 'component'
+    ? definition.switchStates?.find(state => state.id === instance?.switchStateId)
+    : undefined;
+}
+
 /**
  * Validates a V1 snapshot using the domain rules, then resolves occurrences on demand.
  * Use a new resolver when the project changes. Definitions and values are borrowed from the snapshot.
@@ -65,25 +89,30 @@ export function resolveHierarchy(project: Project) {
       if (!instance) return undefined;
 
       const childDefinition: Definition = definitions.get(instance.definitionId)!;
-      const childParameters = readParameters(childDefinition, instance);
-      for (const mapping of definition.parameterMappings ?? []) {
-        if (mapping.target.instanceId !== instanceId) continue;
-        const parameter = parameters.get(mapping.parameterId);
-        if (parameter) {
-          childParameters.set(mapping.target.parameterId, {
-            value: parameter.value,
-            source: { kind: 'mapped', instancePath: instancePath.slice(0, depth), parameterId: mapping.parameterId },
-          });
-        }
-      }
+      parameters = readChildParameters(childDefinition, instance, definition, parameters, () => instancePath.slice(0, depth));
       definition = childDefinition;
-      parameters = childParameters;
     }
-    const switchStateId = instance?.switchStateId;
-    const switchState = definition.kind === 'component' && switchStateId !== undefined
-      ? definition.switchStates?.find(state => state.id === switchStateId)
-      : undefined;
-    return { instancePath: [...instancePath], instance, definition, parameters, switchState };
+    return { instancePath: [...instancePath], instance, definition, parameters, switchState: selectedSwitchState(definition, instance) };
+  }
+
+  /** Walks occurrences from the root, reusing each parent's resolved parameters. */
+  function* walkInstances(): IterableIterator<ResolvedInstance> {
+    const pending = [resolveInstance([])!];
+    while (pending.length > 0) {
+      const parent = pending.pop()!;
+      yield parent;
+      if (parent.definition.kind !== 'module') continue;
+      const children = parent.definition.instances;
+      for (let i = children.length - 1; i >= 0; i--) {
+        const instance = children[i];
+        const definition = definitions.get(instance.definitionId)!;
+        pending.push({
+          instancePath: [...parent.instancePath, instance.id], instance, definition,
+          parameters: readChildParameters(definition, instance, parent.definition, parent.parameters, () => parent.instancePath),
+          switchState: selectedSwitchState(definition, instance),
+        });
+      }
+    }
   }
 
   function resolvePort(endpoint: EndpointRef): PortResolution {
@@ -105,5 +134,5 @@ export function resolveHierarchy(project: Project) {
     return { status: 'invalid_reference', chain, endpoint: current };
   }
 
-  return { resolveInstance, resolvePort };
+  return { resolveInstance, resolvePort, walkInstances };
 }
