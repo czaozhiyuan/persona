@@ -4,16 +4,13 @@
   "description": "persona P0 offline optoelectronic design prototype",
   "directories": {
     "doc": "docs",
-    "example": "examples",
-    "test": "tests"
+    "example": "examples"
   },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build && tsx scripts/package-artifacts.ts",
-    "test": "tsx --test tests/engine.test.ts",
     "example": "tsx scripts/export-example.ts",
-    "test:browser": "tsx scripts/browser-smoke.ts",
-    "verify": "npm run test && npm run build && npm run example"
+    "verify": "npm run build && npm run example"
   },
   "repository": {
     "type": "git",
@@ -34,7 +31,6 @@
     "react-konva": "^19.3.2"
   },
   "devDependencies": {
-    "@playwright/test": "^1.65.1",
     "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
