@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { LayoutEditor } from '../../editors/layout/v1/layout-editor';
 import { TopologyEditor } from '../../editors/topology/v1/topology-editor';
 import type { Project } from '../../model/v1/types';
 import type { ProjectStore } from '../../state/v1/project-store';
+import { parseProjectJson, serializeProjectJson } from '../../storage/v1/project-json';
 import { LibraryPanel } from './library-panel';
 import { LinkEditor } from './links/link-editor';
 import { createLinkOptions } from './links/link-options';
@@ -26,6 +27,9 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const { project, selection, canUndo, canRedo } = state;
   const [error, setError] = useState('');
+  const fileInput = useRef<HTMLInputElement>(null);
+  const importAttempt = useRef(0);
+  const [projectSession, setProjectSession] = useState(0);
   const [page, setPage] = useState<Page>('canvas');
   const [treeHidden, setTreeHidden] = useState(() => window.matchMedia('(max-width: 46rem)').matches);
   const [expandedHierarchy, setExpandedHierarchy] = useState<ReadonlySet<string>>(new Set(['[]']));
@@ -62,15 +66,60 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     };
   }, []);
 
-  function openProject(load: () => Project) {
-    closeWorkbenchMenu();
-    if ((canUndo || canRedo) && !window.confirm('打开其他工程会清除当前编辑历史。是否继续？')) return;
-    const result = store.replaceProject(load());
+  function replaceProject(candidate: Project) {
+    const result = store.replaceProject(candidate);
     setError(result.ok ? '' : result.message);
     if (result.ok) {
+      importAttempt.current++;
+      setProjectSession(session => session + 1);
       setSupplies(new Map());
       setExpandedHierarchy(new Set(['[]']));
       setPage('canvas');
+    }
+  }
+
+  function openProject(load: () => Project) {
+    closeWorkbenchMenu();
+    if ((canUndo || canRedo) && !window.confirm('打开其他工程会清除当前编辑历史。是否继续？')) return;
+    try {
+      replaceProject(load());
+    } catch (error) {
+      setError(`打开工程失败：${(error as Error).message}`);
+    }
+  }
+
+  async function openProjectFile(file: File) {
+    const attempt = ++importAttempt.current;
+    try {
+      const source = await file.text();
+      if (attempt !== importAttempt.current) return;
+      const candidate = parseProjectJson(source);
+      if (!window.confirm(`打开「${candidate.name}」会替换当前工程并清除编辑历史。是否继续？`)) return;
+      replaceProject(candidate);
+    } catch (error) {
+      if (attempt === importAttempt.current) setError(`无法打开「${file.name}」：${(error as Error).message}`);
+    }
+  }
+
+  function downloadProject() {
+    closeWorkbenchMenu();
+    try {
+      const json = serializeProjectJson(store.getSnapshot().project);
+      const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'persona-project.json';
+      link.hidden = true;
+      try {
+        document.body.append(link);
+        link.click();
+        setError('');
+      } finally {
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      }
+    } catch (error) {
+      setError(`保存工程失败：${(error as Error).message}`);
     }
   }
 
@@ -99,6 +148,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
             <div className="v1-menu-items">
               <button type="button" onClick={() => openProject(newProject)}>新建空工程</button>
               <button type="button" onClick={() => openProject(loadExample)}>加载示例</button>
+                <button type="button" onClick={() => { closeWorkbenchMenu(); fileInput.current?.click(); }}>打开工程 JSON</button>
+                <button type="button" onClick={downloadProject}>保存工程 JSON</button>
               <button type="button" onClick={() => openPage('project')}>工程状态</button>
             </div>
           </details>
@@ -127,17 +178,24 @@ export function Workbench({ store, loadExample, newProject }: Props) {
             onClick={() => { store.setView('physical'); openPage('canvas'); }}>物理布局</button>
         </div>
       </header>
+      <input ref={fileInput} type="file" accept=".json,application/json" hidden aria-label="工程 JSON 文件"
+        onChange={event => {
+          const input = event.currentTarget;
+          const file = input.files?.[0];
+          input.value = '';
+          if (file) void openProjectFile(file);
+        }} />
       {error && <p className="v1-workbench-notice error" role="alert">{error}</p>}
       <main className="v1-workbench-main">
         <div className="v1-canvas-page" inert={page !== 'canvas'} aria-hidden={page !== 'canvas'}>
         {selection.view === 'topology' && active?.kind === 'module' &&
-          <TopologyEditor key={JSON.stringify(['topology', project.id, selection.modulePath])}
+          <TopologyEditor key={JSON.stringify(['topology', projectSession, project.id, selection.modulePath])}
             store={store} state={state} module={active} pathResult={pathResult} graph={linkOptions.graph}
             expandedHierarchy={expandedHierarchy} setExpandedHierarchy={setExpandedHierarchy}
             treeHidden={treeHidden} setTreeHidden={setTreeHidden} />}
         {selection.view === 'physical' &&
           <div className="v1-page-scroll"><div className="workspace">
-            <LayoutEditor key={JSON.stringify(['physical', project.id])} store={store} state={state} />
+            <LayoutEditor key={JSON.stringify(['physical', projectSession, project.id])} store={store} state={state} />
           </div></div>}
         </div>
         {page !== 'canvas' && <div className="v1-page-scroll">
