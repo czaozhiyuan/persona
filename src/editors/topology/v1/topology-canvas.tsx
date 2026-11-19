@@ -6,10 +6,13 @@ import type { Connection, LocalEndpointRef } from '../../../model/v1/topology';
 import type { InstancePath, ModuleDefinition, PortDefinition, PortMapping, Project } from '../../../model/v1/types';
 import { canvasEdgeKey } from './path-highlight';
 import type { projectPathHighlight } from './path-highlight';
+import { frameHeader, frameInsets, framePadding, ModuleFrame } from './module-frame';
 import '@xyflow/react/dist/style.css';
 
-type NodeData = { name: string; ports: readonly PortDefinition[]; boundary: boolean; pathPorts: ReadonlySet<string>; foldedPath?: boolean };
+type NodeData = { name: string; ports: readonly PortDefinition[]; pathPorts: ReadonlySet<string>; foldedPath?: boolean };
 type DeviceNode = Node<NodeData, 'device'>;
+type FrameNode = Node<NodeData, 'moduleFrame'>;
+type CanvasNode = DeviceNode | FrameNode;
 
 const boundary = 'boundary';
 const nodeId = (id: string) => encodeURIComponent(JSON.stringify(['instance', id]));
@@ -23,7 +26,7 @@ function Device({ id, data, selected }: NodeProps<DeviceNode>) {
       <strong>{data.name}</strong>
       {data.foldedPath && <span className="v1-topology-path-label">路径经过内部</span>}
       {data.ports.map(port => {
-        const output = (port.direction === 'out') !== data.boundary;
+        const output = port.direction === 'out';
         return (
           <div key={port.id} className={`v1-topology-port ${output ? 'out' : 'in'}${data.pathPorts.has(port.id) ? ' is-on-path' : ''}`} title={port.id}>
             <Handle id={handleId(port.id)} type={output ? 'source' : 'target'}
@@ -36,11 +39,36 @@ function Device({ id, data, selected }: NodeProps<DeviceNode>) {
   );
 }
 
-const nodeTypes = { device: Device };
+function Frame({ id, data }: NodeProps<FrameNode>) {
+  return <ModuleFrame id={id} name={data.name} ports={data.ports} highlighted={data.pathPorts} handleId={handleId} editable />;
+}
+
+const nodeTypes = { device: Device, moduleFrame: Frame };
+
+function moduleFrame(nodes: DeviceNode[], data: NodeData): FrameNode {
+  const insets = frameInsets(data.ports);
+  let left = nodes[0]?.position.x ?? 0;
+  let top = nodes[0]?.position.y ?? 0;
+  let right = left;
+  let bottom = top;
+  for (const { position, measured, data } of nodes) {
+    left = Math.min(left, position.x);
+    top = Math.min(top, position.y);
+    right = Math.max(right, position.x + (measured?.width ?? 202));
+    bottom = Math.max(bottom, position.y + (measured?.height ?? (48 + data.ports.length * 24)));
+  }
+  left -= insets.left;
+  top -= frameHeader;
+  return { id: boundary, type: 'moduleFrame', position: { x: left, y: top },
+    style: { width: Math.max(360, right - left + insets.right), height: Math.max(insets.height, bottom - top + framePadding),
+      pointerEvents: 'none' },
+    draggable: false, selectable: false, focusable: false, zIndex: -1, data };
+}
 
 type Props = {
   project: Project;
   module: ModuleDefinition;
+  moduleName: string;
   modulePath: InstancePath;
   selectedInstance?: InstancePath;
   highlight: ReturnType<typeof projectPathHighlight>;
@@ -51,28 +79,29 @@ type Props = {
   mapPort: (mapping: PortMapping) => void;
 };
 
-export function TopologyCanvas({ project, module, modulePath, selectedInstance, highlight, selectInstance, enterModule, move, connect, mapPort }: Props) {
+export function TopologyCanvas({ project, module, moduleName, modulePath, selectedInstance, highlight, selectInstance, enterModule, move, connect, mapPort }: Props) {
   const [drag, setDrag] = useState<{ id: string; position: XYPosition }>();
+  const [measurements, setMeasurements] = useState<ReadonlyMap<string, { width: number; height: number }>>(new Map());
   const definitions = new Map([...project.moduleDefinitions, ...project.componentDefinitions].map(def => [def.id, def]));
   const positions = new Map(project.layout?.topology?.map(item => [JSON.stringify(item.instancePath), item]));
   const instances = new Map(module.instances.map(instance => [nodeId(instance.id), instance]));
   const selected = selectedInstance && JSON.stringify(selectedInstance);
   const pathPorts = (path: InstancePath, ports: readonly PortDefinition[]) =>
     new Set(ports.filter(port => highlight.ports.has(signalPortKey({ instancePath: path, portId: port.id }))).map(port => port.id));
-  const nodes: DeviceNode[] = module.instances.map((instance, index) => {
+  const devices: DeviceNode[] = module.instances.map((instance, index) => {
     const id = nodeId(instance.id);
     const path = [...modulePath, instance.id];
     const saved = positions.get(JSON.stringify(path));
     const position = drag?.id === id ? drag.position : saved ? { x: saved.x, y: saved.y }
       : { x: 260 * (index % 3) + (module.ports.length ? 260 : 25), y: 240 * Math.floor(index / 3) + 25 };
     const ports = definitions.get(instance.definitionId)!.ports;
-    return { id, type: 'device', position, selected: selected === JSON.stringify(path),
-      data: { name: instance.name, ports, boundary: false, foldedPath: highlight.folded.has(instance.id), pathPorts: pathPorts(path, ports) } };
+    return { id, type: 'device', position, selected: selected === JSON.stringify(path), measured: measurements.get(id),
+      data: { name: instance.name, ports, foldedPath: highlight.folded.has(instance.id), pathPorts: pathPorts(path, ports) } };
   });
-  if (module.ports.length) {
-    nodes.push({ id: boundary, type: 'device', position: { x: 25, y: 25 }, draggable: false, selectable: false,
-      data: { name: '公开端口', ports: module.ports, boundary: true, pathPorts: pathPorts(modulePath, module.ports) } });
-  }
+  const framed = modulePath.length > 0 || module.ports.length > 0;
+  const nodes: CanvasNode[] = framed ? [
+    moduleFrame(devices, { name: moduleName, ports: module.ports, pathPorts: pathPorts(modulePath, module.ports) }), ...devices,
+  ] : devices;
 
   const edges: Edge[] = (module.connections ?? []).map(item => ({
     id: canvasEdgeKey('connection', item.id), source: nodeId(item.from.instanceId), target: nodeId(item.to.instanceId),
@@ -120,7 +149,7 @@ export function TopologyCanvas({ project, module, modulePath, selectedInstance, 
 
   return (
     <div className="v1-topology-canvas" aria-label="逻辑拓扑画布">
-      <ReactFlow<DeviceNode, Edge> nodes={nodes} edges={edges.map(edge => highlight.edges.has(edge.id)
+      <ReactFlow<CanvasNode, Edge> nodes={nodes} edges={edges.map(edge => highlight.edges.has(edge.id)
         ? { ...edge, className: 'v1-path-edge', style: { ...edge.style, stroke: '#a85618', strokeWidth: 3 }, zIndex: 2 } : edge)}
         nodeTypes={nodeTypes} fitView
         minZoom={0.2} maxZoom={2} deleteKeyCode={null} onConnect={onConnect} onPaneClick={() => selectInstance()}
@@ -135,6 +164,15 @@ export function TopologyCanvas({ project, module, modulePath, selectedInstance, 
         onNodesChange={changes => {
           const change = changes.find(item => item.type === 'position' && item.dragging);
           if (change?.type === 'position' && change.position) setDrag({ id: change.id, position: change.position });
+          if (framed && changes.some(item => item.type === 'dimensions' && item.id !== boundary)) setMeasurements(current => {
+            const next = new Map(current);
+            for (const item of changes) {
+              if (item.type !== 'dimensions' || item.id === boundary || !item.dimensions) continue;
+              const previous = next.get(item.id);
+              if (previous?.width !== item.dimensions.width || previous?.height !== item.dimensions.height) next.set(item.id, item.dimensions);
+            }
+            return [...next].every(([id, value]) => current.get(id) === value) ? current : next;
+          });
         }}
         onNodeDragStop={(_, node) => {
           setDrag(undefined);

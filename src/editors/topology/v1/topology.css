@@ -16,11 +16,24 @@
 .v1-hierarchy-depth input { writing-mode: vertical-lr; direction: ltr; height: clamp(8rem, 36vh, 18rem); accent-color: #267e73; }
 .v1-hierarchy-caption { margin: .35rem 0 0; color: #42605f; font-size: .78rem; }
 .v1-overview-card { box-sizing: border-box; width: 100%; height: 100%; border: 1px solid #8faeab; border-radius: .5rem; background: #fff; }
-.v1-overview-card.is-container { background: #e7f4ee; border: 2px solid #729c88; }
 .v1-overview-card.is-selected { outline: 3px solid #267e73; }
 .v1-overview-header { width: 200px; padding: .5rem .75rem; color: #183039; }
 .v1-overview-header strong, .v1-overview-header .v1-topology-port span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .v1-overview-header .v1-topology-port { height: 24px; min-height: 24px; }
+.v1-module-frame { box-sizing: border-box; width: 100%; height: 100%; border: 2px solid #729c88; border-radius: .5rem; background: #e7f4ee; }
+.v1-module-frame.is-selected { outline: 3px solid #267e73; }
+.v1-module-frame > strong { display: block; margin: .6rem 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.v1-module-pins { position: absolute; top: 52px; width: 116px; }
+.v1-module-pins.left { left: 0; }
+.v1-module-pins.right { right: 0; text-align: right; }
+.v1-module-pins .v1-topology-port { box-sizing: border-box; height: 28px; padding-inline: .65rem; }
+.v1-module-pins.right .v1-topology-port { justify-content: end; }
+.v1-module-pins .v1-topology-port span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.v1-module-pins .v1-topology-port .react-flow__handle { transform: translate(-50%, -50%); right: auto; }
+.v1-module-pins.left .v1-frame-inner-handle { left: 3px; }
+.v1-module-pins.left .v1-frame-outer-handle { left: -3px; }
+.v1-module-pins.right .v1-frame-inner-handle { left: calc(100% - 3px); }
+.v1-module-pins.right .v1-frame-outer-handle { left: calc(100% + 3px); }
 @media (max-width: 46rem) {
   .v1-hierarchy-workspace { grid-template-columns: minmax(0, 1fr) 3.4rem; }
   .v1-hierarchy-tree { grid-column: 1 / -1; }

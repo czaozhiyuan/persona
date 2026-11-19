@@ -1,5 +1,6 @@
 import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
 import type { InstancePath } from '../../../model/v1/types';
+import { frameHeader, frameInsets } from './module-frame';
 
 export const hierarchyKey = (path: InstancePath): string => JSON.stringify(path);
 export const inHierarchy = (scope: InstancePath, path: InstancePath): boolean =>
@@ -33,6 +34,7 @@ export function layoutHierarchy(instances: readonly ResolvedInstance[], scope: I
     && item.instancePath.length - scope.length <= depth);
   const children = hierarchyChildren(visible);
   const scopeKey = hierarchyKey(scope);
+  const showScopeFrame = scope.length > 0 || (visible[0]?.definition.ports.length ?? 0) > 0;
   const locations = new Map<string, { x: number; y: number }>();
   const sizes = new Map<string, { width: number; height: number; expanded: boolean }>();
 
@@ -41,13 +43,14 @@ export function layoutHierarchy(instances: readonly ResolvedInstance[], scope: I
     const key = hierarchyKey(item.instancePath);
     const ownHeight = 48 + item.definition.ports.length * 24;
     const nested = children.get(key) ?? [];
-    const expanded = key !== scopeKey && nested.length > 0;
+    const expanded = key === scopeKey ? showScopeFrame : nested.length > 0;
     let width = cardWidth;
     let height = ownHeight;
     if (expanded || key === scopeKey) {
-      let y = key === scopeKey && !item.definition.ports.length ? gap : ownHeight + gap;
+      const insets = expanded ? frameInsets(item.definition.ports) : { left: gap, right: gap, height: ownHeight };
+      let y = expanded ? frameHeader : gap;
       for (let start = 0; start < nested.length; start += 2) {
-        let x = gap;
+        let x = insets.left;
         let rowHeight = 0;
         for (const child of nested.slice(start, start + 2)) {
           const childKey = hierarchyKey(child.instancePath);
@@ -56,18 +59,21 @@ export function layoutHierarchy(instances: readonly ResolvedInstance[], scope: I
           x += size.width + gap;
           rowHeight = Math.max(rowHeight, size.height);
         }
-        width = Math.max(width, x);
+        width = Math.max(width, x - gap + insets.right);
         y += rowHeight + gap;
       }
-      if (expanded) height = y;
+      if (expanded) {
+        width = Math.max(width, 360);
+        height = Math.max(y, insets.height);
+      }
     }
-    sizes.set(key, { width: key === scopeKey ? cardWidth : width, height, expanded });
+    sizes.set(key, { width, height, expanded });
   }
-  return visible.filter(item => hierarchyKey(item.instancePath) !== scopeKey || item.definition.ports.length > 0)
+  return visible.filter(item => hierarchyKey(item.instancePath) !== scopeKey || showScopeFrame)
     .map(item => {
       const key = hierarchyKey(item.instancePath);
       const parentKey = hierarchyKey(item.instancePath.slice(0, -1));
-      return { item, key, parentKey: key === scopeKey || parentKey === scopeKey ? undefined : parentKey,
+      return { item, key, parentKey: key === scopeKey || (parentKey === scopeKey && !showScopeFrame) ? undefined : parentKey,
         position: locations.get(key) ?? { x: gap, y: gap / 2 }, ...sizes.get(key)! };
     });
 }

@@ -6,6 +6,7 @@ import { signalPortKey } from '../../../engine/v1/signal-graph';
 import type { SignalEdge, SignalGraph } from '../../../engine/v1/signal-graph';
 import type { InstancePath, PortDefinition } from '../../../model/v1/types';
 import { hierarchyKey, layoutHierarchy } from './hierarchy-view';
+import { boundaryPortSide, ModuleFrame } from './module-frame';
 
 type OverviewNode = Node<{
   path: InstancePath;
@@ -20,20 +21,17 @@ type OverviewNode = Node<{
 const nodeId = (key: string) => encodeURIComponent(key);
 const portId = (id: string, inner: boolean) => encodeURIComponent(JSON.stringify([id, inner]));
 
-function OverviewCard({ data, selected }: NodeProps<OverviewNode>) {
-  return <div className={`v1-overview-card${data.expanded ? ' is-container' : ''}${selected ? ' is-selected' : ''}`}>
+function OverviewCard({ id, data, selected }: NodeProps<OverviewNode>) {
+  if (data.expanded) return <ModuleFrame id={id} name={data.name} ports={data.ports} highlighted={data.activePorts}
+    handleId={portId} outerHandles={!data.boundary} selected={selected} />;
+  return <div className={`v1-overview-card${selected ? ' is-selected' : ''}`}>
     <div className="v1-overview-header">
       <strong title={data.name}>{data.name}</strong>
       {data.ports.map(port => {
-        const externalOutput = port.direction === 'out';
-        const handle = (inner: boolean) => {
-          const output = externalOutput !== inner;
-          return <Handle id={portId(port.id, inner)} type={output ? 'source' : 'target'}
-            position={output ? Position.Right : Position.Left} className={port.type} isConnectable={false} />;
-        };
+        const right = boundaryPortSide(port.direction) === 'right';
         return <div className={`v1-topology-port${data.activePorts.has(port.id) ? ' is-on-path' : ''}`} key={port.id}>
-          {handle(data.boundary)}
-          {data.expanded && handle(true)}
+          <Handle id={portId(port.id, false)} type={right ? 'source' : 'target'}
+            position={right ? Position.Right : Position.Left} className={port.type} isConnectable={false} />
           <span title={port.id}>{port.id}</span><small>{port.type}</small>
         </div>;
       })}
@@ -70,7 +68,7 @@ export function HierarchyCanvas({ graph, scope, depth, result, selected, select,
     const nodes: OverviewNode[] = projection.map(({ item, key, parentKey, position, expanded, width, height }) => ({
       id: nodeId(key), type: 'overview', position, parentId: parentKey === undefined ? undefined : nodeId(parentKey),
       style: { width, height }, selected: active === key, selectable: key !== scopeKey,
-      data: { path: item.instancePath, name: key === scopeKey ? '公开端口' : item.instance?.name ?? item.definition.name,
+      data: { path: item.instancePath, name: item.instance?.name ?? item.definition.name,
         ports: item.definition.ports, module: item.definition.kind === 'module', boundary: key === scopeKey, expanded,
         activePorts: new Set(item.definition.ports.filter(port => activePorts.has(signalPortKey({
           instancePath: item.instancePath, portId: port.id,

@@ -21,6 +21,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, expand
 }) {
   const { project, selection } = state;
   const scope = selection.modulePath;
+  const moduleName = store.resolveInstance(scope)?.instance?.name ?? module.name;
   const [message, setMessage] = useState('');
   const [requestedDepth, setRequestedDepth] = useState(1);
   const maxDepth = displayDepth(graph.instances, scope);
@@ -73,7 +74,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, expand
   }
 
   return <section className="panel v1-topology" aria-labelledby="topology-title">
-    <h2 id="topology-title">逻辑拓扑 · {store.resolveInstance(scope)?.instance?.name ?? module.name}</h2>
+    <h2 id="topology-title">逻辑拓扑 · {moduleName}</h2>
     <div className="v1-hierarchy-workspace">
       <HierarchyTree instances={graph.instances} modulePath={scope} selected={selection.instancePath}
         expanded={expandedHierarchy} navigate={navigate} toggle={path => {
@@ -86,7 +87,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, expand
           });
         }} />
       <div className="v1-hierarchy-graph">
-    {depth === 1 ? <TopologyCanvas project={project} module={module} modulePath={scope} selectedInstance={selection.instancePath}
+    {depth === 1 ? <TopologyCanvas key={hierarchyKey(scope)} project={project} module={module} moduleName={moduleName} modulePath={scope} selectedInstance={selection.instancePath}
       highlight={projectPathHighlight(pathResult, scope)}
       selectInstance={store.selectInstance} enterModule={store.selectModule}
       move={(id, position) => commit(draft => moveTopologyNode(draft, [...scope, id], position))}
@@ -95,7 +96,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, expand
       }))}
       mapPort={mapping => updateModule(current => ({
         ...current, portMappings: [...(current.portMappings ?? []).filter(item => item.portId !== mapping.portId), mapping],
-      }))} /> : <HierarchyCanvas key={depth} graph={graph} scope={scope} depth={depth} result={pathResult}
+      }))} /> : <HierarchyCanvas key={JSON.stringify([scope, depth])} graph={graph} scope={scope} depth={depth} result={pathResult}
         selected={selection.instancePath} select={store.selectInstance} navigate={store.selectModule} />}
         {depth > 1 && <p className="v1-hierarchy-caption">多层总览 · 回到第 1 层可拖动节点和画布接线。</p>}
       </div>
