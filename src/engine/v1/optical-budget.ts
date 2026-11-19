@@ -2,7 +2,7 @@ import { resolveOpticalChannel } from '../../model/v1/channels';
 import type { OpticalChannelId } from '../../model/v1/channels';
 import type { ConversionBoundary } from '../../model/v1/topology';
 import type { EndpointRef, Project } from '../../model/v1/types';
-import { budgetValue, checkInputRating, unavailable } from './budget-metric';
+import { addGain, budgetValue, checkInputRating, unavailable } from './budget-metric';
 import type { BudgetMetric, InputRatingCheck } from './budget-metric';
 import { resolveEmpiricalValue } from './empirical-value';
 import { searchSignalPath } from './path-search';
@@ -40,12 +40,6 @@ export type OpticalBudget = {
   gainDb: BudgetMetric<'dB'>;
   pathIssue?: PathIssue;
 };
-
-function addGain<Unit extends 'dB' | 'dBm'>(input: BudgetMetric<Unit>, gain: BudgetMetric<'dB'>): BudgetMetric<Unit> {
-  if (input.availability === 'unavailable') return input;
-  return gain.availability === 'available' ? budgetValue(input.unit, input.value + gain.value)
-    : unavailable(input.unit, gain.reason);
-}
 
 /** Calculates optical power over the validated V1 graph. The input snapshot is never edited. */
 export function createOpticalBudget(project: Project) {
