@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build && tsx scripts/package-artifacts.ts",
+    "build:v1": "tsc --noEmit && vite build --mode v1 && tsx scripts/package-artifacts.ts --v1",
     "test:v1:model": "tsx --test tests/v1/*.test.ts",
     "example": "tsx scripts/export-example.ts",
     "verify": "npm run build && npm run example"
