@@ -49,6 +49,20 @@
 .v1-overview-header strong, .v1-overview-header .v1-topology-port span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .v1-overview-header .v1-topology-port { height: 24px; min-height: 24px; }
 .v1-module-frame { box-sizing: border-box; width: 100%; height: 100%; border: 2px solid #729c88; border-radius: .5rem; background: #e7f4ee; }
+.v1-frame-resize { position: absolute; z-index: 2; pointer-events: auto; touch-action: none; }
+.v1-frame-resize:hover { background: #267e7366; }
+.v1-frame-resize-n, .v1-frame-resize-s { left: 10px; right: 10px; height: 10px; cursor: ns-resize; }
+.v1-frame-resize-w, .v1-frame-resize-e { top: 10px; bottom: 10px; width: 10px; cursor: ew-resize; }
+.v1-frame-resize-n, .v1-frame-resize-nw, .v1-frame-resize-ne { top: -5px; }
+.v1-frame-resize-s, .v1-frame-resize-sw, .v1-frame-resize-se { bottom: -5px; }
+.v1-frame-resize-w, .v1-frame-resize-nw, .v1-frame-resize-sw { left: -5px; }
+.v1-frame-resize-e, .v1-frame-resize-ne, .v1-frame-resize-se { right: -5px; }
+.v1-frame-resize-nw, .v1-frame-resize-ne, .v1-frame-resize-sw, .v1-frame-resize-se {
+  width: 15px; height: 15px; border-radius: 3px; background: #729c88;
+}
+.v1-frame-resize-nw, .v1-frame-resize-se { cursor: nwse-resize; }
+.v1-frame-resize-ne, .v1-frame-resize-sw { cursor: nesw-resize; }
+.react-flow__node-moduleFrame .v1-module-pins { z-index: 3; }
 .v1-module-frame.is-selected { outline: 3px solid #267e73; }
 .v1-module-frame > strong { display: block; margin: .6rem 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .v1-module-pins { position: absolute; top: 52px; width: 116px; }

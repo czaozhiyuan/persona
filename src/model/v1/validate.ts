@@ -175,4 +175,13 @@ export function validateProject(project: Project): void {
     requireValid(Number.isFinite(placement.x) && Number.isFinite(placement.y), `Invalid topology coordinates: ${key}`);
     positions.add(key);
   }
+  const frames = new Set<string>();
+  for (const frame of project.layout?.topologyFrames ?? []) {
+    const key = JSON.stringify(frame.modulePath);
+    requireValid(definitionAtPath(frame.modulePath)?.kind === 'module', `模块边框必须引用模块：${key}`);
+    requireValid(!frames.has(key), `模块边框重复：${key}`);
+    requireValid(frame.width > 0 && frame.height > 0
+      && [frame.x, frame.y, frame.x + frame.width, frame.y + frame.height].every(Number.isFinite), `模块边框坐标或尺寸无效：${key}`);
+    frames.add(key);
+  }
 }

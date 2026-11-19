@@ -3,7 +3,7 @@ import type { PathResult } from '../../../engine/v1/path-resolver';
 import type { SignalGraph } from '../../../engine/v1/signal-graph';
 import type { InstancePath, ModuleDefinition, PortDirection, PortType, Project } from '../../../model/v1/types';
 import type { ProjectStore, ProjectStoreSnapshot } from '../../../state/v1/project-store';
-import { editModule, editModuleWiring, moveTopologyNode } from '../../../state/v1/topology-edits';
+import { editModule, editModuleWiring, moveTopologyNode, resizeTopologyFrame } from '../../../state/v1/topology-edits';
 import { PortDeletionDialog } from './port-deletion-dialog';
 import { projectPathHighlight } from './path-highlight';
 import { TopologyCanvas } from './topology-canvas';
@@ -81,7 +81,15 @@ export function TopologyEditor({ store, state, module, pathResult, graph, expand
       modulePath={scope} treeHidden={treeHidden} selectedInstance={selection.instancePath}
       highlight={projectPathHighlight(pathResult, scope)}
       selectInstance={store.selectInstance} enterModule={store.selectModule}
-      move={(id, position) => commit(draft => moveTopologyNode(draft, [...scope, id], position))}
+      move={(id, position, frame) => commit(draft => {
+        const placed = moveTopologyNode(draft, [...scope, id], position);
+        return frame ? resizeTopologyFrame(placed, { modulePath: scope, ...frame }) : placed;
+      })}
+      resize={(frame, adjustments) => commit(draft => {
+        const placed = adjustments.reduce((current, { instanceId, position }) =>
+          moveTopologyNode(current, [...scope, instanceId], position), draft);
+        return resizeTopologyFrame(placed, { modulePath: scope, ...frame });
+      })}
       connect={connection => updateModule(current => ({
         ...current, connections: [...(current.connections ?? []), { ...connection, id: crypto.randomUUID() }],
       }))}
@@ -120,7 +128,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, expand
         <span>全部</span>
         <output htmlFor="topology-depth">{depth} / {maxDepth}</output>
       </div>
-      {depth > 1 && <p className="v1-hierarchy-caption">多层总览 · 回到第 1 层可拖动节点和画布接线。</p>}
+      {depth > 1 && <p className="v1-hierarchy-caption">多层总览 · 回到第 1 层可调整边框、拖动节点和接线。</p>}
       {message && !preview && <p className="v1-topology-message error" role="alert">{message}</p>}
     </div>
     <div className="v1-topology-tools">

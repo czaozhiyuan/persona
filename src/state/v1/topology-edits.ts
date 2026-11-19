@@ -1,6 +1,6 @@
 import { resolveHierarchy } from '../../engine/v1/hierarchy';
 import type { CableCoreRef, CableCore, ConversionBoundary, LocalEndpointRef } from '../../model/v1/topology';
-import type { ConnectionRef, EndpointRef, InstancePath, ModuleDefinition, Project } from '../../model/v1/types';
+import type { ConnectionRef, EndpointRef, InstancePath, ModuleDefinition, Project, TopologyFrame } from '../../model/v1/types';
 
 type Via = ConnectionRef | CableCoreRef;
 
@@ -33,6 +33,12 @@ export function moveTopologyNode(project: Project, instancePath: InstancePath, p
   const topology = (project.layout?.topology ?? []).filter(placement =>
     placement.instancePath.length !== instancePath.length || placement.instancePath.some((id, i) => id !== instancePath[i]));
   return { ...project, layout: { ...project.layout, topology: [...topology, { instancePath, x: position.x, y: position.y }] } };
+}
+
+export function resizeTopologyFrame(project: Project, frame: TopologyFrame): Project {
+  const key = JSON.stringify(frame.modulePath);
+  const topologyFrames = (project.layout?.topologyFrames ?? []).filter(item => JSON.stringify(item.modulePath) !== key);
+  return { ...project, layout: { ...project.layout, topologyFrames: [...topologyFrames, frame] } };
 }
 
 type ImpactKind = '端口' | '连接' | '端口映射' | '纤芯附件' | '器件传输' | '开关路由' | '链路端点' | '链路必经边' | '标定绑定' | '直流电源' | '直流负载';

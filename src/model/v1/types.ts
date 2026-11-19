@@ -96,9 +96,19 @@ export type TopologyPlacement = {
   y: number;
 };
 
+export type TopologyFrame = {
+  modulePath: InstancePath;
+  /** Bounds in the module's own logical canvas coordinates. */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 export type LayoutState = {
   physical?: readonly PhysicalPlacement[];
   topology?: readonly TopologyPlacement[];
+  topologyFrames?: readonly TopologyFrame[];
 };
 
 export type Project = {
