@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import type { NamedLink } from '../../src/model/v1/topology';
+import { resizeTopologyFrame } from '../../src/state/v1/topology-edits';
 import type { Project } from '../../src/model/v1/types';
 import { ProjectFileError, ProjectStructureError, parseProjectJson, serializeProjectJson } from '../../src/storage/v1/project-json';
 
@@ -28,6 +29,21 @@ test('the standalone example round-trips all project snapshots, references and l
   assert.equal(bundle?.coreCount, 12);
   assert.deepEqual(bundle?.cores[2].b, { pin: 10 });
   assert.equal(project.namedLinks?.find(link => link.id === 'full')?.conversionBindings?.[0].profileId, 'reference');
+});
+
+test('topology frames retain different bounds for instances of the same module', () => {
+  const project = parseProjectJson(source);
+  const a = { modulePath: ['TX_A'], x: -35, y: -20, width: 700, height: 500 };
+  const b = { ...a, modulePath: ['TX_B'], width: 600 };
+  const initial = resizeTopologyFrame(resizeTopologyFrame(project, a), b);
+  const resized = { ...a, width: 760 };
+  const snapshot = resizeTopologyFrame(initial, resized);
+
+  assert.deepEqual(roundTrip(snapshot).layout?.topologyFrames, [b, resized]);
+  assert.deepEqual(snapshot.layout?.physical, project.layout?.physical);
+  assert.deepEqual(snapshot.layout?.topology, project.layout?.topology);
+  assert.throws(() => serializeProjectJson(resizeTopologyFrame(project, { ...a, width: 0 })), /模块边框坐标或尺寸无效/);
+  assert.throws(() => serializeProjectJson(resizeTopologyFrame(project, { ...a, modulePath: ['TX_A', 'mzm'] })), /模块边框必须引用模块/);
 });
 
 test('interface-first modules and incomplete or disconnected links remain editable', () => {

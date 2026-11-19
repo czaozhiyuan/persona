@@ -1,19 +1,21 @@
 import { Background, Handle, Position, ReactFlow, useNodesState, useUpdateNodeInternals } from '@xyflow/react';
-import type { Connection as FlowConnection, Edge, Node, NodeChange, NodeProps, ReactFlowInstance, Viewport, XYPosition } from '@xyflow/react';
+import type { Connection as FlowConnection, Edge, Node, NodeChange, NodeProps, ReactFlowInstance, Rect, Viewport, XYPosition } from '@xyflow/react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { signalPortKey } from '../../../engine/v1/signal-graph';
 import type { Connection, LocalEndpointRef } from '../../../model/v1/topology';
 import type { InstancePath, ModuleDefinition, PortDefinition, PortMapping, Project } from '../../../model/v1/types';
 import { canvasEdgeKey } from './path-highlight';
 import type { projectPathHighlight } from './path-highlight';
-import { frameHeader, frameInsets, framePadding, ModuleFrame } from './module-frame';
+import { frameInsets, ModuleFrame } from './module-frame';
+import { fitModuleFrame, keepNodeInside, minimumFrame, moduleExtent } from './frame-geometry';
+import { FrameResizeHandles } from './frame-resize-handles';
 import { keepGraphVisible } from './viewport';
 import { CanvasControls, canvasFitOptions } from './canvas-controls';
 import '@xyflow/react/dist/style.css';
 
 type NodeData = { name: string; ports: readonly PortDefinition[]; pathPorts: ReadonlySet<string>; foldedPath?: boolean };
 type DeviceNode = Node<NodeData, 'device'>;
-type FrameNode = Node<NodeData, 'moduleFrame'>;
+type FrameNode = Node<NodeData & Parameters<typeof FrameResizeHandles>[0], 'moduleFrame'>;
 type CanvasNode = DeviceNode | FrameNode;
 
 const boundary = 'boundary';
@@ -42,29 +44,23 @@ function Device({ id, data, selected }: NodeProps<DeviceNode>) {
 }
 
 function Frame({ id, data }: NodeProps<FrameNode>) {
-  return <ModuleFrame id={id} name={data.name} ports={data.ports} highlighted={data.pathPorts} handleId={handleId} editable />;
+  return <>
+    <ModuleFrame id={id} name={data.name} ports={data.ports} highlighted={data.pathPorts} handleId={handleId} editable />
+    <FrameResizeHandles frame={data.frame} childrenBounds={data.childrenBounds} insets={data.insets}
+      preview={data.preview} finish={data.finish} />
+  </>;
 }
 
 const nodeTypes = { device: Device, moduleFrame: Frame };
 
-function moduleFrame(nodes: DeviceNode[], data: NodeData): FrameNode {
-  const insets = frameInsets(data.ports);
-  let left = nodes[0]?.position.x ?? 0;
-  let top = nodes[0]?.position.y ?? 0;
-  let right = left;
-  let bottom = top;
-  for (const { position, measured, data } of nodes) {
-    left = Math.min(left, position.x);
-    top = Math.min(top, position.y);
-    right = Math.max(right, position.x + (measured?.width ?? 202));
-    bottom = Math.max(bottom, position.y + (measured?.height ?? (48 + data.ports.length * 24)));
-  }
-  left -= insets.left;
-  top -= frameHeader;
-  return { id: boundary, type: 'moduleFrame', position: { x: left, y: top },
-    style: { width: Math.max(360, right - left + insets.right), height: Math.max(insets.height, bottom - top + framePadding),
-      pointerEvents: 'none' },
+function moduleFrame(data: FrameNode['data']): FrameNode {
+  const { x, y, width, height } = data.frame;
+  return { id: boundary, type: 'moduleFrame', position: { x, y }, style: { width, height, pointerEvents: 'none' },
     draggable: false, selectable: false, focusable: false, zIndex: -1, data };
+}
+
+function nodeBounds(node: DeviceNode, position = node.position): Rect {
+  return { ...position, width: node.measured?.width ?? 202, height: node.measured?.height ?? (48 + node.data.ports.length * 24) };
 }
 
 type Props = {
@@ -77,13 +73,15 @@ type Props = {
   highlight: ReturnType<typeof projectPathHighlight>;
   selectInstance: (path?: InstancePath) => void;
   enterModule: (path: InstancePath) => void;
-  move: (instanceId: string, position: XYPosition) => void;
+  move: (instanceId: string, position: XYPosition, frame?: Rect) => void;
+  resize: (frame: Rect, placementAdjustments: readonly { instanceId: string; position: XYPosition }[]) => void;
   connect: (connection: Omit<Connection, 'id'>) => void;
   mapPort: (mapping: PortMapping) => void;
 };
 
-export function TopologyCanvas({ project, module, moduleName, modulePath, treeHidden, selectedInstance, highlight, selectInstance, enterModule, move, connect, mapPort }: Props) {
+export function TopologyCanvas({ project, module, moduleName, modulePath, treeHidden, selectedInstance, highlight, selectInstance, enterModule, move, resize, connect, mapPort }: Props) {
   const [viewport, setViewport] = useState<Viewport>();
+  const [resizePreview, setResizePreview] = useState<Rect>();
   const canvas = useRef<HTMLDivElement>(null);
   const flow = useRef<ReactFlowInstance<CanvasNode, Edge>>(null);
 
@@ -129,12 +127,40 @@ export function TopologyCanvas({ project, module, moduleName, modulePath, treeHi
     });
   }, [projectedNodes, setNodes]);
 
-  const nodes: CanvasNode[] = modulePath.length || module.ports.length ? [
-    moduleFrame(devices, { name: moduleName, ports: module.ports,
+  const insets = frameInsets(module.ports);
+  const originalPositions = new Map(projectedNodes.map(node => [node.id, node.position]));
+  const originalBounds = new Map(devices.map(node => [node.id, nodeBounds(node, originalPositions.get(node.id))]));
+  const childBounds = [...originalBounds.values()];
+  const savedFrame = project.layout?.topologyFrames?.find(item => JSON.stringify(item.modulePath) === JSON.stringify(modulePath));
+  const { width: minWidth, height: minHeight } = minimumFrame(childBounds, insets);
+  const baseFrame = savedFrame
+    ? { x: savedFrame.x, y: savedFrame.y, width: Math.max(savedFrame.width, minWidth), height: Math.max(savedFrame.height, minHeight) }
+    : fitModuleFrame(childBounds, insets);
+  const hasFrame = !!(modulePath.length || module.ports.length || savedFrame);
+  const frame = resizePreview ?? baseFrame;
+  const baseExtent = moduleExtent(baseFrame, insets);
+  const extent = resizePreview ? moduleExtent(frame, insets) : baseExtent;
+  const boundedDevices = hasFrame ? devices.map(node => ({
+    ...node, extent, position: keepNodeInside(nodeBounds(node), baseExtent),
+  })) : devices;
+
+  function saveFrame(next: Rect) {
+    // Persist any positions that were visually clamped after an import or an instance was added.
+    const adjustments = boundedDevices.flatMap(({ id, position }) => {
+      const original = originalBounds.get(id);
+      const instance = instances.get(id);
+      return instance && original && (original.x !== position.x || original.y !== position.y)
+        ? [{ instanceId: instance.id, position }] : [];
+    });
+    resize(next, adjustments);
+  }
+  const nodes: CanvasNode[] = hasFrame ? [
+    moduleFrame({ name: moduleName, ports: module.ports, frame, insets,
+      childrenBounds: boundedDevices.map(node => nodeBounds(node)), preview: setResizePreview, finish: saveFrame,
       pathPorts: new Set(module.ports.filter(port => highlight.ports.has(signalPortKey({
         instancePath: modulePath, portId: port.id,
       }))).map(port => port.id)) }),
-    ...devices,
+    ...boundedDevices,
   ] : devices;
 
   const edges: Edge[] = (module.connections ?? []).map(item => ({
@@ -205,9 +231,12 @@ export function TopologyCanvas({ project, module, moduleName, modulePath, treeHi
         }}
         onNodeDragStop={(_, node) => {
           const instance = instances.get(node.id);
-          const previous = projectedNodes.find(item => item.id === node.id)?.position;
-          if (instance && previous && (node.position.x !== previous.x || node.position.y !== previous.y)) {
-            move(instance.id, node.position);
+          const original = originalBounds.get(node.id);
+          if (!instance || !original) return;
+          const previous = hasFrame ? keepNodeInside(original, extent) : original;
+          const position = hasFrame ? keepNodeInside({ ...original, ...node.position }, extent) : node.position;
+          if (position.x !== previous.x || position.y !== previous.y) {
+            move(instance.id, position, hasFrame && !savedFrame ? baseFrame : undefined);
           }
         }}>
         <Background />
