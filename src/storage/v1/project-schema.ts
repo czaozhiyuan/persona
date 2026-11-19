@@ -102,6 +102,8 @@ const empirical = byKind({ fixed, rfCurve, channelTable });
 const rfValue = byKind({ fixed, rfCurve });
 const rfQuantity = byKind({ fixed, rfCurve, parameter: parameterRef });
 const opticalQuantity = byKind({ fixed, channelTable, parameter: parameterRef });
+const dcQuantity = byKind({ fixed, parameter: parameterRef });
+const dcCapacity = shape({ unit: oneOf('W', 'A'), value: dcQuantity });
 const parameterValue: Check = (value, path) => {
   if (typeof value !== 'string') empirical(value, path);
 };
@@ -128,12 +130,14 @@ const transfer = byKind({
     opticalLoss: shape({}, { intrinsicLossDb: opticalQuantity, operatingPointLossDb: opticalQuantity }),
   }),
   oe: shape({ ...portPair, kind: oneOf('oe') }, { channelIds: channels }),
-  dc: shape({ ...portPair, kind: oneOf('dc') }),
+  dc: shape({ ...portPair, kind: oneOf('dc') }, { outputVoltageV: dcQuantity, efficiency: dcQuantity, capacity: dcCapacity }),
 });
 const definition = { ...identity, ports: list(port) };
 const component = shape({ ...definition, kind: oneOf('component') }, {
   parameters: list(parameter), transfers: list(transfer),
   switchStates: list(shape({ ...identity, routes: list(shape(portPair, opticalOptions)) })),
+  dcSupply: shape({ portId: text }, { voltageV: dcQuantity, capacity: dcCapacity }),
+  dcLoad: shape({ portId: text }, { powerW: dcQuantity }),
 });
 const instance = shape({ ...identity, definitionId: text }, {
   parameterOverrides: dictionary(parameterValue), switchStateId: text,
