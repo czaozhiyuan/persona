@@ -35,7 +35,7 @@ export function moveTopologyNode(project: Project, instancePath: InstancePath, p
   return { ...project, layout: { ...project.layout, topology: [...topology, { instancePath, x: position.x, y: position.y }] } };
 }
 
-type ImpactKind = '端口' | '连接' | '端口映射' | '纤芯附件' | '器件传输' | '开关路由' | '链路端点' | '链路必经边' | '标定绑定';
+type ImpactKind = '端口' | '连接' | '端口映射' | '纤芯附件' | '器件传输' | '开关路由' | '链路端点' | '链路必经边' | '标定绑定' | '直流电源' | '直流负载';
 export type PortDeletionImpact = {
   kind: ImpactKind;
   name: string;
@@ -64,9 +64,15 @@ export function planPortDeletion(project: Project, definitionId: string, portId:
 
   const componentDefinitions = project.componentDefinitions.map(component => {
     if (component.id !== definitionId) return component;
+    const clearSupply = component.dcSupply?.portId === portId;
+    const clearLoad = component.dcLoad?.portId === portId;
+    if (clearSupply) report('直流电源', portId, component.id);
+    if (clearLoad) report('直流负载', portId, component.id);
     return {
       ...component,
       ports: component.ports.filter(port => port.id !== portId),
+      ...(clearSupply && { dcSupply: undefined }),
+      ...(clearLoad && { dcLoad: undefined }),
       transfers: component.transfers?.filter(transfer => {
         const removed = transfer.fromPortId === portId || transfer.toPortId === portId
           || (transfer.kind === 'eo' && transfer.supplyPortId === portId);

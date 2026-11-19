@@ -1,11 +1,16 @@
 import type { OpticalChannelId } from './channels';
-import type { NumericRange, OpticalValue, RfValue } from './parameters';
+import type { FixedValue, NumericRange, OpticalValue, RfValue } from './parameters';
 
 export type InputRating = NumericRange & { unit: 'dBm' | 'V' | 'A' | 'W' };
 
 type Quantity<T> = T | { kind: 'parameter'; parameterId: string };
 type PortPair = { fromPortId: string; toPortId: string };
 type ChannelFilter = { channelIds?: readonly OpticalChannelId[] };
+
+export type DcValue = Quantity<FixedValue>;
+export type DcCapacity = { unit: 'W' | 'A'; value: DcValue };
+export type DcSupply = { portId: string; voltageV?: DcValue; capacity?: DcCapacity };
+export type DcLoad = { portId: string; powerW?: DcValue };
 
 export type OpticalRoute = PortPair & ChannelFilter & { gainDb?: Quantity<OpticalValue> };
 
@@ -33,7 +38,7 @@ export type Transfer =
     gainDb?: Quantity<OpticalValue>;
   })
   | (PortPair & ChannelFilter & { kind: 'oe' })
-  | (PortPair & { kind: 'dc' });
+  | (PortPair & { kind: 'dc'; outputVoltageV?: DcValue; efficiency?: DcValue; capacity?: DcCapacity });
 
 export type SwitchState = {
   id: string;

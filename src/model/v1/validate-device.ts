@@ -1,4 +1,4 @@
-import type { ConversionProfile, Transfer } from './device';
+import type { ConversionProfile, DcCapacity, DcValue, Transfer } from './device';
 import type { EmpiricalValue, ParameterDefinition } from './parameters';
 import type { ComponentDefinition, PortDefinition, PortType } from './types';
 import { validateChannelIds, validateEmpirical, validateRange } from './validate-parameters';
@@ -67,6 +67,50 @@ export function validateDevice(
       if (intrinsicLossDb !== undefined) validateDb(intrinsicLossDb, kinds, `${context} intrinsic loss`, 0);
       if (operatingPointLossDb !== undefined) validateDb(operatingPointLossDb, kinds, `${context} operating-point loss`, 0);
     }
+    if (route.kind === 'dc') {
+      validateDcValue(route.outputVoltageV, 'V', `${context} output voltage`);
+      validateDcValue(route.efficiency, 'ratio', `${context} efficiency`);
+      validateDcCapacity(route.capacity, `${context} capacity`);
+      requireValid(route.toPortId !== definition.dcSupply?.portId, `${context}: DC supply output cannot also be a converter output`);
+    }
+  }
+
+  function validateDcValue(value: DcValue | undefined, unit: 'V' | 'A' | 'W' | 'ratio', context: string) {
+    if (value === undefined) return;
+    const allowsRange = (min: number, max: number) => (unit === 'V' || unit === 'ratio' ? min > 0 : min >= 0)
+      && (unit !== 'ratio' || max <= 1);
+    if (value.kind === 'parameter') {
+      const parameter = parameters.get(value.parameterId);
+      requireValid(parameter?.kind === 'numeric' && parameter.unit === unit && parameter.valueKind === 'fixed',
+        `${context}: expected a fixed ${unit} parameter reference`);
+      requireValid(allowsRange(parameter.range?.min ?? -Infinity, parameter.range?.max ?? Infinity),
+        `${context}: parameter range must enforce valid DC values`);
+    } else {
+      validateEmpirical(value, ['fixed'], context);
+      requireValid(allowsRange(value.value, value.value), `${context}: invalid DC value`);
+    }
+  }
+
+  function validateDcCapacity(capacity: DcCapacity | undefined, context: string) {
+    if (capacity === undefined) return;
+    requireValid(capacity.unit === 'A' || capacity.unit === 'W', `${context}: expected A or W`);
+    validateDcValue(capacity.value, capacity.unit, context);
+  }
+
+  if (definition.dcSupply) {
+    const { portId, voltageV, capacity } = definition.dcSupply;
+    const port = ports.get(portId);
+    const context = `DC supply in "${definition.id}"`;
+    requireValid(port?.type === 'DC_POWER' && port.direction === 'out', `${context}: expected a DC_POWER output port`);
+    validateDcValue(voltageV, 'V', `${context} voltage`);
+    validateDcCapacity(capacity, `${context} capacity`);
+  }
+  if (definition.dcLoad) {
+    const { portId, powerW } = definition.dcLoad;
+    const port = ports.get(portId);
+    const context = `DC load in "${definition.id}"`;
+    requireValid(port?.type === 'DC_POWER' && port.direction === 'in', `${context}: expected a DC_POWER input port`);
+    validateDcValue(powerW, 'W', `${context} power`);
   }
 
   function validateDb(

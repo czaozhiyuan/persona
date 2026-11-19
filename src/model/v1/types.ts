@@ -1,5 +1,5 @@
 import type { OpticalChannelId } from './channels';
-import type { ConversionProfile, InputRating, SwitchState, Transfer } from './device';
+import type { ConversionProfile, DcLoad, DcSupply, InputRating, SwitchState, Transfer } from './device';
 import type { ParameterDefinition, ParameterMapping, ParameterValue } from './parameters';
 import type { CableBundle, Connection, LocalEndpointRef, NamedLink } from './topology';
 
@@ -39,6 +39,8 @@ export type ComponentDefinition = DefinitionIdentity & {
   kind: 'component';
   transfers?: readonly Transfer[];
   switchStates?: readonly SwitchState[];
+  dcSupply?: DcSupply;
+  dcLoad?: DcLoad;
 };
 
 export type Instance = {
