@@ -1,5 +1,6 @@
 import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
 import type { InstancePath } from '../../../model/v1/types';
+import { blockPortRows } from './block-ports';
 import { frameHeader, frameInsets } from './module-frame';
 
 export const hierarchyKey = (path: InstancePath): string => JSON.stringify(path);
@@ -41,7 +42,7 @@ export function layoutHierarchy(instances: readonly ResolvedInstance[], scope: I
   // Lay out descendants before their containers, with positions relative to the immediate parent.
   for (const item of [...visible].reverse()) {
     const key = hierarchyKey(item.instancePath);
-    const ownHeight = 48 + item.definition.ports.length * 24;
+    const ownHeight = 48 + blockPortRows(item.definition.ports) * 24;
     const nested = children.get(key) ?? [];
     const expanded = key === scopeKey ? showScopeFrame : nested.length > 0;
     let width = cardWidth;
