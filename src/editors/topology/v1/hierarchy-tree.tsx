@@ -9,9 +9,11 @@ type Props = {
   expanded: ReadonlySet<string>;
   toggle: (path: InstancePath) => void;
   navigate: (path: InstancePath, module: boolean) => void;
+  hidden: boolean;
+  toggleTree: () => void;
 };
 
-export function HierarchyTree({ instances, modulePath, selected, expanded, toggle, navigate }: Props) {
+export function HierarchyTree({ instances, modulePath, selected, expanded, toggle, navigate, hidden, toggleTree }: Props) {
   const children = hierarchyChildren(instances);
   const root = instances[0];
   const pending = root ? [root] : [];
@@ -25,9 +27,14 @@ export function HierarchyTree({ instances, modulePath, selected, expanded, toggl
       for (const child of [...(children.get(hierarchyKey(occurrence.instancePath)) ?? [])].reverse()) pending.push(child);
     }
   }
-  return <aside className="v1-hierarchy-tree" aria-labelledby="hierarchy-tree-title">
-    <h3 id="hierarchy-tree-title">工程层级</h3>
-    <ul>
+  return <aside className="v1-hierarchy-tree" aria-label="工程层级">
+    <header>
+      {!hidden && <h3>工程层级</h3>}
+      <button type="button" aria-expanded={!hidden} aria-controls="hierarchy-rows"
+        aria-label={hidden ? '显示工程层级' : '收起工程层级'} title={hidden ? '显示工程层级' : '收起工程层级'}
+        onClick={toggleTree}>{hidden ? '»' : '«'}</button>
+    </header>
+    <ul id="hierarchy-rows" hidden={hidden}>
       {rows.map(({ instancePath, instance, definition }) => {
         const key = hierarchyKey(instancePath);
         const name = instance?.name ?? definition.name;

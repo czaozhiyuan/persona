@@ -1,4 +1,4 @@
-import { Background, Controls, Handle, Position, ReactFlow, useNodesState, useUpdateNodeInternals } from '@xyflow/react';
+import { Background, Handle, Position, ReactFlow, useNodesState, useUpdateNodeInternals } from '@xyflow/react';
 import type { Connection as FlowConnection, Edge, Node, NodeChange, NodeProps, ReactFlowInstance, Viewport, XYPosition } from '@xyflow/react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { signalPortKey } from '../../../engine/v1/signal-graph';
@@ -8,6 +8,7 @@ import { canvasEdgeKey } from './path-highlight';
 import type { projectPathHighlight } from './path-highlight';
 import { frameHeader, frameInsets, framePadding, ModuleFrame } from './module-frame';
 import { keepGraphVisible } from './viewport';
+import { CanvasControls, canvasFitOptions } from './canvas-controls';
 import '@xyflow/react/dist/style.css';
 
 type NodeData = { name: string; ports: readonly PortDefinition[]; pathPorts: ReadonlySet<string>; foldedPath?: boolean };
@@ -70,6 +71,7 @@ type Props = {
   project: Project;
   module: ModuleDefinition;
   moduleName: string;
+  treeHidden: boolean;
   modulePath: InstancePath;
   selectedInstance?: InstancePath;
   highlight: ReturnType<typeof projectPathHighlight>;
@@ -80,7 +82,7 @@ type Props = {
   mapPort: (mapping: PortMapping) => void;
 };
 
-export function TopologyCanvas({ project, module, moduleName, modulePath, selectedInstance, highlight, selectInstance, enterModule, move, connect, mapPort }: Props) {
+export function TopologyCanvas({ project, module, moduleName, modulePath, treeHidden, selectedInstance, highlight, selectInstance, enterModule, move, connect, mapPort }: Props) {
   const [viewport, setViewport] = useState<Viewport>();
   const canvas = useRef<HTMLDivElement>(null);
   const flow = useRef<ReactFlowInstance<CanvasNode, Edge>>(null);
@@ -183,7 +185,8 @@ export function TopologyCanvas({ project, module, moduleName, modulePath, select
     <div ref={canvas} className="v1-topology-canvas" aria-label="逻辑拓扑画布">
       <ReactFlow<CanvasNode, Edge> nodes={nodes} edges={edges.map(edge => highlight.edges.has(edge.id)
         ? { ...edge, className: 'v1-path-edge', style: { ...edge.style, stroke: '#a85618', strokeWidth: 3 }, zIndex: 2 } : edge)}
-        nodeTypes={nodeTypes} fitView viewport={viewport} onViewportChange={changeViewport} onInit={instance => { flow.current = instance; }}
+        nodeTypes={nodeTypes} fitView fitViewOptions={canvasFitOptions(treeHidden)}
+        viewport={viewport} onViewportChange={changeViewport} onInit={instance => { flow.current = instance; }}
         minZoom={0.2} maxZoom={2} deleteKeyCode={null} onConnect={onConnect} onPaneClick={() => selectInstance()}
         onNodeClick={(_, node) => {
           const instance = instances.get(node.id);
@@ -208,7 +211,7 @@ export function TopologyCanvas({ project, module, moduleName, modulePath, select
           }
         }}>
         <Background />
-        <Controls showInteractive={false} />
+        <CanvasControls treeHidden={treeHidden} />
       </ReactFlow>
       {!nodes.length && <span className="v1-topology-empty">添加实例或声明公开端口以开始。</span>}
     </div>

@@ -1,9 +1,17 @@
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import type { CableBundle, Connection, LocalEndpointRef } from '../../../model/v1/topology';
 import type { ModuleDefinition, PortDefinition } from '../../../model/v1/types';
 
 export type LocalPort = { ref: LocalEndpointRef; port: PortDefinition; label: string };
 export type UpdateWiring = (change: (module: ModuleDefinition) => ModuleDefinition) => boolean;
+
+export function TopologyTool({ title, children }: { title: string; children: ReactNode }) {
+  return <details name="topology-tools" data-workbench-popup>
+    <summary>{title}</summary>
+    <div className="v1-topology-popup" aria-label={title}>{children}</div>
+  </details>;
+}
 
 export const field = (data: FormData, name: string) => String(data.get(name) ?? '').trim();
 const endpointKey = (ref: LocalEndpointRef) => JSON.stringify([ref.instanceId, ref.portId]);
@@ -24,8 +32,7 @@ export function ConnectionForm({ module, ports, update }: { module: ModuleDefini
   const [selected, setSelected] = useState('');
   const connection = module.connections?.find(item => item.id === selected);
   const label = (ref: LocalEndpointRef) => ports.find(item => endpointKey(item.ref) === endpointKey(ref))?.label;
-  return <details>
-    <summary>连接</summary>
+  return <TopologyTool title="连接">
     <label>已有连接<select value={connection?.id ?? ''} onChange={event => setSelected(event.target.value)}>
       <option value="">新增连接</option>
       {module.connections?.map(item => <option key={item.id} value={item.id}>{label(item.from)} → {label(item.to)}</option>)}
@@ -53,7 +60,7 @@ export function ConnectionForm({ module, ports, update }: { module: ModuleDefini
         if (update(current => ({ ...current, connections: current.connections?.filter(item => item.id !== connection.id) }))) setSelected('');
       }}>删除连接</button>}
     </form>
-  </details>;
+  </TopologyTool>;
 }
 
 export function MappingForm({ module, ports, update }: { module: ModuleDefinition; ports: readonly LocalPort[]; update: UpdateWiring }) {
@@ -61,8 +68,7 @@ export function MappingForm({ module, ports, update }: { module: ModuleDefinitio
   const publicPort = module.ports.find(item => item.id === selected);
   const mapping = module.portMappings?.find(item => item.portId === selected);
   const candidates = ports.filter(item => item.port.type === publicPort?.type && item.port.direction === publicPort.direction);
-  return <details>
-    <summary>公开端口映射</summary>
+  return <TopologyTool title="公开端口映射">
     <label>公开端口<select value={publicPort?.id ?? ''} onChange={event => setSelected(event.target.value)}>
       <option value="">请选择</option>
       {module.ports.map(port => <option key={port.id} value={port.id}>{port.id}{module.portMappings?.some(item => item.portId === port.id) ? '' : '（开放）'}</option>)}
@@ -81,7 +87,7 @@ export function MappingForm({ module, ports, update }: { module: ModuleDefinitio
         ...current, portMappings: current.portMappings?.filter(item => item.portId !== selected),
       }))}>清除映射</button>}
     </form>}
-  </details>;
+  </TopologyTool>;
 }
 
 function CoreForm({ bundle, ports, update }: { bundle: CableBundle; ports: readonly LocalPort[]; update: (bundle: CableBundle) => boolean }) {
@@ -120,8 +126,7 @@ export function CableForm({ module, ports, update }: { module: ModuleDefinition;
   const save = (item: CableBundle) => update(current => ({
     ...current, cableBundles: [...(current.cableBundles ?? []).filter(existing => existing.id !== bundle?.id), item],
   }));
-  return <details>
-    <summary>MPO 芯序</summary>
+  return <TopologyTool title="MPO 芯序">
     <label>线缆<select value={bundle?.id ?? ''} onChange={event => setSelected(event.target.value)}>
       <option value="">新增线缆</option>
       {module.cableBundles?.map(item => <option key={item.id} value={item.id}>{item.id}（{item.coreCount} 芯）</option>)}
@@ -141,5 +146,5 @@ export function CableForm({ module, ports, update }: { module: ModuleDefinition;
       }}>删除线缆</button>}
     </form>
     {bundle && <CoreForm key={bundle.id} bundle={bundle} ports={ports.filter(item => item.port.type === 'OPTICAL')} update={save} />}
-  </details>;
+  </TopologyTool>;
 }
