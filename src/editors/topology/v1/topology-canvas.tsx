@@ -1,11 +1,12 @@
-import { Background, Controls, Handle, Position, ReactFlow, useUpdateNodeInternals } from '@xyflow/react';
-import type { Connection as FlowConnection, Edge, Node, NodeProps, XYPosition } from '@xyflow/react';
-import { useEffect, useState } from 'react';
+import { Background, Controls, Handle, Position, ReactFlow, useNodesState, useUpdateNodeInternals } from '@xyflow/react';
+import type { Connection as FlowConnection, Edge, Node, NodeProps, ReactFlowInstance, Viewport, XYPosition } from '@xyflow/react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { signalPortKey } from '../../../engine/v1/signal-graph';
 import type { Connection, LocalEndpointRef } from '../../../model/v1/topology';
 import type { InstancePath, ModuleDefinition, PortDefinition, PortMapping, Project } from '../../../model/v1/types';
 import { canvasEdgeKey } from './path-highlight';
 import type { projectPathHighlight } from './path-highlight';
+import { keepGraphVisible } from './viewport';
 import '@xyflow/react/dist/style.css';
 
 type NodeData = { name: string; ports: readonly PortDefinition[]; boundary: boolean; pathPorts: ReadonlySet<string>; foldedPath?: boolean };
@@ -52,27 +53,53 @@ type Props = {
 };
 
 export function TopologyCanvas({ project, module, modulePath, selectedInstance, highlight, selectInstance, enterModule, move, connect, mapPort }: Props) {
-  const [drag, setDrag] = useState<{ id: string; position: XYPosition }>();
-  const definitions = new Map([...project.moduleDefinitions, ...project.componentDefinitions].map(def => [def.id, def]));
-  const positions = new Map(project.layout?.topology?.map(item => [JSON.stringify(item.instancePath), item]));
+  const [viewport, setViewport] = useState<Viewport>();
+  const canvas = useRef<HTMLDivElement>(null);
+  const flow = useRef<ReactFlowInstance<DeviceNode, Edge>>(null);
+
+  const changeViewport = useCallback((requested: Viewport) => {
+    const bounds = flow.current?.getNodes().flatMap(({ id }) => {
+      const node = flow.current?.getInternalNode(id);
+      const width = node?.measured.width ?? 0;
+      const height = node?.measured.height ?? 0;
+      return node && width > 0 && height > 0 ? [{ ...node.internals.positionAbsolute, width, height }] : [];
+    }) ?? [];
+    const next = keepGraphVisible(requested, canvas.current?.clientWidth ?? 0, canvas.current?.clientHeight ?? 0, bounds);
+    setViewport(next);
+  }, []);
+  const definitions = useMemo(() => new Map([...project.moduleDefinitions, ...project.componentDefinitions].map(def => [def.id, def])), [project]);
   const instances = new Map(module.instances.map(instance => [nodeId(instance.id), instance]));
   const selected = selectedInstance && JSON.stringify(selectedInstance);
-  const pathPorts = (path: InstancePath, ports: readonly PortDefinition[]) =>
-    new Set(ports.filter(port => highlight.ports.has(signalPortKey({ instancePath: path, portId: port.id }))).map(port => port.id));
-  const nodes: DeviceNode[] = module.instances.map((instance, index) => {
-    const id = nodeId(instance.id);
-    const path = [...modulePath, instance.id];
-    const saved = positions.get(JSON.stringify(path));
-    const position = drag?.id === id ? drag.position : saved ? { x: saved.x, y: saved.y }
-      : { x: 260 * (index % 3) + (module.ports.length ? 260 : 25), y: 240 * Math.floor(index / 3) + 25 };
-    const ports = definitions.get(instance.definitionId)!.ports;
-    return { id, type: 'device', position, selected: selected === JSON.stringify(path),
-      data: { name: instance.name, ports, boundary: false, foldedPath: highlight.folded.has(instance.id), pathPorts: pathPorts(path, ports) } };
-  });
-  if (module.ports.length) {
-    nodes.push({ id: boundary, type: 'device', position: { x: 25, y: 25 }, draggable: false, selectable: false,
-      data: { name: '公开端口', ports: module.ports, boundary: true, pathPorts: pathPorts(modulePath, module.ports) } });
-  }
+  const projectedNodes = useMemo(() => {
+    const positions = new Map(project.layout?.topology?.map(item => [JSON.stringify(item.instancePath), item]));
+    const pathPorts = (path: InstancePath, ports: readonly PortDefinition[]) =>
+      new Set(ports.filter(port => highlight.ports.has(signalPortKey({ instancePath: path, portId: port.id }))).map(port => port.id));
+    const projected: DeviceNode[] = module.instances.map((instance, index) => {
+      const id = nodeId(instance.id);
+      const path = [...modulePath, instance.id];
+      const saved = positions.get(JSON.stringify(path));
+      const position = saved ? { x: saved.x, y: saved.y }
+        : { x: 260 * (index % 3) + (module.ports.length ? 260 : 25), y: 240 * Math.floor(index / 3) + 25 };
+      const ports = definitions.get(instance.definitionId)!.ports;
+      return { id, type: 'device', position, selected: selected === JSON.stringify(path),
+        data: { name: instance.name, ports, boundary: false, foldedPath: highlight.folded.has(instance.id), pathPorts: pathPorts(path, ports) } };
+    });
+    if (module.ports.length) {
+      projected.push({ id: boundary, type: 'device', position: { x: 25, y: 25 }, draggable: false, selectable: false,
+        data: { name: '公开端口', ports: module.ports, boundary: true, pathPorts: pathPorts(modulePath, module.ports) } });
+    }
+    return projected;
+  }, [project.layout?.topology, module, modulePath, definitions, selected, highlight]);
+  const [nodes, setNodes, applyCanvasChanges] = useNodesState(projectedNodes);
+
+  useLayoutEffect(() => {
+    setNodes(current => {
+      if (current === projectedNodes) return current;
+      const measurements = new Map(current.map(node => [node.id, node.measured]));
+      // Keep React Flow's measurements across project edits and selection changes.
+      return projectedNodes.map(node => ({ ...node, measured: measurements.get(node.id) }));
+    });
+  }, [projectedNodes, setNodes]);
 
   const edges: Edge[] = (module.connections ?? []).map(item => ({
     id: canvasEdgeKey('connection', item.id), source: nodeId(item.from.instanceId), target: nodeId(item.to.instanceId),
@@ -119,10 +146,10 @@ export function TopologyCanvas({ project, module, modulePath, selectedInstance, 
   }
 
   return (
-    <div className="v1-topology-canvas" aria-label="逻辑拓扑画布">
+    <div ref={canvas} className="v1-topology-canvas" aria-label="逻辑拓扑画布">
       <ReactFlow<DeviceNode, Edge> nodes={nodes} edges={edges.map(edge => highlight.edges.has(edge.id)
         ? { ...edge, className: 'v1-path-edge', style: { ...edge.style, stroke: '#a85618', strokeWidth: 3 }, zIndex: 2 } : edge)}
-        nodeTypes={nodeTypes} fitView
+        nodeTypes={nodeTypes} fitView viewport={viewport} onViewportChange={changeViewport} onInit={instance => { flow.current = instance; }}
         minZoom={0.2} maxZoom={2} deleteKeyCode={null} onConnect={onConnect} onPaneClick={() => selectInstance()}
         onNodeClick={(_, node) => {
           const instance = instances.get(node.id);
@@ -133,18 +160,17 @@ export function TopologyCanvas({ project, module, modulePath, selectedInstance, 
           if (instance && definitions.get(instance.definitionId)?.kind === 'module') enterModule([...modulePath, instance.id]);
         }}
         onNodesChange={changes => {
-          const change = changes.find(item => item.type === 'position' && item.dragging);
-          if (change?.type === 'position' && change.position) setDrag({ id: change.id, position: change.position });
+          // Drag and measurement events update the canvas only, until the drop commits a project edit.
+          const canvasChanges = changes.filter(change => change.type === 'dimensions'
+            || (change.type === 'position' && (change.dragging || nodes.some(node => node.id === change.id && node.dragging))));
+          if (canvasChanges.length) applyCanvasChanges(canvasChanges);
         }}
         onNodeDragStop={(_, node) => {
-          setDrag(undefined);
           const instance = instances.get(node.id);
-          if (!instance) return;
-          const path = [...modulePath, instance.id];
-          const index = module.instances.indexOf(instance);
-          const saved = positions.get(JSON.stringify(path));
-          const previous = saved ?? { x: 260 * (index % 3) + (module.ports.length ? 260 : 25), y: 240 * Math.floor(index / 3) + 25 };
-          if (node.position.x !== previous.x || node.position.y !== previous.y) move(instance.id, node.position);
+          const previous = projectedNodes.find(item => item.id === node.id)?.position;
+          if (instance && previous && (node.position.x !== previous.x || node.position.y !== previous.y)) {
+            move(instance.id, node.position);
+          }
         }}>
         <Background />
         <Controls showInteractive={false} />
