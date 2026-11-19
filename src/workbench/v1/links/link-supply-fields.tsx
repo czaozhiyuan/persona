@@ -3,6 +3,7 @@ import type { OpticalSource } from '../../../engine/v1/optical-budget';
 import { signalPortKey } from '../../../engine/v1/signal-graph';
 import { resolveOpticalChannel } from '../../../model/v1/channels';
 import type { LinkOptions } from './link-options';
+import { showEndpoint } from './link-options';
 import { ChannelField } from '../properties/channel-field';
 
 const sourceKey = ({ endpoint, channelId }: OpticalSource) => JSON.stringify([signalPortKey(endpoint), channelId]);
@@ -18,7 +19,7 @@ export function LinkSupplyFields({ options, sources, onChange }: {
     <summary>供光查询{sources.length ? ` · ${sources.length} 项` : ''}</summary>
     {sources.length > 0 && <ul className="v1-supply-list">
       {sources.map((source, index) => <li key={sourceKey(source)}>
-        <span>{labels.get(signalPortKey(source.endpoint))} · <b>{source.channelId}</b></span>
+        <span>{labels.get(signalPortKey(source.endpoint)) ?? showEndpoint(source.endpoint)} · <b>{source.channelId}</b></span>
         <label>光源功率 (dBm)<input type="number" step="any" value={source.powerDbm ?? ''} placeholder="未知"
           onChange={event => {
             const value = event.currentTarget.valueAsNumber;

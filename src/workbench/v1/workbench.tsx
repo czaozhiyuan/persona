@@ -7,6 +7,9 @@ import { signalPortKey } from '../../engine/v1/signal-graph';
 import type { Project } from '../../model/v1/types';
 import type { ProjectStore } from '../../state/v1/project-store';
 import { parseProjectJson, serializeProjectJson } from '../../storage/v1/project-json';
+import { DcBudgetPanel } from './budgets/dc-budget-panel';
+import { LocalOpticalPanel } from './budgets/local-optical-panel';
+import type { LocalOpticalSettings } from './budgets/local-optical-panel';
 import { LibraryPanel } from './library-panel';
 import { LinkEditor } from './links/link-editor';
 import { createLinkOptions } from './links/link-options';
@@ -20,7 +23,7 @@ type Props = {
   newProject: () => Project;
 };
 
-type Page = 'canvas' | 'project' | 'links' | 'library' | 'properties' | 'profiles';
+type Page = 'canvas' | 'project' | 'links' | 'library' | 'properties' | 'profiles' | 'optical-budget' | 'dc-budget';
 const emptyBudgetConditions: LinkBudgetConditions = {};
 
 function closeWorkbenchMenu() {
@@ -38,6 +41,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const [treeHidden, setTreeHidden] = useState(() => window.matchMedia('(max-width: 46rem)').matches);
   const [expandedHierarchy, setExpandedHierarchy] = useState<ReadonlySet<string>>(new Set(['[]']));
   const [linkInputs, setLinkInputs] = useState<ReadonlyMap<string, LinkBudgetConditions>>(new Map());
+  const [localOptical, setLocalOptical] = useState<LocalOpticalSettings>({ sources: [] });
   const activeOccurrence = store.resolveInstance(selection.modulePath);
   const active = activeOccurrence?.definition;
   const selected = selection.instancePath && store.resolveInstance(selection.instancePath);
@@ -80,6 +84,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
       importAttempt.current++;
       setProjectSession(session => session + 1);
       setLinkInputs(new Map());
+      setLocalOptical({ sources: [] });
       setExpandedHierarchy(new Set(['[]']));
       setPage('canvas');
     }
@@ -162,6 +167,12 @@ export function Workbench({ store, loadExample, newProject }: Props) {
           </details>
           <details name="workbench-menu" data-workbench-popup><summary>链路</summary>
             <div className="v1-menu-items"><button type="button" onClick={() => openPage('links')}>命名链路</button></div>
+          </details>
+          <details name="workbench-menu" data-workbench-popup><summary>预算</summary>
+            <div className="v1-menu-items">
+              <button type="button" onClick={() => openPage('optical-budget')}>局部光功率</button>
+              <button type="button" onClick={() => openPage('dc-budget')}>DC 供电预算</button>
+            </div>
           </details>
           <details name="workbench-menu" data-workbench-popup><summary>器件库</summary>
             <div className="v1-menu-items"><button type="button" disabled={active?.kind !== 'module'}
@@ -275,6 +286,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
         {page === 'properties' && properties && <PropertiesPanel key={JSON.stringify(['properties', project.id, properties.instancePath])}
           store={store} occurrence={properties} />}
         {page === 'profiles' && <ProfilePanel key={JSON.stringify(['profiles', project.id])} store={store} profiles={project.conversionProfiles ?? []} />}
+        {page === 'optical-budget' && <LocalOpticalPanel options={linkOptions} settings={localOptical} onChange={setLocalOptical} />}
+        {page === 'dc-budget' && <DcBudgetPanel project={project} />}
           </div>
         </div>}
       </main>
