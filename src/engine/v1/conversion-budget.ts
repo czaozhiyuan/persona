@@ -1,4 +1,5 @@
 import { DEFAULT_CONVERSION_K } from '../../model/v1/device';
+import type { ConversionProfile } from '../../model/v1/device';
 import type { OpticalChannelId } from '../../model/v1/channels';
 import type { NamedLink } from '../../model/v1/topology';
 import type { EndpointRef, Project } from '../../model/v1/types';
@@ -9,11 +10,12 @@ import { createOpticalBudgetForGraph } from './optical-budget';
 import type { OpticalBudget, OpticalSource } from './optical-budget';
 import { createPathResolver } from './path-resolver';
 import type { PathResult, PathTrace } from './path-resolver';
-import { resolveRfStage } from './rf-budget';
+import { isRfFrequency, resolveRfStage } from './rf-budget';
 import type { RfBudgetInput } from './rf-budget';
 import { signalPortKey } from './signal-graph';
+import type { SignalGraph } from './signal-graph';
 
-type ConversionBudgetInput = RfBudgetInput & { opticalSources?: readonly OpticalSource[] };
+export type ConversionBudgetInput = RfBudgetInput & { opticalSources?: readonly OpticalSource[] };
 
 type ConversionSegment = {
   eoEdgeIndex: number;
@@ -58,11 +60,10 @@ export type ConversionBudget = {
 
 const noNf = () => unavailable('dB', 'Cross-domain noise figure is not modeled.');
 
-export function createConversionBudget(project: Project) {
-  const resolver = createPathResolver(project);
-  const opticalBudget = createOpticalBudgetForGraph(resolver.graph);
-  const instances = new Map(resolver.graph.instances.map(item => [JSON.stringify(item.instancePath), item]));
-  const profiles = new Map(project.conversionProfiles?.map(profile => [profile.id, profile]));
+export function createConversionPathBudget(graph: SignalGraph, conversionProfiles: readonly ConversionProfile[] = []) {
+  const opticalBudget = createOpticalBudgetForGraph(graph);
+  const instances = new Map(graph.instances.map(item => [JSON.stringify(item.instancePath), item]));
+  const profiles = new Map(conversionProfiles.map(profile => [profile.id, profile]));
 
   function opticalSegment(trace: PathTrace, eoIndex: number, oeIndex: number, sources: readonly OpticalSource[]) {
     const eo = trace.edges[eoIndex];
@@ -85,7 +86,7 @@ export function createConversionBudget(project: Project) {
     return { optical, channelId: optical.stages.at(-1)!.channelId };
   }
 
-  function calculateNamedLink(link: NamedLink, input: ConversionBudgetInput): ConversionBudget {
+  return function calculate(path: PathResult, input: ConversionBudgetInput): ConversionBudget {
     const { frequencyGHz, inputPowerDbm, opticalSources = [] } = input;
     const diagnostics: Diagnostic[] = [];
     const segments: ConversionSegment[] = [];
@@ -95,12 +96,9 @@ export function createConversionBudget(project: Project) {
       return { status: 'error', frequencyGHz, gainDb: unavailable('dB', problem.reason), nfDb: noNf(),
         powerDbm: unavailable('dBm', problem.reason), segments, rfStages, diagnostics: [problem] };
     }
-    if (!Number.isFinite(frequencyGHz) || frequencyGHz < 0 || frequencyGHz > 67) {
+    if (!isRfFrequency(frequencyGHz)) {
       return failed({ code: 'invalid_frequency', reason: 'RF frequency must be between 0 and 67 GHz.' });
     }
-    const path = resolver.resolveNamedLink(link, {
-      opticalSources: opticalSources.map(source => ({ ...source.endpoint, channelId: source.channelId })),
-    });
     let blocked: Diagnostic | undefined;
     if (path.status !== 'resolved') {
       blocked = { code: path.status, endpoint: path.endpoint, reason: path.reason };
@@ -203,7 +201,17 @@ export function createConversionBudget(project: Project) {
       segment.optical && segment.optical.status !== 'error' || segment.gainDb.availability === 'available')
       || rfStages.some(stage => stage.gainDb.availability === 'available' || stage.nfDb.availability === 'available');
     return { status: hasResults ? 'partial' : 'error', frequencyGHz, gainDb, powerDbm, nfDb: noNf(), segments, rfStages, diagnostics };
-  }
+  };
+}
 
+export function createConversionBudget(project: Project) {
+  const resolver = createPathResolver(project);
+  const calculate = createConversionPathBudget(resolver.graph, project.conversionProfiles);
+  function calculateNamedLink(link: NamedLink, input: ConversionBudgetInput) {
+    const path = resolver.resolveNamedLink(link, {
+      opticalSources: input.opticalSources?.map(source => ({ ...source.endpoint, channelId: source.channelId })),
+    });
+    return calculate(path, input);
+  }
   return { calculateNamedLink };
 }

@@ -7,9 +7,13 @@ import { resolveEmpiricalValue } from './empirical-value';
 import type { ResolvedInstance } from './hierarchy';
 import { createPathResolver } from './path-resolver';
 import type { LocalPathRequest, PathResult } from './path-resolver';
-import type { SignalEdge, SignalPort } from './signal-graph';
+import type { SignalEdge, SignalGraph, SignalPort } from './signal-graph';
 
 export type RfBudgetInput = { frequencyGHz: number; inputPowerDbm?: number };
+
+export function isRfFrequency(frequencyGHz: number): boolean {
+  return Number.isFinite(frequencyGHz) && frequencyGHz >= 0 && frequencyGHz <= 67;
+}
 
 type RfStageValues = { gainDb: BudgetMetric<'dB'>; nfDb: BudgetMetric<'dB'> };
 type RfStage = {
@@ -70,17 +74,15 @@ function failed(frequencyGHz: number, pathIssue: RfPathIssue): RfBudget {
     nfDb: unavailable('dB', pathIssue.reason), powerDbm: unavailable('dBm', pathIssue.reason) };
 }
 
-/** Calculates budgets against a single validated V1 project snapshot. */
-export function createRfBudget(project: Project) {
-  const resolver = createPathResolver(project);
-  const instances = new Map(resolver.graph.instances.map(item => [JSON.stringify(item.instancePath), item]));
+/** Evaluates the selected path using effective parameters from the same graph. */
+export function createRfPathBudget(graph: SignalGraph) {
+  const instances = new Map(graph.instances.map(item => [JSON.stringify(item.instancePath), item]));
 
-  function calculate(input: RfBudgetInput, resolve: () => PathResult): RfBudget {
+  return function calculate(path: PathResult, input: RfBudgetInput): RfBudget {
     const { frequencyGHz, inputPowerDbm } = input;
-    if (!Number.isFinite(frequencyGHz) || frequencyGHz < 0 || frequencyGHz > 67) {
+    if (!isRfFrequency(frequencyGHz)) {
       return failed(frequencyGHz, { status: 'invalid_frequency', reason: 'RF frequency must be between 0 and 67 GHz.' });
     }
-    const path = resolve();
     if (path.status !== 'resolved') return failed(frequencyGHz, { status: path.status, reason: path.reason, endpoint: path.endpoint });
     const nonRf = path.trace.steps.find(step => step.port.definition.type !== 'RF');
     if (nonRf) {
@@ -118,10 +120,15 @@ export function createRfBudget(project: Project) {
       || item.incoming?.device?.gainDb.availability === 'available' || item.incoming?.device?.nfDb.availability === 'available');
     const status = available === 3 ? 'valid' : available > 0 || hasStageData ? 'partial' : 'error';
     return { status, frequencyGHz, stages, gainDb, nfDb, powerDbm };
-  }
+  };
+}
 
+/** Calculates budgets against a single validated V1 project snapshot. */
+export function createRfBudget(project: Project) {
+  const resolver = createPathResolver(project);
+  const calculate = createRfPathBudget(resolver.graph);
   return {
-    calculateLocal: (request: LocalPathRequest, input: RfBudgetInput) => calculate(input, () => resolver.resolveLocalPath(request)),
-    calculateNamedLink: (link: NamedLink, input: RfBudgetInput) => calculate(input, () => resolver.resolveNamedLink(link)),
+    calculateLocal: (request: LocalPathRequest, input: RfBudgetInput) => calculate(resolver.resolveLocalPath(request), input),
+    calculateNamedLink: (link: NamedLink, input: RfBudgetInput) => calculate(resolver.resolveNamedLink(link), input),
   };
 }
