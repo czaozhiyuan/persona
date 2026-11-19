@@ -16,6 +16,12 @@ export function budgetValue<Unit extends NumericUnit>(unit: Unit, value: number)
     : unavailable(unit, 'The budget value is not finite.');
 }
 
+export function addGain<Unit extends 'dB' | 'dBm'>(input: BudgetMetric<Unit>, gain: BudgetMetric<'dB'>): BudgetMetric<Unit> {
+  if (input.availability === 'unavailable') return input;
+  return gain.availability === 'available' ? budgetValue(input.unit, input.value + gain.value)
+    : unavailable(input.unit, gain.reason);
+}
+
 export type InputRatingCheck = { endpoint: EndpointRef; limits: InputRating } & (
   | { status: 'unknown'; reason: string }
   | { status: 'within_range'; value: number }
