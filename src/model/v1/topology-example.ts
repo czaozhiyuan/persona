@@ -1,4 +1,5 @@
 import type { OpticalChannelId } from './channels';
+import type { NumericParameter } from './parameters';
 import type { ConversionBinding } from './topology';
 import type { PortDirection, Project } from './types';
 
@@ -7,6 +8,10 @@ const optical = (id: string, direction: PortDirection, channelIds: readonly Opti
   ({ id, type: 'OPTICAL' as const, direction, channelIds });
 const rf = (id: string, direction: PortDirection) => ({ id, type: 'RF' as const, direction });
 const local = (instanceId: string, portId: string) => ({ instanceId, portId });
+const operatingPointLoss: NumericParameter = {
+  id: 'operatingPointLoss', name: '控制点附加损耗', kind: 'numeric', unit: 'dB', valueKind: 'fixed',
+  range: { min: 0 }, defaultValue: { kind: 'fixed', value: 2 }, overridable: true,
+};
 
 const binding: ConversionBinding = {
   id: 'span-1',
@@ -23,7 +28,11 @@ export const topologyExample = {
     {
       kind: 'component', id: 'mzm', name: 'MZM',
       ports: [rf('RF_IN', 'in'), optical('SUPPLY', 'in'), optical('OUT', 'out')],
-      transfers: [{ kind: 'eo', fromPortId: 'RF_IN', toPortId: 'OUT', supplyPortId: 'SUPPLY' }],
+      parameters: [operatingPointLoss],
+      transfers: [{ kind: 'eo', fromPortId: 'RF_IN', toPortId: 'OUT', supplyPortId: 'SUPPLY', opticalLoss: {
+        intrinsicLossDb: { kind: 'fixed', value: 3 },
+        operatingPointLossDb: { kind: 'parameter', parameterId: operatingPointLoss.id },
+      } }],
     },
     {
       kind: 'component', id: 'pd', name: 'PD',
@@ -63,6 +72,9 @@ export const topologyExample = {
         { id: 'mzm', name: 'MZM', definitionId: 'mzm' },
       ],
       portMappings: [{ portId: 'OPT_OUT', target: local('mzm', 'OUT') }],
+      parameters: [operatingPointLoss],
+      parameterMappings: [{ parameterId: operatingPointLoss.id,
+        target: { instanceId: 'mzm', parameterId: operatingPointLoss.id } }],
       connections: [{ id: 'rf-feed', from: local('source', 'OUT'), to: local('mzm', 'RF_IN'), mediaKind: 'RF_COAX' }],
     },
     {

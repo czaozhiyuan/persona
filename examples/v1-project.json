@@ -47,12 +47,28 @@
             ]
           }
         ],
+        "parameters": [
+          {
+            "id": "operatingPointLoss",
+            "name": "控制点附加损耗",
+            "kind": "numeric",
+            "unit": "dB",
+            "valueKind": "fixed",
+            "range": { "min": 0 },
+            "defaultValue": { "kind": "fixed", "value": 2 },
+            "overridable": true
+          }
+        ],
         "transfers": [
           {
             "kind": "eo",
             "fromPortId": "RF_IN",
             "toPortId": "OUT",
-            "supplyPortId": "SUPPLY"
+            "supplyPortId": "SUPPLY",
+            "opticalLoss": {
+              "intrinsicLossDb": { "kind": "fixed", "value": 3 },
+              "operatingPointLossDb": { "kind": "parameter", "parameterId": "operatingPointLoss" }
+            }
           }
         ]
       },
@@ -591,6 +607,24 @@
               "instanceId": "mzm",
               "portId": "OUT"
             }
+          }
+        ],
+        "parameters": [
+          {
+            "id": "operatingPointLoss",
+            "name": "控制点附加损耗",
+            "kind": "numeric",
+            "unit": "dB",
+            "valueKind": "fixed",
+            "range": { "min": 0 },
+            "defaultValue": { "kind": "fixed", "value": 2 },
+            "overridable": true
+          }
+        ],
+        "parameterMappings": [
+          {
+            "parameterId": "operatingPointLoss",
+            "target": { "instanceId": "mzm", "parameterId": "operatingPointLoss" }
           }
         ],
         "connections": [

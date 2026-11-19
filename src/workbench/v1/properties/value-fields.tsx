@@ -132,13 +132,15 @@ export const rfKinds = ['fixed', 'rfCurve'] as const;
 export const opticalKinds = ['fixed', 'channelTable'] as const;
 const modeNames = { fixed: '固定值', rfCurve: 'RF 折点', channelTable: '通道表', parameter: '引用参数' };
 
-export function QuantityField({ name, label, kinds, value, parameters }: {
+export function QuantityField({ name, label, kinds, value, parameters, minimum }: {
   name: string; label: string; kinds: readonly ValueKind[];
   value?: EmpiricalValue | { kind: 'parameter'; parameterId: string }; parameters: readonly ParameterDefinition[];
+  minimum?: number;
 }) {
   const [kind, setKind] = useState<ValueKind | 'parameter' | ''>(value?.kind ?? '');
   const options = parameters.filter(parameter =>
-    parameter.kind === 'numeric' && parameter.unit === 'dB' && kinds.some(item => item === parameter.valueKind));
+    parameter.kind === 'numeric' && parameter.unit === 'dB' && kinds.some(item => item === parameter.valueKind)
+    && (minimum === undefined || (parameter.range?.min ?? -Infinity) >= minimum));
   return <fieldset>
     <legend>{label}</legend>
     <label>取值方式<select name={name + 'Kind'} value={kind} onChange={event => setKind(event.target.value as typeof kind)}>

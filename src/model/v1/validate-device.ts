@@ -61,18 +61,26 @@ export function validateDevice(
     const kinds = route.kind === 'rf' ? ['fixed', 'rfCurve'] as const : ['fixed', 'channelTable'] as const;
     if ('gainDb' in route && route.gainDb !== undefined) validateDb(route.gainDb, kinds, context);
     if (route.kind === 'rf' && route.nfDb !== undefined) validateDb(route.nfDb, kinds, `${context} NF`);
+    if (route.kind === 'eo' && route.opticalLoss !== undefined) {
+      requireValid(route.gainDb === undefined, `${context}: specify either net gain or split optical losses`);
+      const { intrinsicLossDb, operatingPointLossDb } = route.opticalLoss;
+      if (intrinsicLossDb !== undefined) validateDb(intrinsicLossDb, kinds, `${context} intrinsic loss`, 0);
+      if (operatingPointLossDb !== undefined) validateDb(operatingPointLossDb, kinds, `${context} operating-point loss`, 0);
+    }
   }
 
   function validateDb(
     value: EmpiricalValue | { kind: 'parameter'; parameterId: string },
-    kinds: readonly EmpiricalValue['kind'][], context: string,
+    kinds: readonly EmpiricalValue['kind'][], context: string, minimum?: number,
   ) {
     if (value.kind === 'parameter') {
       const parameter = parameters.get(value.parameterId);
       requireValid(parameter?.kind === 'numeric' && parameter.unit === 'dB' && kinds.includes(parameter.valueKind),
         `${context}: invalid dB parameter reference "${value.parameterId}"`);
+      if (minimum !== undefined) requireValid((parameter.range?.min ?? -Infinity) >= minimum,
+        `${context}: referenced loss parameter must have a non-negative lower bound`);
     } else {
-      validateEmpirical(value, kinds, context);
+      validateEmpirical(value, kinds, context, minimum === undefined ? undefined : { min: minimum });
     }
   }
 

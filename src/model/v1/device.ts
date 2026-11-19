@@ -9,6 +9,11 @@ type ChannelFilter = { channelIds?: readonly OpticalChannelId[] };
 
 export type OpticalRoute = PortPair & ChannelFilter & { gainDb?: Quantity<OpticalValue> };
 
+export type EoOpticalLoss = {
+  intrinsicLossDb?: Quantity<OpticalValue>;
+  operatingPointLossDb?: Quantity<OpticalValue>;
+};
+
 export type Transfer =
   | (PortPair & { kind: 'rf'; gainDb?: Quantity<RfValue>; nfDb?: Quantity<RfValue> })
   | (OpticalRoute & { kind: 'optical' })
@@ -23,6 +28,8 @@ export type Transfer =
     kind: 'eo';
     /** The optical input required by externally supplied modulators such as an MZM. */
     supplyPortId?: string;
+    /** Positive optical losses. This is mutually exclusive with a signed net gain. */
+    opticalLoss?: EoOpticalLoss;
     gainDb?: Quantity<OpticalValue>;
   })
   | (PortPair & ChannelFilter & { kind: 'oe' })

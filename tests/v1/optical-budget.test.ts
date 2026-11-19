@@ -7,7 +7,10 @@ import { createOpticalBudget } from '../../src/engine/v1/optical-budget';
 import type { OpticalSource } from '../../src/engine/v1/optical-budget';
 import { createPathResolver } from '../../src/engine/v1/path-resolver';
 import { deviceExample } from '../../src/model/v1/device-example';
+import { topologyExample } from '../../src/model/v1/topology-example';
 import type { EndpointRef, ModuleDefinition, Project } from '../../src/model/v1/types';
+import type { Transfer } from '../../src/model/v1/device';
+import { parseProjectJson, serializeProjectJson } from '../../src/storage/v1/project-json';
 
 const ch28 = 'DWDM_CH28', ch30 = 'DWDM_CH30';
 const fixed = (value: number) => ({ kind: 'fixed' as const, value });
@@ -139,4 +142,70 @@ test('an undeclared optical transfer gain does not become a lossless device', ()
   assert.deepEqual(result.stages[1].powerDbm, { unit: 'dBm', availability: 'available', value: 0 });
   unavailableBecause(result.powerDbm, /not declared/);
   unavailableBecause(result.gainDb, /not declared/);
+});
+
+const splitTransfer = topologyExample.componentDefinitions.find(definition => definition.id === 'mzm')
+  ?.transfers?.find(transfer => transfer.kind === 'eo')!;
+
+function splitLossProject(transfer: Extract<Transfer, { kind: 'eo' }> = splitTransfer): Project {
+  return {
+    ...topologyExample,
+    componentDefinitions: [
+      ...topologyExample.componentDefinitions.map(definition => definition.id !== 'mzm' ? definition : {
+        ...definition, transfers: [transfer],
+      }),
+      { kind: 'component', id: 'laser', name: 'Laser', ports: [{ id: 'OUT', type: 'OPTICAL', direction: 'out' }] },
+    ],
+    moduleDefinitions: topologyExample.moduleDefinitions.map(module => module.id !== 'tx' ? module : {
+      ...module, instances: [...module.instances, { id: 'laser', name: 'Laser', definitionId: 'laser' }],
+      connections: [...(module.connections ?? []), { id: 'supply', from: local('laser', 'OUT'), to: local('mzm', 'SUPPLY') }],
+    }),
+  };
+}
+
+function splitLossBudget(project: Project, tx: string, channelId: OpticalSource['channelId'] = ch28) {
+  return createOpticalBudget(project).calculateLocal({
+    eo: { instancePath: [tx, 'mzm'], fromPortId: 'RF_IN', toPortId: 'OUT' },
+    sources: [{ endpoint: ref([tx, 'laser'], 'OUT'), channelId, powerDbm: 0 }],
+    channelId, to: ref([tx], 'OPT_OUT'),
+  });
+}
+
+test('each MZM loss is applied once and changing one transmitter operating point leaves its peer unchanged', () => {
+  const project = splitLossProject();
+  const before = splitLossBudget(project, 'TX_A');
+  const after = parseProjectJson(serializeProjectJson({
+    ...project,
+    moduleDefinitions: project.moduleDefinitions.map(module => module.id !== 'system' ? module : {
+      ...module, instances: module.instances.map(instance => instance.id !== 'TX_A' ? instance : {
+        ...instance, parameterOverrides: { operatingPointLoss: fixed(0) },
+      }),
+    }),
+  }));
+  const a = splitLossBudget(after, 'TX_A');
+  const b = splitLossBudget(after, 'TX_B');
+  const loss = (result: ReturnType<typeof splitLossBudget>) => result.stages
+    .find(step => step.endpoint.portId === 'OUT' && step.endpoint.instancePath.at(-1) === 'mzm')?.incoming?.opticalLoss;
+  const db = (value: number) => ({ unit: 'dB', availability: 'available', value });
+  assert.deepEqual(loss(before), { intrinsicLossDb: db(3), operatingPointLossDb: db(2) });
+  assert.deepEqual(loss(a), { intrinsicLossDb: db(3), operatingPointLossDb: db(0) });
+  assert.deepEqual(loss(b), loss(before));
+  assert.deepEqual([before, a, b].map(result => result.powerDbm), [-5, -3, -5].map(value =>
+    ({ unit: 'dBm', availability: 'available', value })));
+  assert.deepEqual([before.gainDb, a.gainDb], [db(-5), db(-3)]);
+});
+
+test('split losses reject negative or conflicting values and identify missing operating-point data', () => {
+  const intrinsicLossDb = fixed(3);
+  for (const opticalLoss of [{ intrinsicLossDb }, {
+    intrinsicLossDb, operatingPointLossDb: { kind: 'channelTable', values: { [ch30]: 2 } },
+  }] as const) {
+    const result = splitLossBudget(splitLossProject({ ...splitTransfer, opticalLoss }), 'TX_A');
+    unavailableBecause(result.powerDbm, /Operating-point loss:.*(not declared|DWDM_CH28)/);
+    assert.equal(result.status, 'partial');
+  }
+  assert.throws(() => serializeProjectJson(splitLossProject({ ...splitTransfer,
+    opticalLoss: { intrinsicLossDb: fixed(-3), operatingPointLossDb: fixed(2) },
+  })), /intrinsic loss: expected a finite value within the declared range/);
+  assert.throws(() => serializeProjectJson(splitLossProject({ ...splitTransfer, gainDb: fixed(-5) })), /either net gain or split optical losses/);
 });

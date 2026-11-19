@@ -19,7 +19,11 @@ type OpticalStage = {
   endpoint: EndpointRef;
   channelId: OpticalChannelId;
   powerDbm: BudgetMetric<'dBm'>;
-  incoming?: { edge: SignalEdge; gainDb: BudgetMetric<'dB'> };
+  incoming?: {
+    edge: SignalEdge;
+    gainDb: BudgetMetric<'dB'>;
+    opticalLoss?: { intrinsicLossDb: BudgetMetric<'dB'>; operatingPointLossDb: BudgetMetric<'dB'> };
+  };
   rating?: InputRatingCheck;
 };
 
@@ -71,7 +75,9 @@ export function createOpticalBudget(project: Project) {
     const powerDbm = pathIssue ? unavailable('dBm', pathIssue.reason) : stages.at(-1)!.powerDbm;
     const status = powerDbm.availability === 'available' && gainDb.availability === 'available' ? 'valid'
       : gainDb.availability === 'available' || stages.some(item => item.powerDbm.availability === 'available'
-        || item.incoming?.gainDb.availability === 'available') ? 'partial' : 'error';
+        || item.incoming?.gainDb.availability === 'available'
+        || item.incoming?.opticalLoss?.intrinsicLossDb.availability === 'available'
+        || item.incoming?.opticalLoss?.operatingPointLossDb.availability === 'available') ? 'partial' : 'error';
     return { status, stages, powerDbm, gainDb, pathIssue };
   }
 
@@ -95,11 +101,27 @@ export function createOpticalBudget(project: Project) {
   function advance(stages: OpticalStage[], edge: SignalEdge, gainDb: BudgetMetric<'dB'>) {
     const previous = stages.at(-1)!;
     const source = edge.source;
+    const query = { channelId: previous.channelId };
+    const instance = instanceAt(edge.from.ref);
+    if (source.kind === 'transfer' && source.transfer.kind === 'eo' && source.transfer.opticalLoss !== undefined) {
+      const { intrinsicLossDb, operatingPointLossDb } = source.transfer.opticalLoss;
+      const opticalLoss = {
+        intrinsicLossDb: resolveEmpiricalValue('dB', intrinsicLossDb, query, instance),
+        operatingPointLossDb: resolveEmpiricalValue('dB', operatingPointLossDb, query, instance),
+      };
+      const intrinsic = opticalLoss.intrinsicLossDb;
+      const operating = opticalLoss.operatingPointLossDb;
+      const gain = intrinsic.availability === 'unavailable' ? unavailable('dB', `Intrinsic loss: ${intrinsic.reason}`)
+        : operating.availability === 'unavailable' ? unavailable('dB', `Operating-point loss: ${operating.reason}`)
+        : budgetValue('dB', 0 - (intrinsic.value + operating.value));
+      stages.push(stage(edge.to, previous.channelId, addGain(previous.powerDbm, gain), { edge, gainDb: gain, opticalLoss }));
+      return addGain(gainDb, gain);
+    }
     const declared = source.kind === 'switchRoute' ? source.route.gainDb
       : source.kind === 'transfer' && 'gainDb' in source.transfer ? source.transfer.gainDb : undefined;
     // Every device route needs an explicit gain, even if its specified gain is zero.
     const gain = source.kind === 'switchRoute' || source.kind === 'transfer'
-      ? resolveEmpiricalValue('dB', declared, { channelId: previous.channelId }, instanceAt(edge.from.ref))
+      ? resolveEmpiricalValue('dB', declared, query, instance)
       : budgetValue('dB', 0);
     const nextChannel = edge.channels.kind === 'convert' ? edge.channels.toChannelId : previous.channelId;
     stages.push(stage(edge.to, nextChannel, addGain(previous.powerDbm, gain), { edge, gainDb: gain }));

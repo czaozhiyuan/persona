@@ -123,7 +123,10 @@ const transfer = byKind({
   wavelengthConversion: shape({
     ...portPair, kind: oneOf('wavelengthConversion'), fromChannelId: text, toChannelId: text,
   }, { gainDb: opticalQuantity }),
-  eo: shape({ ...portPair, kind: oneOf('eo') }, { ...opticalOptions, supplyPortId: text }),
+  eo: shape({ ...portPair, kind: oneOf('eo') }, {
+    ...opticalOptions, supplyPortId: text,
+    opticalLoss: shape({}, { intrinsicLossDb: opticalQuantity, operatingPointLossDb: opticalQuantity }),
+  }),
   oe: shape({ ...portPair, kind: oneOf('oe') }, { channelIds: channels }),
   dc: shape({ ...portPair, kind: oneOf('dc') }),
 });
