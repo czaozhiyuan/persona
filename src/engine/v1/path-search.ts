@@ -20,6 +20,7 @@ type Search = {
   target?: SignalPort;
   adjacent: ReadonlyMap<SignalPort, readonly SignalEdge[]>;
   carrier: Carrier;
+  startCarriers?: ReadonlyMap<SignalPort, Carrier>;
   targetCarrier?: Carrier;
   required?: ReadonlyMap<SignalEdge, bigint>;
   allRequired?: bigint;
@@ -103,7 +104,8 @@ export function searchSignalPath(query: Search): SearchResult {
 
   const starts = new Set<State>();
   for (const port of query.starts) {
-    const carrier = port.definition.type === 'OPTICAL' ? intersectCarrier(query.carrier, port.definition.channelIds) : undefined;
+    const carrier = port.definition.type === 'OPTICAL'
+      ? intersectCarrier(intersectCarrier(query.carrier, query.startCarriers?.get(port)), port.definition.channelIds) : undefined;
     if (carrier?.length !== 0) starts.add(stateAt(port, carrier, 0n));
   }
   if (pending.length > MAX_STATES) return { status: 'search_limit' };

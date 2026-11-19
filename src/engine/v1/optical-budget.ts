@@ -8,7 +8,7 @@ import { resolveEmpiricalValue } from './empirical-value';
 import { searchSignalPath } from './path-search';
 import type { SearchResult, SignalPath } from './path-search';
 import { buildSignalGraph, signalPortKey } from './signal-graph';
-import type { SignalEdge, SignalPort } from './signal-graph';
+import type { SignalEdge, SignalGraph, SignalPort } from './signal-graph';
 
 export type OpticalSource = { endpoint: EndpointRef; channelId: OpticalChannelId; powerDbm?: number };
 export type LocalOpticalRequest =
@@ -43,7 +43,10 @@ export type OpticalBudget = {
 
 /** Calculates optical power over the validated V1 graph. The input snapshot is never edited. */
 export function createOpticalBudget(project: Project) {
-  const graph = buildSignalGraph(project);
+  return createOpticalBudgetForGraph(buildSignalGraph(project));
+}
+
+export function createOpticalBudgetForGraph(graph: SignalGraph) {
   const instances = new Map(graph.instances.map(item => [JSON.stringify(item.instancePath), item]));
   const outgoing = new Map<SignalPort, SignalEdge[]>();
   for (const edge of graph.edges) {
@@ -122,8 +125,8 @@ export function createOpticalBudget(project: Project) {
     return addGain(gainDb, gain);
   }
 
-  function propagate(stages: OpticalStage[], path: SignalPath, gain: BudgetMetric<'dB'>) {
-    for (const edge of path.edges) gain = advance(stages, edge, gain);
+  function propagate(stages: OpticalStage[], edges: readonly SignalEdge[], gain: BudgetMetric<'dB'>) {
+    for (const edge of edges) gain = advance(stages, edge, gain);
     return gain;
   }
 
@@ -141,6 +144,18 @@ export function createOpticalBudget(project: Project) {
       ? unavailable('dBm', 'The optical source power is not provided.') : budgetValue('dBm', source.powerDbm))];
   }
 
+  function calculateEoSupply(supply: SignalPath, source: OpticalSource, eo: SignalEdge) {
+    const stages = start(supply.steps[0].port, source);
+    const gain = propagate(stages, supply.edges, budgetValue('dB', 0));
+    return { stages, gainDb: advance(stages, eo, gain) };
+  }
+
+  /** Evaluates the supplied EO and the already selected optical edges up to the PD input. */
+  function calculateEoPath(supply: SignalPath, source: OpticalSource, eo: SignalEdge, opticalEdges: readonly SignalEdge[]) {
+    const { stages, gainDb } = calculateEoSupply(supply, source, eo);
+    return finish(stages, propagate(stages, opticalEdges, gainDb));
+  }
+
   function calculateLocal(request: LocalOpticalRequest): OpticalBudget {
     const target = portAt(request.to);
     if (target?.definition.type !== 'OPTICAL') return fail('invalid_reference', request.to, 'An optical target port is required.');
@@ -152,7 +167,7 @@ export function createOpticalBudget(project: Project) {
       const path = search([port], target, source.channelId);
       if (path.status !== 'resolved') return pathFailure(path, target);
       const stages = start(port, source);
-      return finish(stages, propagate(stages, path.path, budgetValue('dB', 0)));
+      return finish(stages, propagate(stages, path.path.edges, budgetValue('dB', 0)));
     }
 
     const { eo, sources, channelId } = request;
@@ -196,13 +211,12 @@ export function createOpticalBudget(project: Project) {
       return fail('missing_supply', supply.ref, 'No declared optical supply reaches the EO input on a compatible channel.');
     }
 
-    const stages = start(supplied.path.steps[0].port, supplied.source);
-    const supplyGain = propagate(stages, supplied.path, budgetValue('dB', 0));
-    const eoGain = advance(stages, edge, supplyGain);
     const path = search([edge.to], target, channelId);
-    if (path.status !== 'resolved') return pathFailure(path, target, stages);
-    return finish(stages, propagate(stages, path.path, eoGain));
+    if (path.status !== 'resolved') {
+      return pathFailure(path, target, calculateEoSupply(supplied.path, supplied.source, edge).stages);
+    }
+    return calculateEoPath(supplied.path, supplied.source, edge, path.path.edges);
   }
 
-  return { calculateLocal };
+  return { calculateLocal, calculateEoPath };
 }

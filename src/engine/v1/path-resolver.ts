@@ -11,7 +11,7 @@ import type { SignalEdge, SignalPort } from './signal-graph';
 export type LocalPathRequest = { from: EndpointRef; to: EndpointRef; channelId?: OpticalChannelId };
 export type PathOptions = {
   /** Optical outputs or public input boundaries explicitly supplied by the caller. */
-  opticalSources?: readonly EndpointRef[];
+  opticalSources?: readonly (EndpointRef & { channelId?: OpticalChannelId })[];
 };
 
 type ConversionStep = { kind: 'eo' | 'oe'; edgeIndex: number };
@@ -75,7 +75,7 @@ export function createPathResolver(project: Project) {
     return port;
   }
 
-  function traceSupplies(path: SignalPath, sources: readonly SignalPort[], bindings: readonly ConversionBinding[]): PathResult {
+  function traceSupplies(path: SignalPath, sources: ReadonlyMap<SignalPort, Carrier>, bindings: readonly ConversionBinding[]): PathResult {
     const steps = [...path.steps];
     const conversions: ConversionStep[] = [];
     const supplies: SupplyBranch[] = [];
@@ -87,7 +87,7 @@ export function createPathResolver(project: Project) {
       if (!edge.supply) continue;
 
       const supply = searchSignalPath({
-        starts: sources, target: edge.supply, adjacent: outgoing, carrier: undefined,
+        starts: [...sources.keys()], startCarriers: sources, target: edge.supply, adjacent: outgoing, carrier: undefined,
         targetCarrier: steps[edgeIndex + 1].channelIds, opticalOnly: true,
       });
       const endpoint = edge.supply.ref;
@@ -139,7 +139,7 @@ export function createPathResolver(project: Project) {
     if (request.channelId !== undefined && !resolveOpticalChannel(request.channelId)) {
       return { status: 'invalid_reference', reason: `Unknown optical channel "${request.channelId}".` };
     }
-    const sources: SignalPort[] = [];
+    const sources = new Map<SignalPort, Carrier>();
     for (const ref of options.opticalSources ?? []) {
       const port = getPort(ref);
       const scope = scopes.get(JSON.stringify(ref.instancePath));
@@ -147,7 +147,11 @@ export function createPathResolver(project: Project) {
         || (scope.kind === 'module' ? port.definition.direction !== 'in' : port.definition.direction !== 'out')) {
         return { status: 'invalid_reference', endpoint: ref, reason: 'Supply sources must be optical device outputs or module inputs.' };
       }
-      sources.push(port);
+      if (ref.channelId !== undefined && !resolveOpticalChannel(ref.channelId)) {
+        return { status: 'invalid_reference', endpoint: ref, reason: `Unknown optical source channel "${ref.channelId}".` };
+      }
+      if (ref.channelId === undefined || (sources.has(port) && sources.get(port) === undefined)) sources.set(port, undefined);
+      else sources.set(port, [...new Set([...(sources.get(port) ?? []), ref.channelId])]);
     }
     const requiredEdges: SignalEdge[] = [];
     if (link) {
