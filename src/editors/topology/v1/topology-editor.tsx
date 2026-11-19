@@ -1,14 +1,18 @@
 import { useState } from 'react';
+import type { PathResult } from '../../../engine/v1/path-resolver';
 import type { ModuleDefinition, PortDirection, PortType, Project } from '../../../model/v1/types';
 import type { ProjectStore, ProjectStoreSnapshot } from '../../../state/v1/project-store';
 import { editModule, editModuleWiring, moveTopologyNode } from '../../../state/v1/topology-edits';
 import { PortDeletionDialog } from './port-deletion-dialog';
+import { projectPathHighlight } from './path-highlight';
 import { TopologyCanvas } from './topology-canvas';
 import { CableForm, ConnectionForm, MappingForm, field } from './wiring-forms';
 import type { LocalPort, UpdateWiring } from './wiring-forms';
 import './topology.css';
 
-export function TopologyEditor({ store, state, module }: { store: ProjectStore; state: ProjectStoreSnapshot; module: ModuleDefinition }) {
+export function TopologyEditor({ store, state, module, pathResult }: {
+  store: ProjectStore; state: ProjectStoreSnapshot; module: ModuleDefinition; pathResult?: PathResult;
+}) {
   const { project, selection } = state;
   const scope = selection.modulePath;
   const [message, setMessage] = useState('');
@@ -46,6 +50,7 @@ export function TopologyEditor({ store, state, module }: { store: ProjectStore; 
   return <section className="panel v1-topology" aria-labelledby="topology-title">
     <h2 id="topology-title">逻辑拓扑 · {store.resolveInstance(scope)?.instance?.name ?? module.name}</h2>
     <TopologyCanvas project={project} module={module} modulePath={scope} selectedInstance={selection.instancePath}
+      highlight={projectPathHighlight(pathResult, scope)}
       selectInstance={store.selectInstance} enterModule={store.selectModule}
       move={(id, position) => commit(draft => moveTopologyNode(draft, [...scope, id], position))}
       connect={connection => updateModule(current => ({

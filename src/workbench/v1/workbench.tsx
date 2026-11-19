@@ -1,8 +1,10 @@
-import { useState, useSyncExternalStore } from 'react';
+import { useMemo, useState, useSyncExternalStore } from 'react';
 import { LayoutEditor } from '../../editors/layout/v1/layout-editor';
 import { TopologyEditor } from '../../editors/topology/v1/topology-editor';
 import type { Project } from '../../model/v1/types';
 import type { ProjectStore } from '../../state/v1/project-store';
+import { LinkEditor } from './links/link-editor';
+import { createLinkOptions } from './links/link-options';
 import { ProfilePanel } from './properties/profile-panel';
 import { PropertiesPanel } from './properties/properties-panel';
 import './properties/properties.css';
@@ -17,16 +19,26 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const { project, selection, canUndo, canRedo } = state;
   const [error, setError] = useState('');
+  const [supplies, setSupplies] = useState<ReadonlyMap<string, readonly string[]>>(new Map());
   const activeOccurrence = store.resolveInstance(selection.modulePath);
   const active = activeOccurrence?.definition;
   const selected = selection.instancePath && store.resolveInstance(selection.instancePath);
   const properties = selected || activeOccurrence;
   const layout = selection.view === 'topology' ? project.layout?.topology : project.layout?.physical;
+  const linkOptions = useMemo(() => createLinkOptions(project), [project]);
+  const selectedLink = project.namedLinks?.find(link => link.id === selection.linkId);
+  const selectedSources = useMemo(() => {
+    const saved = selectedLink && supplies.get(selectedLink.id);
+    return saved ? linkOptions.opticalSources.filter(item => saved.includes(item.key)) : [];
+  }, [selectedLink, linkOptions, supplies]);
+  const pathResult = useMemo(() => selectedLink && linkOptions.resolveNamedLink(selectedLink,
+    { opticalSources: selectedSources.map(item => item.value) }), [selectedLink, linkOptions, selectedSources]);
 
   function openProject(load: () => Project) {
     if ((canUndo || canRedo) && !window.confirm('打开其他工程会清除当前编辑历史。是否继续？')) return;
     const result = store.replaceProject(load());
     setError(result.ok ? '' : result.message);
+    if (result.ok) setSupplies(new Map());
   }
 
   function showTopology() {
@@ -62,9 +74,15 @@ export function Workbench({ store, loadExample, newProject }: Props) {
           </div>
         </section>
         {selection.view === 'topology' && active?.kind === 'module' &&
-          <TopologyEditor key={JSON.stringify(['topology', project.id, selection.modulePath])} store={store} state={state} module={active} />}
+          <TopologyEditor key={JSON.stringify(['topology', project.id, selection.modulePath])}
+            store={store} state={state} module={active} pathResult={pathResult} />}
         {selection.view === 'physical' &&
           <LayoutEditor key={JSON.stringify(['physical', project.id])} store={store} state={state} />}
+        <LinkEditor key={JSON.stringify(['link', project.id, selectedLink?.id])} store={store} project={project}
+          options={linkOptions} selected={selectedLink} result={pathResult} sourceKeys={selectedSources.map(item => item.key)}
+          setSources={keys => {
+            if (selectedLink) setSupplies(previous => new Map(previous).set(selectedLink.id, keys));
+          }} />
         <div className="columns">
           <section className="panel" aria-labelledby="module-title">
             <div className="panel-header">
@@ -118,11 +136,6 @@ export function Workbench({ store, loadExample, newProject }: Props) {
               </div>
             </form>
             {error && <p className="error" role="alert">{error}</p>}
-            <label htmlFor="link-selection">命名链路</label>
-            <select id="link-selection" value={selection.linkId ?? ''} onChange={event => store.selectLink(event.target.value || undefined)}>
-              <option value="">未选择</option>
-              {project.namedLinks?.map(link => <option key={link.id} value={link.id}>{link.name} ({link.id})</option>)}
-            </select>
             <dl>
               <div><dt>选中实例</dt><dd>{selected?.instance?.name ?? '未选择'}</dd></div>
               <div><dt>布局记录</dt><dd>{layout?.length ?? 0}</dd></div>

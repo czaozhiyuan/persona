@@ -3,6 +3,10 @@
 .v1-topology-empty { position: absolute; inset: 1rem auto auto 1rem; color: #536867; pointer-events: none; }
 .v1-topology-device { width: 11rem; padding: .7rem .8rem; background: #fff; border: 1px solid #8faeab; border-radius: .55rem; box-shadow: 0 2px 8px #173e4014; }
 .v1-topology-device.is-selected { outline: 2px solid #267e73; outline-offset: 2px; }
+.v1-topology-device.has-folded-path { border-color: #a85618; }
+.v1-topology-path-label { display: block; margin-bottom: .2rem; color: #8a4a1d; font-size: .72rem; }
+.v1-topology-port.is-on-path { background: #fff0dc; color: #82400e; border-radius: .25rem; }
+.v1-topology-port.is-on-path .react-flow__handle { outline: 2px solid #a85618; }
 .v1-topology-device strong { display: block; overflow-wrap: anywhere; margin-bottom: .25rem; }
 .v1-topology-port { position: relative; display: flex; gap: .3rem; align-items: center; justify-content: space-between; min-height: 1.5rem; font-size: .78rem; overflow-wrap: anywhere; }
 .v1-topology-port small { white-space: nowrap; color: #42605f; }

@@ -1,0 +1,18 @@
+.v1-links { margin-bottom: 1rem; }
+.v1-links-header { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: .65rem; align-items: center; }
+.v1-links label { min-width: 0; display: block; font-size: .87rem; }
+.v1-links input, .v1-links select {
+  display: block; width: 100%; min-width: 0; min-height: 2.15rem; margin-top: .25rem; padding: .35rem .5rem;
+  border: 1px solid #becfce; border-radius: .35rem; background: #fff; color: inherit; font: inherit;
+}
+.v1-links details { margin-top: .65rem; padding: .55rem .7rem; border: 1px solid #d2dfdb; border-radius: .35rem; }
+.v1-links summary { margin: .15rem 0 .4rem; cursor: pointer; }
+.v1-links form { margin: .65rem 0 .25rem; }
+.v1-links form > button { margin: .7rem .4rem 0 0; }
+.v1-link-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem .85rem; margin-top: .65rem; }
+.v1-link-diagnostics { margin: .7rem 0; padding: .65rem .8rem; border-radius: .35rem; background: #f9f0e0; color: #654522; }
+.v1-link-diagnostics[data-path-status="resolved"] { background: #e5f3eb; color: #245949; }
+.v1-link-diagnostics p, .v1-link-diagnostics ul, .v1-binding-matches { margin: .35rem 0 0; overflow-wrap: anywhere; }
+@media (max-width: 44rem) {
+  .v1-link-fields, .v1-links-header { grid-template-columns: minmax(0, 1fr); }
+}
