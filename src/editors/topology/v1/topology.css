@@ -1,4 +1,44 @@
 .v1-topology { margin-bottom: 1rem; }
+.v1-hierarchy-workspace { display: grid; grid-template-columns: minmax(9rem, 13rem) minmax(0, 1fr) 4rem; gap: .7rem; margin-top: .8rem; }
+.v1-hierarchy-workspace .v1-topology-canvas { margin-top: 0; }
+.v1-hierarchy-tree { border: 1px solid #d2dfdb; border-radius: .5rem; background: #f4f8f7; min-width: 0; }
+.v1-hierarchy-tree h3 { margin: 0; padding: .65rem; border-bottom: 1px solid #d2dfdb; font-size: .9rem; }
+.v1-hierarchy-tree ul { margin: 0; padding: .3rem; max-height: clamp(15rem, 46vh, 31rem); overflow: auto; list-style: none; }
+.v1-hierarchy-tree li { display: flex; align-items: center; width: max-content; min-width: 100%; }
+.v1-hierarchy-tree button { min-height: 1.75rem; border: 0; padding: .15rem .3rem; background: transparent; }
+.v1-hierarchy-disclosure { width: 1.4rem; flex-shrink: 0; color: #315d56; }
+.v1-hierarchy-entry { display: flex; gap: .4rem; align-items: center; white-space: nowrap; }
+.v1-hierarchy-entry[aria-pressed="true"], .v1-hierarchy-entry[aria-current] { background: #deefe9; }
+.v1-hierarchy-icon { width: .45rem; height: .45rem; border-radius: 50%; background: #327970; }
+.v1-hierarchy-icon.module { width: .55rem; height: .55rem; border-radius: .13rem; background: #fff; border: 1px solid #327970; }
+.v1-hierarchy-depth { display: flex; flex-direction: column; align-items: center; gap: .35rem; font-size: .76rem; color: #42605f; }
+.v1-hierarchy-depth label { font-weight: 600; }
+.v1-hierarchy-depth input { writing-mode: vertical-lr; direction: ltr; height: clamp(8rem, 36vh, 18rem); accent-color: #267e73; }
+.v1-hierarchy-caption { margin: .35rem 0 0; color: #42605f; font-size: .78rem; }
+.v1-overview-card { box-sizing: border-box; width: 100%; height: 100%; border: 1px solid #8faeab; border-radius: .5rem; background: #fff; }
+.v1-overview-card.is-selected { outline: 3px solid #267e73; }
+.v1-overview-header { width: 200px; padding: .5rem .75rem; color: #183039; }
+.v1-overview-header strong, .v1-overview-header .v1-topology-port span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.v1-overview-header .v1-topology-port { height: 24px; min-height: 24px; }
+.v1-module-frame { box-sizing: border-box; width: 100%; height: 100%; border: 2px solid #729c88; border-radius: .5rem; background: #e7f4ee; }
+.v1-module-frame.is-selected { outline: 3px solid #267e73; }
+.v1-module-frame > strong { display: block; margin: .6rem 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.v1-module-pins { position: absolute; top: 52px; width: 116px; }
+.v1-module-pins.left { left: 0; }
+.v1-module-pins.right { right: 0; text-align: right; }
+.v1-module-pins .v1-topology-port { box-sizing: border-box; height: 28px; padding-inline: .65rem; }
+.v1-module-pins.right .v1-topology-port { justify-content: end; }
+.v1-module-pins .v1-topology-port span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.v1-module-pins .v1-topology-port .react-flow__handle { transform: translate(-50%, -50%); right: auto; }
+.v1-module-pins.left .v1-frame-inner-handle { left: 3px; }
+.v1-module-pins.left .v1-frame-outer-handle { left: -3px; }
+.v1-module-pins.right .v1-frame-inner-handle { left: calc(100% - 3px); }
+.v1-module-pins.right .v1-frame-outer-handle { left: calc(100% + 3px); }
+@media (max-width: 46rem) {
+  .v1-hierarchy-workspace { grid-template-columns: minmax(0, 1fr) 3.4rem; }
+  .v1-hierarchy-tree { grid-column: 1 / -1; }
+  .v1-hierarchy-tree ul { max-height: 9rem; }
+}
 .v1-topology-canvas { position: relative; height: clamp(18rem, 52vh, 34rem); margin-top: .8rem; border: 1px solid #d2dfdb; border-radius: .5rem; overflow: hidden; background: #f6faf9; }
 .v1-topology-empty { position: absolute; inset: 1rem auto auto 1rem; color: #536867; pointer-events: none; }
 .v1-topology-device { width: 11rem; padding: .7rem .8rem; background: #fff; border: 1px solid #8faeab; border-radius: .55rem; box-shadow: 0 2px 8px #173e4014; }

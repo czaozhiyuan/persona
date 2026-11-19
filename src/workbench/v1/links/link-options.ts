@@ -55,7 +55,7 @@ export function createLinkOptions(project: Project) {
       }
     }
   }
-  return { endpoints, opticalSources, via, eo, oe, resolveNamedLink };
+  return { graph, endpoints, opticalSources, via, eo, oe, resolveNamedLink };
 }
 
 export type LinkOptions = ReturnType<typeof createLinkOptions>;
