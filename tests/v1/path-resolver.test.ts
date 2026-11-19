@@ -21,6 +21,10 @@ function deepTopology() {
     kind: 'module', id, name: id, ports: mzm.ports,
     instances: [{ id: 'child', name: 'Child', definitionId: wrappers[index + 1] ?? 'mzm' }],
     portMappings: mzm.ports.map(port => ({ portId: port.id, target: local('child', port.id) })),
+    parameters: mzm.parameters,
+    parameterMappings: mzm.parameters?.map(parameter => ({
+      parameterId: parameter.id, target: { instanceId: 'child', parameterId: parameter.id },
+    })),
   }));
   const original = topologyExample.namedLinks[2];
   const leafPath = ['TX_A', 'mzm', 'child', 'child', 'child'];

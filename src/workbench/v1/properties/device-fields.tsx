@@ -52,8 +52,17 @@ function readTransfer(data: FormData, transfer: Transfer): Transfer {
   switch (transfer.kind) {
     case 'rf': return { ...transfer, ...ports, gainDb: readQuantity(data, 'gain', rfKinds), nfDb: readQuantity(data, 'nf', rfKinds) };
     case 'optical': return { ...transfer, ...ports, channelIds: channelList(data, 'channels'), gainDb: readQuantity(data, 'gain', opticalKinds) };
-    case 'eo': return { ...transfer, ...ports, channelIds: channelList(data, 'channels'),
-      supplyPortId: choice(data, 'supply') || undefined, gainDb: readQuantity(data, 'gain', opticalKinds) };
+    case 'eo': {
+      const split = choice(data, 'eoLossMode') === 'split';
+      return { ...transfer, ...ports, channelIds: channelList(data, 'channels'),
+        supplyPortId: choice(data, 'supply') || undefined,
+        gainDb: split ? undefined : readQuantity(data, 'gain', opticalKinds),
+        opticalLoss: split ? {
+          intrinsicLossDb: readQuantity(data, 'intrinsicLoss', opticalKinds),
+          operatingPointLossDb: readQuantity(data, 'operatingPointLoss', opticalKinds),
+        } : undefined,
+      };
+    }
     case 'oe': return { ...transfer, ...ports, channelIds: channelList(data, 'channels') };
     case 'wavelengthConversion': return { ...transfer, ...ports, fromChannelId: channelId(choice(data, 'fromChannel')),
       toChannelId: channelId(choice(data, 'toChannel')), gainDb: readQuantity(data, 'gain', opticalKinds) };
@@ -67,6 +76,7 @@ export function TransferFields({ transfer, definition, save }: {
   const inputPorts = definition.ports.filter(port => port.direction === 'in');
   const outputPorts = definition.ports.filter(port => port.direction === 'out');
   const parameters = definition.parameters ?? [];
+  const [eoLossMode, setEoLossMode] = useState(transfer.kind === 'eo' && transfer.gainDb !== undefined ? 'net' : 'split');
   return <form onSubmit={event => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
@@ -92,7 +102,19 @@ export function TransferFields({ transfer, definition, save }: {
       <QuantityField name="gain" label="增益" kinds={rfKinds} value={transfer.gainDb} parameters={parameters} />
       <QuantityField name="nf" label="噪声系数" kinds={rfKinds} value={transfer.nfDb} parameters={parameters} />
     </>}
-    {(transfer.kind === 'optical' || transfer.kind === 'eo' || transfer.kind === 'wavelengthConversion') &&
+    {transfer.kind === 'eo' && <>
+      <label>光学损耗设置<select name="eoLossMode" value={eoLossMode} onChange={event => setEoLossMode(event.target.value)}>
+        <option value="split">独立插损</option>
+        <option value="net">带符号净增益</option>
+      </select></label>
+      {eoLossMode === 'split' ? <>
+        <QuantityField name="intrinsicLoss" label="固有插损" kinds={opticalKinds}
+          value={transfer.opticalLoss?.intrinsicLossDb} parameters={parameters} minimum={0} />
+        <QuantityField name="operatingPointLoss" label="控制点附加损耗" kinds={opticalKinds}
+          value={transfer.opticalLoss?.operatingPointLossDb} parameters={parameters} minimum={0} />
+      </> : <QuantityField name="gain" label="光学净增益" kinds={opticalKinds} value={transfer.gainDb} parameters={parameters} />}
+    </>}
+    {(transfer.kind === 'optical' || transfer.kind === 'wavelengthConversion') &&
       <QuantityField name="gain" label="增益" kinds={opticalKinds} value={transfer.gainDb} parameters={parameters} />}
     <button type="submit">保存传输</button>
   </form>;
