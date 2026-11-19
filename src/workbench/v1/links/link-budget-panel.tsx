@@ -1,27 +1,12 @@
 import { useMemo, useState } from 'react';
-import type { BudgetMetric, InputRatingCheck } from '../../../engine/v1/budget-metric';
 import type { createLinkBudget, LinkBudgetConditions, LinkBudgetPoint, RfScanRange } from '../../../engine/v1/link-budget';
 import type { NamedLink } from '../../../model/v1/topology';
 import { RfScanPlot, scanMetrics } from './rf-scan-plot';
 import type { ScanMetric } from './rf-scan-plot';
 import { showEndpoint } from './link-options';
+import { Metric, Rating } from '../budgets/budget-values';
 
 const statusLabels = { valid: '可计算', partial: '部分可计算', error: '不可计算' };
-
-function Metric({ metric }: { metric?: BudgetMetric }) {
-  if (!metric) return <>—</>;
-  return metric.availability === 'available'
-    ? <>{metric.value.toFixed(1)} {metric.unit}</>
-    : <span className="v1-budget-unavailable" title={metric.reason}>不可用 · {metric.reason}</span>;
-}
-
-function Rating({ check }: { check?: InputRatingCheck }) {
-  if (!check || check.status === 'within_range') return <>—</>;
-  if (check.status === 'unknown') return <>无法判断 · {check.reason}</>;
-  return <strong className="v1-budget-warning">
-    {check.status === 'above_max' ? '超出上限' : '低于下限'} {check.excess.toFixed(1)} {check.limits.unit}
-  </strong>;
-}
 
 function PointDetails({ point }: { point: LinkBudgetPoint }) {
   const issue = point.kind !== 'conversion' ? point.pathIssue : undefined;

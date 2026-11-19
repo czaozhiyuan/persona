@@ -17,6 +17,7 @@ export const showEndpoint = (ref: EndpointRef) => `${showPath(ref.instancePath)}
 export function createLinkOptions(project: Project) {
   const { graph, resolveNamedLink } = createPathResolver(project);
   const endpoints: Option<EndpointRef>[] = [];
+  const opticalEndpoints: Option<EndpointRef>[] = [];
   const opticalSources: Option<EndpointRef>[] = [];
   const via: Option<RequiredEdge>[] = [];
   const eo: Option<ConversionBoundary>[] = [];
@@ -27,6 +28,7 @@ export function createLinkOptions(project: Project) {
       const ref = { instancePath, portId: port.id };
       const option = { key: signalPortKey(ref), label: `${instance?.name ?? definition.name} · ${showEndpoint(ref)}`, value: ref };
       endpoints.push(option);
+      if (port.type === 'OPTICAL') opticalEndpoints.push(option);
       if (port.type === 'OPTICAL' && port.direction === (definition.kind === 'component' ? 'out' : 'in')) {
         opticalSources.push(option);
       }
@@ -55,7 +57,7 @@ export function createLinkOptions(project: Project) {
       }
     }
   }
-  return { graph, endpoints, opticalSources, via, eo, oe, resolveNamedLink };
+  return { graph, endpoints, opticalEndpoints, opticalSources, via, eo, oe, resolveNamedLink };
 }
 
 export type LinkOptions = ReturnType<typeof createLinkOptions>;
