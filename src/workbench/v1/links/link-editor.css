@@ -13,6 +13,36 @@
 .v1-link-diagnostics { margin: .7rem 0; padding: .65rem .8rem; border-radius: .35rem; background: #f9f0e0; color: #654522; }
 .v1-link-diagnostics[data-path-status="resolved"] { background: #e5f3eb; color: #245949; }
 .v1-link-diagnostics p, .v1-link-diagnostics ul, .v1-binding-matches { margin: .35rem 0 0; overflow-wrap: anywhere; }
+.v1-supply-list { list-style: none; padding: 0; margin: .55rem 0; }
+.v1-supply-list li {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(8rem, 12rem) auto;
+  gap: .65rem; align-items: end; padding: .6rem 0; border-bottom: 1px solid #e0ebe7;
+  overflow-wrap: anywhere;
+}
+.v1-supply-list li > span { align-self: center; }
+.v1-link-budget { margin-top: .85rem; padding: .8rem; border: 1px solid #d2dfdb; border-radius: .4rem; background: #f8fbfa; }
+.v1-link-budget h3 { margin: 0; font-size: 1rem; }
+.v1-point-details h4 { margin: .8rem 0 .4rem; font-size: .87rem; color: #345951; }
+.v1-budget-metrics {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem;
+  padding: 0; margin: .45rem 0;
+}
+.v1-budget-metrics > div {
+  padding: .55rem .65rem; border: 1px solid #d9e7e1; border-radius: .35rem; background: #fff;
+  overflow-wrap: anywhere;
+}
+.v1-budget-metrics dt { color: #42605f; font-size: .8rem; }
+.v1-budget-metrics dd { margin: .18rem 0 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.v1-budget-unavailable { color: #546863; font-size: .8rem; font-weight: 400; }
+.v1-budget-warning { color: #955018; }
+.v1-budget-reasons { padding-inline-start: 1.25rem; overflow-wrap: anywhere; }
+.v1-budget-table { overflow: auto; }
+.v1-budget-table table { width: 100%; border-collapse: collapse; font-size: .82rem; text-align: left; }
+.v1-budget-table th, .v1-budget-table td { border-bottom: 1px solid #dce7e4; padding: .45rem; vertical-align: top; }
+.v1-budget-table th { font-weight: 600; }
+.v1-scan-plot { margin: .65rem 0; padding: .45rem; border: 1px solid #d9e7e1; border-radius: .35rem; background: #fff; }
+.v1-scan-plot canvas { display: block; width: 100%; height: auto; }
+.v1-scan-plot figcaption { color: #42605f; font-size: .78rem; padding: .25rem; }
 @media (max-width: 44rem) {
-  .v1-link-fields, .v1-links-header { grid-template-columns: minmax(0, 1fr); }
+  .v1-link-fields, .v1-links-header, .v1-supply-list li, .v1-budget-metrics { grid-template-columns: minmax(0, 1fr); }
 }

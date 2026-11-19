@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { createLinkBudget, LinkBudgetConditions } from '../../../engine/v1/link-budget';
 import type { PathResult } from '../../../engine/v1/path-resolver';
 import { signalPortKey } from '../../../engine/v1/signal-graph';
 import { resolveOpticalChannel } from '../../../model/v1/channels';
@@ -6,6 +7,8 @@ import type { ConversionBinding, NamedLink } from '../../../model/v1/topology';
 import type { Project } from '../../../model/v1/types';
 import type { ProjectStore } from '../../../state/v1/project-store';
 import { ChannelField } from '../properties/channel-field';
+import { LinkBudgetPanel } from './link-budget-panel';
+import { LinkSupplyFields } from './link-supply-fields';
 import { conversionKey, requiredEdgeKey, showEndpoint } from './link-options';
 import type { LinkOptions, Option } from './link-options';
 import './link-editor.css';
@@ -16,8 +19,9 @@ type Props = {
   options: LinkOptions;
   selected?: NamedLink;
   result?: PathResult;
-  sourceKeys: readonly string[];
-  setSources: (keys: readonly string[]) => void;
+  budget: ReturnType<typeof createLinkBudget>;
+  conditions: LinkBudgetConditions;
+  setConditions: (conditions: LinkBudgetConditions) => void;
 };
 
 function Choice<T>({ name, title, options, value, required }: {
@@ -53,7 +57,7 @@ function Diagnostics({ result }: { result: PathResult }) {
   </div>;
 }
 
-export function LinkEditor({ store, project, options, selected, result, sourceKeys, setSources }: Props) {
+export function LinkEditor({ store, project, options, selected, result, budget, conditions, setConditions }: Props) {
   const [error, setError] = useState('');
   const [bindingId, setBindingId] = useState('');
   const binding = selected?.conversionBindings?.find(item => item.id === bindingId);
@@ -119,13 +123,10 @@ export function LinkEditor({ store, project, options, selected, result, sourceKe
       </form>
     </details>
     {selected && <>
-      <details>
-        <summary>供光查询</summary>
-        <label>供光来源（可多选）<select name="opticalSources" multiple size={4} value={[...sourceKeys]}
-          onChange={event => setSources([...event.currentTarget.selectedOptions].map(option => option.value))}>
-          {options.opticalSources.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}
-        </select></label>
-      </details>
+      <LinkSupplyFields options={options.opticalSources} sources={conditions.opticalSources ?? []}
+        onChange={opticalSources => setConditions({ ...conditions, opticalSources })} />
+      <LinkBudgetPanel link={selected} budget={budget} conditions={conditions}
+        setInputPower={inputPowerDbm => setConditions({ ...conditions, inputPowerDbm })} />
       <details>
         <summary>EO/OE 标定绑定</summary>
         <label>工程内绑定<select value={binding?.id ?? ''} onChange={event => { setBindingId(event.target.value); setError(''); }}>

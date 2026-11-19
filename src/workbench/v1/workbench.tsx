@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { LayoutEditor } from '../../editors/layout/v1/layout-editor';
 import { TopologyEditor } from '../../editors/topology/v1/topology-editor';
+import { createLinkBudget } from '../../engine/v1/link-budget';
+import type { LinkBudgetConditions } from '../../engine/v1/link-budget';
+import { signalPortKey } from '../../engine/v1/signal-graph';
 import type { Project } from '../../model/v1/types';
 import type { ProjectStore } from '../../state/v1/project-store';
 import { parseProjectJson, serializeProjectJson } from '../../storage/v1/project-json';
@@ -18,6 +21,7 @@ type Props = {
 };
 
 type Page = 'canvas' | 'project' | 'links' | 'library' | 'properties' | 'profiles';
+const emptyBudgetConditions: LinkBudgetConditions = {};
 
 function closeWorkbenchMenu() {
   for (const menu of document.querySelectorAll<HTMLDetailsElement>('.v1-main-menu details[open]')) menu.open = false;
@@ -33,20 +37,23 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const [page, setPage] = useState<Page>('canvas');
   const [treeHidden, setTreeHidden] = useState(() => window.matchMedia('(max-width: 46rem)').matches);
   const [expandedHierarchy, setExpandedHierarchy] = useState<ReadonlySet<string>>(new Set(['[]']));
-  const [supplies, setSupplies] = useState<ReadonlyMap<string, readonly string[]>>(new Map());
+  const [linkInputs, setLinkInputs] = useState<ReadonlyMap<string, LinkBudgetConditions>>(new Map());
   const activeOccurrence = store.resolveInstance(selection.modulePath);
   const active = activeOccurrence?.definition;
   const selected = selection.instancePath && store.resolveInstance(selection.instancePath);
   const properties = selected || activeOccurrence;
   const layout = selection.view === 'topology' ? project.layout?.topology : project.layout?.physical;
   const linkOptions = useMemo(() => createLinkOptions(project), [project]);
+  const budget = useMemo(() => createLinkBudget(project), [project]);
   const selectedLink = project.namedLinks?.find(link => link.id === selection.linkId);
-  const selectedSources = useMemo(() => {
-    const saved = selectedLink && supplies.get(selectedLink.id);
-    return saved ? linkOptions.opticalSources.filter(item => saved.includes(item.key)) : [];
-  }, [selectedLink, linkOptions, supplies]);
-  const pathResult = useMemo(() => selectedLink && linkOptions.resolveNamedLink(selectedLink,
-    { opticalSources: selectedSources.map(item => item.value) }), [selectedLink, linkOptions, selectedSources]);
+  const savedConditions = (selectedLink && linkInputs.get(selectedLink.id)) || emptyBudgetConditions;
+  const conditions = useMemo(() => {
+    const ports = new Set(linkOptions.opticalSources.map(option => option.key));
+    return { ...savedConditions, opticalSources: savedConditions.opticalSources?.filter(source =>
+      ports.has(signalPortKey(source.endpoint))) };
+  }, [linkOptions, savedConditions]);
+  const pathResult = useMemo(() => selectedLink && budget.resolveNamedLink(selectedLink, conditions),
+    [selectedLink, budget, conditions]);
 
   useEffect(() => {
     function dismiss(event: PointerEvent | KeyboardEvent) {
@@ -72,7 +79,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     if (result.ok) {
       importAttempt.current++;
       setProjectSession(session => session + 1);
-      setSupplies(new Map());
+      setLinkInputs(new Map());
       setExpandedHierarchy(new Set(['[]']));
       setPage('canvas');
     }
@@ -201,9 +208,9 @@ export function Workbench({ store, loadExample, newProject }: Props) {
         {page !== 'canvas' && <div className="v1-page-scroll">
           <div className="workspace">
         {page === 'links' && <LinkEditor key={JSON.stringify(['link', project.id, selectedLink?.id])} store={store} project={project}
-          options={linkOptions} selected={selectedLink} result={pathResult} sourceKeys={selectedSources.map(item => item.key)}
-          setSources={keys => {
-            if (selectedLink) setSupplies(previous => new Map(previous).set(selectedLink.id, keys));
+          options={linkOptions} selected={selectedLink} result={pathResult} budget={budget} conditions={conditions}
+          setConditions={next => {
+            if (selectedLink) setLinkInputs(previous => new Map(previous).set(selectedLink.id, next));
           }} />}
         {page === 'project' && <div className="columns">
           <section className="panel" aria-labelledby="module-title">
