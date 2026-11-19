@@ -3,6 +3,7 @@ import { LayoutEditor } from '../../editors/layout/v1/layout-editor';
 import { TopologyEditor } from '../../editors/topology/v1/topology-editor';
 import type { Project } from '../../model/v1/types';
 import type { ProjectStore } from '../../state/v1/project-store';
+import { LibraryPanel } from './library-panel';
 import { LinkEditor } from './links/link-editor';
 import { createLinkOptions } from './links/link-options';
 import { ProfilePanel } from './properties/profile-panel';
@@ -142,6 +143,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
             </dl>
           </section>
         </div>
+        {active?.kind === 'module' && <LibraryPanel key={JSON.stringify(['library', project.id, selection.modulePath])}
+          store={store} state={state} module={active} />}
         {properties && <PropertiesPanel key={JSON.stringify(['properties', project.id, properties.instancePath])}
           store={store} occurrence={properties} />}
         <ProfilePanel key={JSON.stringify(['profiles', project.id])} store={store} profiles={project.conversionProfiles ?? []} />
