@@ -46,10 +46,14 @@ export function createLinkBudget(project: Project) {
   const evaluateRf = createRfPathBudget(resolver.graph);
   const evaluateConversion = createConversionPathBudget(resolver.graph, project.conversionProfiles);
 
-  function prepare(link: NamedLink, conditions: LinkBudgetConditions): (frequencyGHz: number) => LinkBudgetPoint {
-    const path = resolver.resolveNamedLink(link, {
+  function resolveNamedLink(link: NamedLink, conditions: LinkBudgetConditions = {}): PathResult {
+    return resolver.resolveNamedLink(link, {
       opticalSources: conditions.opticalSources?.map(source => ({ ...source.endpoint, channelId: source.channelId })),
     });
+  }
+
+  function prepare(link: NamedLink, conditions: LinkBudgetConditions): (frequencyGHz: number) => LinkBudgetPoint {
+    const path = resolveNamedLink(link, conditions);
     if (path.status !== 'resolved' && !path.trace) {
       return frequencyGHz => unresolved(frequencyGHz, { status: path.status, reason: path.reason, endpoint: path.endpoint });
     }
@@ -86,5 +90,5 @@ export function createLinkBudget(project: Project) {
     return { status: 'complete', points };
   }
 
-  return { calculateNamedLink, scanNamedLink };
+  return { calculateNamedLink, scanNamedLink, resolveNamedLink };
 }
