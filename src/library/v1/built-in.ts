@@ -11,7 +11,7 @@ const gain: NumericParameter = {
 
 export const builtInDefinitions = [
   {
-    kind: 'component', id: 'library-rf-gain', name: 'RF 增益器件', ports: rfPorts,
+    kind: 'component', id: 'library-rf-gain', name: '射频增益器件', ports: rfPorts,
     parameters: [{ ...gain, defaultValue: { kind: 'fixed', value: 6 } }],
     transfers: [{ kind: 'rf', fromPortId: 'RF_IN', toPortId: 'RF_OUT', gainDb: { kind: 'parameter', parameterId: 'gain' } }],
   },
@@ -21,7 +21,7 @@ export const builtInDefinitions = [
     ],
   },
   {
-    kind: 'module', id: 'library-rf-stage', name: 'RF 增益模块', ports: rfPorts, parameters: [gain],
+    kind: 'module', id: 'library-rf-stage', name: '射频增益模块', ports: rfPorts, parameters: [gain],
     instances: [{ id: 'amplifier', name: '内部增益器件', definitionId: 'library-rf-gain' }],
     portMappings: rfPorts.map(port => ({ portId: port.id, target: { instanceId: 'amplifier', portId: port.id } })),
     parameterMappings: [{ parameterId: 'gain', target: { instanceId: 'amplifier', parameterId: 'gain' } }],

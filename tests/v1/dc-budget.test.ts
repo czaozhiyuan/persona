@@ -99,7 +99,7 @@ test('missing voltage keeps a W demand but makes A capacity and current ratings 
     component.dcSupply ? { ...component, dcSupply: { ...component.dcSupply, voltageV: undefined } } : component) });
   const supply = budget.supplies[0];
   assert.equal(value(supply.demandW), 8);
-  unavailableBecause(supply.capacityW, /requires the corresponding output voltage/);
+  unavailableBecause(supply.capacityW, /需要相应的输出电压/);
   assert.equal(supply.capacityStatus, 'unknown');
   assert.equal(budget.ports.find(port => port.endpoint.instancePath.join('/') === 'A/direct')?.rating?.status, 'unknown');
   assert.ok(budget.diagnostics.some(item => item.code === 'missing_parameter' && item.endpoint.portId === 'OUT'));
@@ -112,8 +112,8 @@ test('unknown efficiency preserves downstream demand and the known direct demand
       ? { ...transfer, efficiency: undefined } : transfer),
   })) });
   assert.equal(value(budget.converters[0].output.demandW), 4);
-  unavailableBecause(budget.converters[0].inputDemandW, /efficiency/);
-  unavailableBecause(budget.supplies[0].demandW, /efficiency/);
+  unavailableBecause(budget.converters[0].inputDemandW, /直流变换效率/);
+  unavailableBecause(budget.supplies[0].demandW, /直流变换效率/);
   assert.equal(value(budget.supplies[0].knownDemandW), 3);
 });
 
@@ -131,7 +131,7 @@ test('open, ambiguous and feedback branches retain the independent rail and know
     connections: [...rail.connections!, { id: 'alternate', from: local('extra', 'OUT'), to: local('direct', 'IN') }],
   })));
   const a = ambiguous.supplies.find(supply => supply.endpoint.instancePath.join('/') === 'A/source')!;
-  unavailableBecause(a.demandW, /ambiguous/);
+  unavailableBecause(a.demandW, /供电分配不明确/);
   assert.equal(value(a.knownDemandW), 5);
   assert.ok(ambiguous.diagnostics.some(item => item.code === 'ambiguous_input' && item.endpoint.instancePath[1] === 'direct'));
   assert.equal(value(ambiguous.supplies.find(supply => supply.endpoint.instancePath[0] === 'B')!.demandW), 8);
@@ -140,7 +140,7 @@ test('open, ambiguous and feedback branches retain the independent rail and know
     ...rail, connections: [...rail.connections!, { id: 'feedback', from: local('converter', 'OUT'), to: local('converter', 'IN') }],
   })));
   const cycleSupply = cyclic.supplies.find(supply => supply.endpoint.instancePath[0] === 'A')!;
-  unavailableBecause(cycleSupply.demandW, /feedback loop/);
+  unavailableBecause(cycleSupply.demandW, /直流供电存在回路/);
   assert.equal(value(cycleSupply.knownDemandW), 3);
   assert.equal(value(cyclic.supplies.find(supply => supply.endpoint.instancePath[0] === 'B')!.demandW), 8);
   assert.ok(cyclic.diagnostics.some(item => item.code === 'feedback' && item.endpoint.instancePath[1] === 'converter'));
@@ -153,13 +153,13 @@ test('DC validation catches efficiency and unit errors, and port deletion clears
       ...component, transfers: component.transfers?.map(transfer => transfer.kind === 'dc'
         ? { ...transfer, efficiency: fixed(efficiency) } : transfer),
     })) };
-    assert.throws(() => serializeProjectJson(invalid), /efficiency: invalid DC value/);
+    assert.throws(() => serializeProjectJson(invalid), /转换效率: 无效的直流参数值/);
   }
   const wrongUnit: Project = { ...project, componentDefinitions: project.componentDefinitions.map(component =>
     component.id !== 'load' ? component : { ...component,
       parameters: component.parameters?.map(parameter => parameter.kind === 'numeric' ? { ...parameter, unit: 'A' } : parameter),
     }) };
-  assert.throws(() => serializeProjectJson(wrongUnit), /expected a fixed W parameter reference/);
+  assert.throws(() => serializeProjectJson(wrongUnit), /应引用单位为 W 的固定值参数/);
   const deletion = planPortDeletion(project, 'load', 'IN')!;
   assert.ok(deletion.impacts.some(impact => impact.kind === '直流负载'));
   assert.doesNotThrow(() => serializeProjectJson(deletion.project));

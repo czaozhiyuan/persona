@@ -1,3 +1,4 @@
+import { portDisplayName, transferLabels } from '../labels';
 import { useState } from 'react';
 import { PortDeletionDialog } from '../../../editors/topology/v1/port-deletion-dialog';
 import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
@@ -63,7 +64,7 @@ export function PropertiesPanel({ store, occurrence }: { store: ProjectStore; oc
           <button type="submit">保存定义名称</button>
         </form>
         {definition.ports.map(port => <details key={port.id}>
-          <summary>端口 · {port.id}</summary>
+          <summary>端口 · {portDisplayName(port.id, true)}</summary>
           <PortFields key={JSON.stringify(port)} port={port} remove={() => { setError(''); setDeletion(port.id); }}
             save={read => changeDefinition(() => ({ ...definition,
               ports: definition.ports.map(item => item.id === port.id ? read() : item),
@@ -88,7 +89,7 @@ export function PropertiesPanel({ store, occurrence }: { store: ProjectStore; oc
           </form>
         </details>)}
         {definition.kind === 'component' && definition.transfers?.map((transfer, index) => <details key={index}>
-          <summary>传输 · {transfer.kind} · {transfer.fromPortId} → {transfer.toPortId}</summary>
+          <summary>传输 · {transferLabels[transfer.kind]} · {portDisplayName(transfer.fromPortId, true)} → {portDisplayName(transfer.toPortId, true)}</summary>
           <TransferFields key={JSON.stringify(transfer)} transfer={transfer} definition={definition}
             save={read => changeDefinition(() => ({ ...definition,
               transfers: definition.transfers?.map((item, i) => i === index ? read() : item),

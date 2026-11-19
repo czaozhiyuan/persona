@@ -1,9 +1,17 @@
-import { Panel, useReactFlow, useViewport } from '@xyflow/react';
+import { Panel, useReactFlow, useViewport, type AriaLabelConfig } from '@xyflow/react';
 import type { FitViewOptions } from '@xyflow/react';
 
 export function canvasFitOptions(treeHidden: boolean): FitViewOptions {
   return { padding: { left: treeHidden ? '44px' : '232px', right: '88px', top: '62px', bottom: '54px' } };
 }
+
+export const flowAriaLabels = {
+  'node.a11yDescription.default': '按回车键或空格键选择节点，按 Esc 键取消选择。',
+  'node.a11yDescription.keyboardDisabled': '按回车键或空格键选择节点，可用方向键移动已选节点。按 Esc 键取消选择。',
+  'node.a11yDescription.ariaLiveMessage': ({ x, y }) => `节点已移动到 X ${x}，Y ${y}。`,
+  'edge.a11yDescription.default': '按回车键或空格键选择连线，按 Esc 键取消选择。',
+  'handle.ariaLabel': '端口',
+} satisfies Partial<AriaLabelConfig>;
 
 export function CanvasControls({ treeHidden }: { treeHidden: boolean }) {
   const { zoomIn, zoomOut, fitView } = useReactFlow();

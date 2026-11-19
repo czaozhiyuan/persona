@@ -76,7 +76,7 @@ test('inclusive fixed-step RF scans retain all 68 points and agree with single-p
   assert.equal(first.kind, 'rf');
   assert.equal(first.status, 'partial');
   assert.equal(first.gainDb.availability, 'unavailable');
-  assert.match(first.gainDb.reason, /outside the empirical curve/);
+  assert.match(first.gainDb.reason, /超出经验曲线范围/);
   assert.equal(value(first.stages[0].powerDbm), -20);
   for (const frequencyGHz of [0, 1, 34, 67]) {
     assert.deepEqual(result.points[frequencyGHz], calculateNamedLink(rfLink, { ...conditions, frequencyGHz }));
@@ -95,7 +95,7 @@ test('invalid ranges are rejected while draft and ambiguous paths keep a diagnos
   for (const [startGHz, stopGHz] of [[0.5, 2], [1, 2.5], [5, 4], [-1, 0], [0, 68], [NaN, 67]]) {
     const result = budget.scanNamedLink(rfLink, { startGHz, stopGHz });
     assert.equal(result.status, 'invalid_range');
-    assert.match(result.reason, /integers from 0 to 67 GHz/);
+    assert.match(result.reason, /0 至 67 GHz 范围内的整数/);
     assert.deepEqual(result.points, []);
   }
   const ambiguous = createLinkBudget(fixture(2, true));
@@ -125,10 +125,10 @@ test('EO→OE scans keep optical power and diagnostics, use discrete channels an
     assert.equal(value(point.segments[0].pdPowerDbm), -5);
     assert.equal(point.segments[0].channelId, 'DWDM_CH28');
     assert.equal(point.nfDb.availability, 'unavailable');
-    assert.match(point.nfDb.reason, /not modeled/);
+    assert.match(point.nfDb.reason, /未建模噪声系数/);
     if (expectedGain === undefined) {
       assert.equal(point.gainDb.availability, 'unavailable');
-      assert.match(point.gainDb.reason, /outside the empirical curve/);
+      assert.match(point.gainDb.reason, /超出经验曲线范围/);
     } else {
       assert.equal(value(point.gainDb), expectedGain);
     }

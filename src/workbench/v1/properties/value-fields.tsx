@@ -26,11 +26,17 @@ export function channelList(data: FormData, name: string) {
   return ids.length ? ids : undefined;
 }
 
+function enumLabel(value: string): string {
+  if (value === 'normal') return '正常（normal）';
+  if (value === 'standby') return '待机（standby）';
+  return value;
+}
+
 type ValueKind = EmpiricalValue['kind'];
 
 export function formatValue(value?: ParameterValue, separator = '\n'): string {
   if (value === undefined) return '';
-  if (typeof value === 'string') return value;
+  if (typeof value === 'string') return enumLabel(value);
   switch (value.kind) {
     case 'fixed': return String(value.value);
     case 'rfCurve': return value.points.map(row => row.join(', ')).join(separator);
@@ -112,7 +118,7 @@ export function ParameterField({ parameter, value, label }: { parameter: Paramet
   if (parameter.kind === 'enum') {
     return <label>{label}<select name="value" defaultValue={typeof value === 'string' ? value : ''}>
       <option value="">未设置</option>
-      {parameter.options.map(option => <option key={option} value={option}>{option}</option>)}
+      {parameter.options.map(option => <option key={option} value={option}>{enumLabel(option)}</option>)}
     </select></label>;
   }
   return <EmpiricalField name="value" kind={parameter.valueKind} label={`${label} (${parameter.unit})`}
@@ -130,7 +136,7 @@ export function readQuantity<K extends ValueKind>(data: FormData, name: string, 
 
 export const rfKinds = ['fixed', 'rfCurve'] as const;
 export const opticalKinds = ['fixed', 'channelTable'] as const;
-const modeNames = { fixed: '固定值', rfCurve: 'RF 折点', channelTable: '通道表', parameter: '引用参数' };
+const modeNames = { fixed: '固定值', rfCurve: '射频曲线折点', channelTable: '通道表', parameter: '引用参数' };
 
 export function QuantityField({ name, label, kinds, value, parameters, minimum }: {
   name: string; label: string; kinds: readonly ValueKind[];

@@ -54,12 +54,12 @@ function appendNoise(previous: BudgetMetric<'ratio'> | undefined, nf: BudgetMetr
   if (previous?.availability === 'unavailable') return previous;
   if (nf.availability === 'unavailable') return unavailable('ratio', nf.reason);
   const factor = 10 ** (nf.value / 10);
-  if (factor <= 0 || !Number.isFinite(factor)) return unavailable('ratio', 'The RF noise factor is outside the numerical range.');
+  if (factor <= 0 || !Number.isFinite(factor)) return unavailable('ratio', '射频线性噪声因子超出数值范围。');
   if (!previous) return budgetValue('ratio', factor);
   if (nf.value === 0) return previous;
-  if (precedingGain.availability === 'unavailable') return unavailable('ratio', `Preceding RF gain: ${precedingGain.reason}`);
+  if (precedingGain.availability === 'unavailable') return unavailable('ratio', `前级射频增益：${precedingGain.reason}`);
   const linearGain = 10 ** (precedingGain.value / 10);
-  if (linearGain <= 0 || !Number.isFinite(linearGain)) return unavailable('ratio', 'The linear RF gain is outside the numerical range.');
+  if (linearGain <= 0 || !Number.isFinite(linearGain)) return unavailable('ratio', '射频线性增益超出数值范围。');
   return budgetValue('ratio', previous.value + (factor - 1) / linearGain);
 }
 
@@ -81,15 +81,15 @@ export function createRfPathBudget(graph: SignalGraph) {
   return function calculate(path: PathResult, input: RfBudgetInput): RfBudget {
     const { frequencyGHz, inputPowerDbm } = input;
     if (!isRfFrequency(frequencyGHz)) {
-      return failed(frequencyGHz, { status: 'invalid_frequency', reason: 'RF frequency must be between 0 and 67 GHz.' });
+      return failed(frequencyGHz, { status: 'invalid_frequency', reason: '射频频率须在 0 至 67 GHz 范围内。' });
     }
     if (path.status !== 'resolved') return failed(frequencyGHz, { status: path.status, reason: path.reason, endpoint: path.endpoint });
     const nonRf = path.trace.steps.find(step => step.port.definition.type !== 'RF');
     if (nonRf) {
-      return failed(frequencyGHz, { status: 'not_pure_rf', endpoint: nonRf.port.ref, reason: 'A pure RF budget requires an all-RF path.' });
+      return failed(frequencyGHz, { status: 'not_pure_rf', endpoint: nonRf.port.ref, reason: '纯射频预算要求整条路径均为射频。' });
     }
 
-    let powerDbm = inputPowerDbm === undefined ? unavailable('dBm', 'The RF input power is not provided.') : budgetValue('dBm', inputPowerDbm);
+    let powerDbm = inputPowerDbm === undefined ? unavailable('dBm', '未提供射频输入功率。') : budgetValue('dBm', inputPowerDbm);
     let gainDb = budgetValue('dB', 0);
     let factor: BudgetMetric<'ratio'> | undefined;
     const stages: RfStage[] = [];

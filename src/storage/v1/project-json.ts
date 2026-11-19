@@ -29,21 +29,21 @@ export function parseProjectJson(source: string): Project {
   try {
     value = JSON.parse(source);
   } catch (error) {
-    throw new ProjectFileError('syntax', `Invalid project JSON: ${(error as Error).message}`, { cause: error });
+    throw new ProjectFileError('syntax', '工程 JSON 语法无效。', { cause: error });
   }
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    throw new ProjectFileError('format', '$: expected a Persona project file object');
+    throw new ProjectFileError('format', '$：工程文件根节点必须为 Persona 工程对象');
   }
   const file = value as Record<string, unknown>;
   if (!Object.hasOwn(file, 'format') || file.format !== PROJECT_FILE_FORMAT) {
-    throw new ProjectFileError('format', `$.format: expected "${PROJECT_FILE_FORMAT}"`);
+    throw new ProjectFileError('format', `$.format：必须为「${PROJECT_FILE_FORMAT}」`);
   }
   if (!Object.hasOwn(file, 'schemaVersion') || file.schemaVersion !== PROJECT_SCHEMA_VERSION) {
-    throw new ProjectFileError('format', `$.schemaVersion: only version ${PROJECT_SCHEMA_VERSION} is supported`);
+    throw new ProjectFileError('format', `$.schemaVersion：仅支持版本 ${PROJECT_SCHEMA_VERSION}`);
   }
   for (const key of Object.keys(file)) {
     if (!['format', 'schemaVersion', 'project'].includes(key)) {
-      throw new ProjectStructureError(`$[${JSON.stringify(key)}]`, 'unknown field');
+      throw new ProjectStructureError(`$[${JSON.stringify(key)}]`, '未知字段');
     }
   }
   const project = Object.hasOwn(file, 'project') ? file.project : undefined;

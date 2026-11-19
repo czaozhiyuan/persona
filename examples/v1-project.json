@@ -3,13 +3,13 @@
   "schemaVersion": 1,
   "project": {
     "id": "v1-example",
-    "name": "V1 optical system and layouts",
+    "name": "V1 光电系统与布局",
     "rootModuleDefinitionId": "system",
     "componentDefinitions": [
       {
         "kind": "component",
         "id": "rf-source",
-        "name": "RF source",
+        "name": "射频信号源",
         "ports": [
           {
             "id": "OUT",
@@ -21,7 +21,7 @@
       {
         "kind": "component",
         "id": "mzm",
-        "name": "MZM",
+        "name": "调制器（MZM）",
         "ports": [
           {
             "id": "RF_IN",
@@ -86,7 +86,7 @@
       {
         "kind": "component",
         "id": "pd",
-        "name": "PD",
+        "name": "探测器（PD）",
         "ports": [
           {
             "id": "IN",
@@ -114,7 +114,7 @@
       {
         "kind": "component",
         "id": "layoutDemo-mzm-optical",
-        "name": "MZM optical component",
+        "name": "马赫–曾德尔调制器",
         "ports": [
           {
             "id": "OPT_OUT",
@@ -126,7 +126,7 @@
       {
         "kind": "component",
         "id": "deviceDemo-rf-pcb",
-        "name": "RF PCB",
+        "name": "射频电路板",
         "ports": [
           {
             "id": "RF_IN",
@@ -172,7 +172,7 @@
       {
         "kind": "component",
         "id": "deviceDemo-mzm",
-        "name": "Optically supplied MZM",
+        "name": "外部供光调制器（MZM）",
         "ports": [
           {
             "id": "RF_IN",
@@ -199,7 +199,7 @@
         "parameters": [
           {
             "id": "modulatorGain",
-            "name": "Modulator gain",
+            "name": "调制器增益",
             "kind": "numeric",
             "unit": "dB",
             "valueKind": "fixed",
@@ -233,7 +233,7 @@
       {
         "kind": "component",
         "id": "deviceDemo-pd850",
-        "name": "850 nm PD",
+        "name": "850 nm 探测器（PD）",
         "ports": [
           {
             "id": "OPT_IN",
@@ -260,7 +260,7 @@
       {
         "kind": "component",
         "id": "deviceDemo-mux",
-        "name": "CWDM/DWDM optical multiplexer",
+        "name": "光合波器（CWDM/DWDM）",
         "ports": [
           {
             "id": "IN_1371",
@@ -327,7 +327,7 @@
       {
         "kind": "component",
         "id": "deviceDemo-demux",
-        "name": "DWDM optical demultiplexer",
+        "name": "光分波器（DWDM）",
         "ports": [
           {
             "id": "COMMON",
@@ -377,7 +377,7 @@
       {
         "kind": "component",
         "id": "deviceDemo-switch",
-        "name": "Optical 1×2 switch",
+        "name": "1×2 光开关",
         "ports": [
           {
             "id": "IN",
@@ -410,7 +410,7 @@
         "switchStates": [
           {
             "id": "a",
-            "name": "Select A",
+            "name": "选通 A 路",
             "routes": [
               {
                 "fromPortId": "IN",
@@ -424,7 +424,7 @@
           },
           {
             "id": "b",
-            "name": "Select B",
+            "name": "选通 B 路",
             "routes": [
               {
                 "fromPortId": "IN",
@@ -444,7 +444,7 @@
       {
         "kind": "component",
         "id": "demo-laser",
-        "name": "Laser",
+        "name": "激光器",
         "ports": [
           {
             "id": "OUT",
@@ -460,7 +460,7 @@
       {
         "kind": "component",
         "id": "demo-switch",
-        "name": "Optical switch",
+        "name": "光开关",
         "ports": [
           {
             "id": "IN",
@@ -476,7 +476,7 @@
         "switchStates": [
           {
             "id": "pass",
-            "name": "Pass",
+            "name": "导通",
             "routes": [
               {
                 "fromPortId": "IN",
@@ -490,7 +490,7 @@
           },
           {
             "id": "block",
-            "name": "Block",
+            "name": "阻断",
             "routes": []
           }
         ]
@@ -498,7 +498,7 @@
       {
         "kind": "component",
         "id": "demo-rf10",
-        "name": "RF amplifier 10 dB",
+        "name": "射频放大器（10 dB）",
         "ports": [
           {
             "id": "IN",
@@ -530,7 +530,7 @@
       {
         "kind": "component",
         "id": "demo-rf5",
-        "name": "RF amplifier 5 dB",
+        "name": "射频放大器（5 dB）",
         "ports": [
           {
             "id": "IN",
@@ -562,7 +562,7 @@
       {
         "kind": "component",
         "id": "demo-supply",
-        "name": "DC supply",
+        "name": "直流电源",
         "ports": [
           {
             "id": "OUT",
@@ -588,7 +588,7 @@
       {
         "kind": "component",
         "id": "demo-converter",
-        "name": "DC/DC converter",
+        "name": "直流变换器（DC/DC）",
         "ports": [
           {
             "id": "IN",
@@ -627,7 +627,7 @@
       {
         "kind": "component",
         "id": "demo-load",
-        "name": "DC load",
+        "name": "直流负载",
         "ports": [
           {
             "id": "IN",
@@ -669,37 +669,37 @@
       {
         "kind": "module",
         "id": "system",
-        "name": "System",
+        "name": "系统",
         "ports": [],
         "instances": [
           {
             "id": "TX_A",
-            "name": "Transmitter A",
+            "name": "发射机箱 A",
             "definitionId": "tx"
           },
           {
             "id": "TX_B",
-            "name": "Transmitter B",
+            "name": "发射机箱 B",
             "definitionId": "tx"
           },
           {
             "id": "RX_A",
-            "name": "Receiver A",
+            "name": "接收机箱 A",
             "definitionId": "rx"
           },
           {
             "id": "RX_B",
-            "name": "Receiver B",
+            "name": "接收机箱 B",
             "definitionId": "rx"
           },
           {
             "id": "layoutDemo",
-            "name": "Nested chassis layouts",
+            "name": "嵌套机箱布局",
             "definitionId": "layoutDemo-System"
           },
           {
             "id": "deviceDemo",
-            "name": "Device configuration",
+            "name": "器件配置",
             "definitionId": "deviceDemo-system"
           }
         ],
@@ -788,7 +788,7 @@
       {
         "kind": "module",
         "id": "tx",
-        "name": "Transmitter chassis",
+        "name": "发射机箱",
         "ports": [
           {
             "id": "OPT_OUT",
@@ -825,53 +825,53 @@
         "instances": [
           {
             "id": "source",
-            "name": "RF source",
+            "name": "射频信号源",
             "definitionId": "rf-source"
           },
           {
             "id": "mzm",
-            "name": "MZM",
+            "name": "调制器（MZM）",
             "definitionId": "mzm"
           },
           {
             "id": "laser",
-            "name": "Laser",
+            "name": "激光器",
             "definitionId": "demo-laser"
           },
           {
             "id": "optical-switch",
-            "name": "Optical switch",
+            "name": "光开关",
             "definitionId": "demo-switch",
             "switchStateId": "pass"
           },
           {
             "id": "rf10",
-            "name": "RF amplifier 10 dB",
+            "name": "射频放大器（10 dB）",
             "definitionId": "demo-rf10"
           },
           {
             "id": "rf5",
-            "name": "RF amplifier 5 dB",
+            "name": "射频放大器（5 dB）",
             "definitionId": "demo-rf5"
           },
           {
             "id": "dc-supply",
-            "name": "DC supply",
+            "name": "直流电源",
             "definitionId": "demo-supply"
           },
           {
             "id": "dc-converter",
-            "name": "DC/DC converter",
+            "name": "直流变换器（DC/DC）",
             "definitionId": "demo-converter"
           },
           {
             "id": "dc-direct",
-            "name": "Direct DC load",
+            "name": "直供负载",
             "definitionId": "demo-load"
           },
           {
             "id": "dc-converted",
-            "name": "Converted DC load",
+            "name": "经变换器供电的负载",
             "definitionId": "demo-load",
             "parameterOverrides": {
               "powerW": {
@@ -1042,7 +1042,7 @@
       {
         "kind": "module",
         "id": "rx",
-        "name": "Receiver chassis",
+        "name": "接收机箱",
         "ports": [
           {
             "id": "OPT_IN",
@@ -1079,7 +1079,7 @@
         "instances": [
           {
             "id": "pd",
-            "name": "PD",
+            "name": "探测器（PD）",
             "definitionId": "pd"
           }
         ],
@@ -1096,17 +1096,17 @@
       {
         "kind": "module",
         "id": "layoutDemo-System",
-        "name": "System",
+        "name": "系统",
         "ports": [],
         "instances": [
           {
             "id": "TX_A",
-            "name": "Transmitter A",
+            "name": "发射机箱 A",
             "definitionId": "layoutDemo-TX_CHASSIS"
           },
           {
             "id": "TX_B",
-            "name": "Transmitter B",
+            "name": "发射机箱 B",
             "definitionId": "layoutDemo-TX_CHASSIS"
           }
         ]
@@ -1114,7 +1114,7 @@
       {
         "kind": "module",
         "id": "layoutDemo-TX_CHASSIS",
-        "name": "TX chassis",
+        "name": "发射机箱",
         "ports": [
           {
             "id": "OPT_OUT",
@@ -1130,7 +1130,7 @@
         "instances": [
           {
             "id": "TX_SLOT",
-            "name": "TX slot",
+            "name": "发射插盒",
             "definitionId": "layoutDemo-slot"
           }
         ],
@@ -1147,7 +1147,7 @@
       {
         "kind": "module",
         "id": "layoutDemo-slot",
-        "name": "TX slot",
+        "name": "发射插盒",
         "ports": [
           {
             "id": "OPT_OUT",
@@ -1163,7 +1163,7 @@
         "instances": [
           {
             "id": "TX_CBB",
-            "name": "TX CBB",
+            "name": "发射 CBB 模块",
             "definitionId": "layoutDemo-cbb"
           }
         ],
@@ -1180,7 +1180,7 @@
       {
         "kind": "module",
         "id": "layoutDemo-cbb",
-        "name": "TX CBB",
+        "name": "发射 CBB 模块",
         "ports": [
           {
             "id": "OPT_OUT",
@@ -1196,7 +1196,7 @@
         "instances": [
           {
             "id": "MZM_MODULE",
-            "name": "MZM module",
+            "name": "调制器模块（MZM）",
             "definitionId": "layoutDemo-mzm"
           }
         ],
@@ -1213,7 +1213,7 @@
       {
         "kind": "module",
         "id": "layoutDemo-mzm",
-        "name": "MZM module",
+        "name": "调制器模块（MZM）",
         "ports": [
           {
             "id": "OPT_OUT",
@@ -1224,7 +1224,7 @@
         "instances": [
           {
             "id": "MZM_OPTICAL",
-            "name": "MZM optical component",
+            "name": "马赫–曾德尔调制器",
             "definitionId": "layoutDemo-mzm-optical"
           }
         ],
@@ -1241,12 +1241,12 @@
       {
         "kind": "module",
         "id": "deviceDemo-system",
-        "name": "System",
+        "name": "系统",
         "ports": [],
         "instances": [
           {
             "id": "board",
-            "name": "Transceiver board",
+            "name": "收发电路板",
             "definitionId": "deviceDemo-board",
             "parameterOverrides": {
               "modulatorGain": {
@@ -1258,28 +1258,28 @@
           },
           {
             "id": "rf",
-            "name": "RF PCB",
+            "name": "射频电路板",
             "definitionId": "deviceDemo-rf-pcb"
           },
           {
             "id": "mux",
-            "name": "MUX",
+            "name": "合波器",
             "definitionId": "deviceDemo-mux"
           },
           {
             "id": "demux",
-            "name": "DEMUX",
+            "name": "分波器",
             "definitionId": "deviceDemo-demux"
           },
           {
             "id": "swA",
-            "name": "Switch A",
+            "name": "光开关 A",
             "definitionId": "deviceDemo-switch",
             "switchStateId": "a"
           },
           {
             "id": "swB",
-            "name": "Switch B",
+            "name": "光开关 B",
             "definitionId": "deviceDemo-switch",
             "switchStateId": "b"
           }
@@ -1288,7 +1288,7 @@
       {
         "kind": "module",
         "id": "deviceDemo-board",
-        "name": "Independent TX and RX board",
+        "name": "独立收发电路板",
         "ports": [
           {
             "id": "TX_OUT",
@@ -1310,7 +1310,7 @@
         "parameters": [
           {
             "id": "modulatorGain",
-            "name": "Modulator gain",
+            "name": "调制器增益",
             "kind": "numeric",
             "unit": "dB",
             "valueKind": "fixed",
@@ -1327,7 +1327,7 @@
           {
             "kind": "enum",
             "id": "mode",
-            "name": "Board mode",
+            "name": "电路板工作模式",
             "options": [
               "normal",
               "standby"
@@ -1339,12 +1339,12 @@
         "instances": [
           {
             "id": "TX_CH30",
-            "name": "TX CH30",
+            "name": "CH30 发射模块",
             "definitionId": "deviceDemo-tx30"
           },
           {
             "id": "RX_850",
-            "name": "RX 850",
+            "name": "850 nm 接收模块",
             "definitionId": "deviceDemo-rx850"
           }
         ],
@@ -1377,7 +1377,7 @@
       {
         "kind": "module",
         "id": "deviceDemo-tx30",
-        "name": "CH30 transmitter",
+        "name": "CH30 发射模块",
         "ports": [
           {
             "id": "OUT",
@@ -1391,7 +1391,7 @@
         "parameters": [
           {
             "id": "modulatorGain",
-            "name": "Modulator gain",
+            "name": "调制器增益",
             "kind": "numeric",
             "unit": "dB",
             "valueKind": "fixed",
@@ -1409,7 +1409,7 @@
         "instances": [
           {
             "id": "mzm",
-            "name": "MZM",
+            "name": "调制器（MZM）",
             "definitionId": "deviceDemo-mzm"
           }
         ],
@@ -1435,7 +1435,7 @@
       {
         "kind": "module",
         "id": "deviceDemo-rx850",
-        "name": "850 nm receiver",
+        "name": "850 nm 接收模块",
         "ports": [
           {
             "id": "IN",
@@ -1449,7 +1449,7 @@
         "instances": [
           {
             "id": "pd",
-            "name": "850 nm PD",
+            "name": "850 nm 探测器（PD）",
             "definitionId": "deviceDemo-pd850"
           }
         ],
@@ -1492,11 +1492,11 @@
     "namedLinks": [
       {
         "id": "draft",
-        "name": "Optical budget"
+        "name": "光功率预算"
       },
       {
         "id": "tx-only",
-        "name": "Optical budget",
+        "name": "光功率预算",
         "from": {
           "instancePath": [
             "TX_A"
@@ -1506,7 +1506,7 @@
       },
       {
         "id": "full",
-        "name": "跨机箱 EO→OE",
+        "name": "跨机箱电光—光电链路",
         "channelId": "DWDM_CH28",
         "from": {
           "instancePath": [
@@ -1560,7 +1560,7 @@
       },
       {
         "id": "wdm30",
-        "name": "CH30 on the same core",
+        "name": "同一纤芯上的 CH30",
         "channelId": "DWDM_CH30",
         "from": {
           "instancePath": [
@@ -1584,7 +1584,7 @@
       },
       {
         "id": "pure-rf",
-        "name": "纯 RF 两级预算",
+        "name": "两级纯射频链路预算",
         "from": {
           "instancePath": [
             "TX_A",

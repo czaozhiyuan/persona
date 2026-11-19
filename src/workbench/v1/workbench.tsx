@@ -171,7 +171,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
           <details name="workbench-menu" data-workbench-popup><summary>预算</summary>
             <div className="v1-menu-items">
               <button type="button" onClick={() => openPage('optical-budget')}>局部光功率</button>
-              <button type="button" onClick={() => openPage('dc-budget')}>DC 供电预算</button>
+              <button type="button" onClick={() => openPage('dc-budget')}>直流供电预算</button>
             </div>
           </details>
           <details name="workbench-menu" data-workbench-popup><summary>器件库</summary>
@@ -181,7 +181,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
           <details name="workbench-menu" data-workbench-popup><summary>属性与标定</summary>
             <div className="v1-menu-items">
               <button type="button" disabled={!properties} onClick={() => openPage('properties')}>对象属性</button>
-              <button type="button" onClick={() => openPage('profiles')}>工程标定 Profile</button>
+              <button type="button" onClick={() => openPage('profiles')}>工程标定方案</button>
             </div>
           </details>
         </nav>

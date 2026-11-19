@@ -20,8 +20,8 @@ type LayoutOccurrence = {
 function PositionFields({ placement }: { placement?: PhysicalPlacement }) {
   const rotation = placement?.rotationDeg ?? 0;
   return <div className="v1-layout-coordinates">
-    <label>X (mm)<input type="number" name="x" step="any" defaultValue={placement?.xMm ?? 0} required /></label>
-    <label>Y (mm)<input type="number" name="y" step="any" defaultValue={placement?.yMm ?? 0} required /></label>
+    <label>X 坐标 (mm)<input type="number" name="x" step="any" defaultValue={placement?.xMm ?? 0} required /></label>
+    <label>Y 坐标 (mm)<input type="number" name="y" step="any" defaultValue={placement?.yMm ?? 0} required /></label>
     <label>顺时针旋转<select name="rotation" defaultValue={rotation}>
       {[...new Set([...rotations, rotation])].map(degree => <option key={degree} value={degree}>{degree}°</option>)}
     </select></label>
@@ -47,7 +47,7 @@ export function LayoutEditor({ store, state }: { store: ProjectStore; state: Pro
       if (!enclosure && definition.kind !== 'component') continue;
       const name = instance?.name ?? definition.name;
       const key = pathKey(instancePath);
-      const item = { instancePath, key, name, label: `${name} · ${instancePath.join(' / ') || 'System'}`, enclosure };
+      const item = { instancePath, key, name, label: `${name} · ${instancePath.join(' / ') || '系统根层级'}`, enclosure };
       if (instance) placeable.set(key, item);
       if (enclosure) enclosures.push({ ...item, enclosure });
     }

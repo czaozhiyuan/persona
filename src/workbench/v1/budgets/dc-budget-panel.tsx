@@ -3,6 +3,7 @@ import { calculateDcBudget } from '../../../engine/v1/dc-budget';
 import type { DcBudget } from '../../../engine/v1/dc-budget';
 import type { Project } from '../../../model/v1/types';
 import { showEndpoint } from '../links/link-options';
+import { portDisplayName } from '../labels';
 import { Metric, Rating } from './budget-values';
 
 type Output = DcBudget['supplies'][number];
@@ -34,10 +35,10 @@ export function DcBudgetPanel({ project }: { project: Project }) {
   const budget = useMemo(() => calculateDcBudget(project), [project]);
   const ratings = budget.ports.flatMap(port => port.rating ? [port.rating] : []);
   return <section className="panel v1-budget-report" aria-labelledby="v1-dc-heading">
-    <h2 id="v1-dc-heading">DC 供电预算</h2>
-    {!budget.ports.length && <p className="empty">当前工程没有 DC 端口。</p>}
+    <h2 id="v1-dc-heading">直流供电预算</h2>
+    {!budget.ports.length && <p className="empty">当前工程没有直流供电端口。</p>}
     {!!budget.ports.length && !budget.supplies.length && !budget.converters.length && !budget.loads.length &&
-      <p className="empty">当前工程尚未声明 DC 电源、转换器或负载。</p>}
+      <p className="empty">当前工程尚未声明直流电源、变换器或负载。</p>}
     {budget.supplies.length > 0 && <div className="v1-budget-table"><table>
       <caption>电源</caption><thead><tr><th>实例输出端口</th><OutputHead /></tr></thead>
       <tbody>{budget.supplies.map(output => <tr key={JSON.stringify(output.endpoint)}>
@@ -45,9 +46,9 @@ export function DcBudgetPanel({ project }: { project: Project }) {
       </tr>)}</tbody>
     </table></div>}
     {budget.converters.length > 0 && <div className="v1-budget-table"><table>
-      <caption>DC/DC</caption><thead><tr><th>实例输入 → 输出</th><th>效率</th><th>输入需求</th><OutputHead /></tr></thead>
+      <caption>直流变换器（DC/DC）</caption><thead><tr><th>实例输入 → 输出</th><th>效率</th><th>输入需求</th><OutputHead /></tr></thead>
       <tbody>{budget.converters.map(item => <tr key={JSON.stringify([item.input, item.output.endpoint])}>
-        <th scope="row">{showEndpoint(item.input)} → {item.output.endpoint.portId}</th>
+        <th scope="row">{showEndpoint(item.input)} → {portDisplayName(item.output.endpoint.portId, true)}</th>
         <td><Metric metric={item.efficiency} /></td><td data-metric="dc-input-demand"><Metric metric={item.inputDemandW} /></td>
         <OutputColumns output={item.output} />
       </tr>)}</tbody>

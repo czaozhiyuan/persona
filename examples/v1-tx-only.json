@@ -9,7 +9,7 @@
       {
         "kind": "component",
         "id": "rf-source",
-        "name": "RF source",
+        "name": "射频信号源",
         "ports": [
           {
             "id": "OUT",
@@ -21,7 +21,7 @@
       {
         "kind": "component",
         "id": "mzm",
-        "name": "MZM",
+        "name": "调制器（MZM）",
         "ports": [
           {
             "id": "RF_IN",
@@ -86,7 +86,7 @@
       {
         "kind": "component",
         "id": "demo-laser",
-        "name": "Laser",
+        "name": "激光器",
         "ports": [
           {
             "id": "OUT",
@@ -102,7 +102,7 @@
       {
         "kind": "component",
         "id": "demo-switch",
-        "name": "Optical switch",
+        "name": "光开关",
         "ports": [
           {
             "id": "IN",
@@ -118,7 +118,7 @@
         "switchStates": [
           {
             "id": "pass",
-            "name": "Pass",
+            "name": "导通",
             "routes": [
               {
                 "fromPortId": "IN",
@@ -132,7 +132,7 @@
           },
           {
             "id": "block",
-            "name": "Block",
+            "name": "阻断",
             "routes": []
           }
         ]
@@ -142,12 +142,12 @@
       {
         "kind": "module",
         "id": "system",
-        "name": "System",
+        "name": "系统",
         "ports": [],
         "instances": [
           {
             "id": "TX_A",
-            "name": "Transmitter A",
+            "name": "发射机箱 A",
             "definitionId": "tx"
           }
         ]
@@ -155,7 +155,7 @@
       {
         "kind": "module",
         "id": "tx",
-        "name": "Transmitter chassis",
+        "name": "发射机箱",
         "ports": [
           {
             "id": "OPT_OUT",
@@ -178,22 +178,22 @@
         "instances": [
           {
             "id": "source",
-            "name": "RF source",
+            "name": "射频信号源",
             "definitionId": "rf-source"
           },
           {
             "id": "mzm",
-            "name": "MZM",
+            "name": "调制器（MZM）",
             "definitionId": "mzm"
           },
           {
             "id": "laser",
-            "name": "Laser",
+            "name": "激光器",
             "definitionId": "demo-laser"
           },
           {
             "id": "optical-switch",
-            "name": "Optical switch",
+            "name": "光开关",
             "definitionId": "demo-switch",
             "switchStateId": "pass"
           }

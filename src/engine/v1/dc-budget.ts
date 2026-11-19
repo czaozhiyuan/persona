@@ -55,8 +55,8 @@ type Node = {
   demand: Demand;
 };
 
-const noFeed = 'No unambiguous DC supply reaches this port.';
-const feedback = 'A DC feedback loop prevents supply or demand evaluation at this port.';
+const noFeed = '该端口没有可唯一确定的直流供电。';
+const feedback = '直流供电存在回路，无法计算该端口的供电或需求。';
 
 function demandMetric({ knownW, reason }: Demand): BudgetMetric<'W'> {
   return reason === undefined ? budgetValue('W', knownW) : unavailable('W', reason);
@@ -88,10 +88,10 @@ export function calculateDcBudget(project: Project): DcBudget {
     if (instance.definition.kind !== 'component') continue;
     const { dcSupply, dcLoad } = instance.definition;
     if (dcSupply?.portId === port.ref.portId) {
-      node.supply = { voltageV: evaluate(node, 'V', dcSupply.voltageV, 'Supply voltage'), capacity: dcSupply.capacity };
+      node.supply = { voltageV: evaluate(node, 'V', dcSupply.voltageV, '供电电压'), capacity: dcSupply.capacity };
     }
     if (dcLoad?.portId === port.ref.portId) {
-      node.load = evaluate(node, 'W', dcLoad.powerW, 'Load demand');
+      node.load = evaluate(node, 'W', dcLoad.powerW, '负载需求');
     }
   }
 
@@ -104,8 +104,8 @@ export function calculateDcBudget(project: Project): DcBudget {
     if (edge.source.kind === 'transfer' && edge.source.transfer.kind === 'dc') {
       const { efficiency, outputVoltageV, capacity } = edge.source.transfer;
       const converter = { from, to, conversion: {
-        efficiency: evaluate(from, 'ratio', efficiency, 'DC/DC efficiency'),
-        voltageV: evaluate(to, 'V', outputVoltageV, 'DC/DC output voltage'), capacity,
+        efficiency: evaluate(from, 'ratio', efficiency, '直流变换效率'),
+        voltageV: evaluate(to, 'V', outputVoltageV, '直流变换器输出电压'), capacity,
       } };
       arc = converter;
       converters.push(converter);
@@ -127,7 +127,7 @@ export function calculateDcBudget(project: Project): DcBudget {
       node.voltageV = feed.from.voltageV;
       if (feed.from.voltageV.availability === 'available' && feed.conversion) node.voltageV = feed.conversion.voltageV;
     } else if (node.incoming.length > 1) {
-      const reason = 'More than one DC feed reaches this port; load allocation is unknown.';
+      const reason = '该端口存在多路直流供电，无法确定负载分配。';
       node.feed = 'ambiguous';
       node.voltageV = unavailable('V', reason);
       report(node, 'ambiguous_input', reason);
@@ -153,7 +153,7 @@ export function calculateDcBudget(project: Project): DcBudget {
   function contribution(arc: Arc): Demand {
     const { to, conversion } = arc;
     if (!to.scheduled) return { knownW: 0, reason: feedback };
-    if (to.incoming.length > 1) return { knownW: 0, reason: 'A downstream load has ambiguous supply allocation.' };
+    if (to.incoming.length > 1) return { knownW: 0, reason: '下游负载的供电分配不明确。' };
     if (conversion === undefined) return to.demand;
     const { efficiency } = conversion;
     if (efficiency.availability === 'unavailable') return { knownW: 0, reason: efficiency.reason };
@@ -167,7 +167,7 @@ export function calculateDcBudget(project: Project): DcBudget {
     if (node.load?.availability === 'available') knownW = node.load.value;
     else if (node.load?.availability === 'unavailable') reason = node.load.reason;
     else if (node.port.definition.direction === 'in' && node.incoming.length && !node.outgoing.length) {
-      reason = 'The connected DC input has no declared load or onward power path.';
+      reason = '所接直流输入未声明负载，也没有后续供电路径。';
       report(node, 'unknown_load', reason);
     }
     for (const edge of node.outgoing) {
@@ -186,7 +186,7 @@ export function calculateDcBudget(project: Project): DcBudget {
       const inputPower = node.feed === 'known' ? demandW : unavailable('W',
         node.voltageV.availability === 'unavailable' ? node.voltageV.reason : noFeed);
       const current = inputPower.availability === 'available' && node.voltageV.availability === 'available'
-        ? budgetValue('A', inputPower.value / node.voltageV.value) : unavailable('A', 'DC current requires known voltage and input power.');
+        ? budgetValue('A', inputPower.value / node.voltageV.value) : unavailable('A', '计算直流电流需要已知的电压和输入功率。');
       const input = definition.inputRating.unit === 'V' ? node.voltageV : definition.inputRating.unit === 'A' ? current : inputPower;
       rating = checkInputRating(ref, definition.inputRating, input);
     }
@@ -197,19 +197,19 @@ export function calculateDcBudget(project: Project): DcBudget {
     const output = portBudget(node);
     let capacityW: BudgetMetric<'W'>;
     if (capacity?.unit === 'A') {
-      const amps = evaluate(node, 'A', capacity.value, 'Rated output current');
+      const amps = evaluate(node, 'A', capacity.value, '额定输出电流');
       if (amps.availability === 'unavailable') capacityW = unavailable('W', amps.reason);
       else if (voltage.availability === 'available') capacityW = budgetValue('W', amps.value * voltage.value);
       else {
-        const reason = 'Rated output current requires the corresponding output voltage to calculate W.';
+        const reason = '需要相应的输出电压，才能将额定输出电流换算为功率。';
         report(node, 'missing_parameter', reason);
         capacityW = unavailable('W', reason);
       }
     } else {
-      capacityW = evaluate(node, 'W', capacity?.value, 'Rated output power');
+      capacityW = evaluate(node, 'W', capacity?.value, '额定输出功率');
     }
     const { demandW } = output;
-    const marginW = node.incoming.length > 1 ? unavailable('W', 'The load cannot be allocated to an individual DC feed.')
+    const marginW = node.incoming.length > 1 ? unavailable('W', '无法将负载分配到单路直流供电。')
       : capacityW.availability === 'unavailable' ? capacityW : demandW.availability === 'unavailable' ? demandW
         : budgetValue('W', capacityW.value - demandW.value);
     const capacityStatus = marginW.availability === 'unavailable' ? 'unknown' : marginW.value < 0 ? 'over_capacity' : 'within_capacity';

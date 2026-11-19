@@ -1,3 +1,4 @@
+import { portDisplayName, portTypeLabels } from '../../../workbench/v1/labels';
 import { useEffect, useState } from 'react';
 import type { PathResult } from '../../../engine/v1/path-resolver';
 import type { SignalGraph } from '../../../engine/v1/signal-graph';
@@ -32,7 +33,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, expand
   const definitions = new Map([...project.moduleDefinitions, ...project.componentDefinitions].map(definition => [definition.id, definition]));
   const selected = selection.instancePath && store.resolveInstance(selection.instancePath)?.definition;
   const ports: LocalPort[] = module.instances.flatMap(instance => definitions.get(instance.definitionId)!.ports.map(port => ({
-    ref: { instanceId: instance.id, portId: port.id }, port, label: `${instance.name} / ${port.id} · ${port.type}`,
+    ref: { instanceId: instance.id, portId: port.id }, port, label: `${instance.name} / ${portDisplayName(port.id, true)} · ${portTypeLabels[port.type]}`,
   })));
 
   useEffect(() => {
@@ -69,7 +70,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, expand
       setPreview({ definitionId, portId: String(new FormData(event.currentTarget).get('port')) });
     }}>
       <label>{heading}
-        <select name="port" required>{available.map(port => <option key={port.id} value={port.id}>{port.id}</option>)}</select>
+        <select name="port" required>{available.map(port => <option key={port.id} value={port.id}>{portDisplayName(port.id, true)}</option>)}</select>
       </label>
       <button type="submit" aria-label={`预览删除 · ${heading}`}>预览删除</button>
     </form>;
@@ -184,7 +185,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, expand
         }}>
           <label>端口 ID<input name="id" required /></label>
           <label>端口类型<select name="type" defaultValue="OPTICAL">
-            <option>OPTICAL</option><option>RF</option><option>DC_POWER</option><option>CONTROL</option>
+            {Object.entries(portTypeLabels).map(([type, label]) => <option key={type} value={type}>{label}</option>)}
           </select></label>
           <label>端口方向<select name="direction"><option value="in">输入</option><option value="out">输出</option></select></label>
           <button type="submit">声明公开端口</button>

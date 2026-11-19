@@ -86,7 +86,7 @@ test('a local or named RF budget uses actual instance gain, linear Friis weighti
   assert.equal(value(withoutPower.gainDb), 15);
   assert.equal(value(withoutPower.nfDb), value(result.nfDb));
   assert.equal(withoutPower.stages[1].rating?.status, 'unknown');
-  missing(withoutPower.powerDbm, /not provided/);
+  missing(withoutPower.powerDbm, /未提供射频输入功率/);
 });
 
 test('missing NF or out-of-range gain only affects dependent metrics and preserves upstream results', () => {
@@ -94,16 +94,16 @@ test('missing NF or out-of-range gain only affects dependent metrics and preserv
   assert.equal(noNf.status, 'partial');
   assert.equal(value(noNf.gainDb), 5);
   assert.equal(value(noNf.powerDbm), -15);
-  missing(noNf.nfDb, /not declared/);
+  missing(noNf.nfDb, /未设置经验值/);
   const last = createRfBudget(fixture({ limitedGain: 'last' })).calculateLocal(request, { ...input, frequencyGHz: 0 });
   assert.equal(last.status, 'partial');
   assert.equal(value(last.stages[2].powerDbm), -10);
   assert.ok(Math.abs(value(last.nfDb) - value(createRfBudget(fixture()).calculateLocal(request, input).nfDb)) < 1e-12);
-  missing(last.gainDb, /outside the empirical curve/);
-  missing(last.powerDbm, /outside the empirical curve/);
+  missing(last.gainDb, /超出经验曲线范围/);
+  missing(last.powerDbm, /超出经验曲线范围/);
   const first = createRfBudget(fixture({ limitedGain: 'first' })).calculateLocal(request, input);
   assert.ok(Math.abs(value(first.stages[2].cumulativeNfDb) - 3) < 1e-12);
-  missing(first.nfDb, /Preceding RF gain/);
+  missing(first.nfDb, /前级射频增益/);
 });
 
 test('RF budgets preserve path failures and reject invalid frequencies and non-RF ports', () => {

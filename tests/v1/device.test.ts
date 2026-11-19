@@ -32,11 +32,11 @@ test('the V1 fixture separates RF, optical supply, wavelength routing and indepe
   const badSupply = editComponent('mzm', component => ({
     ...component, transfers: [{ kind: 'eo', fromPortId: 'RF_IN', toPortId: 'OPT_OUT', supplyPortId: 'RF_IN' }],
   }));
-  assert.throws(() => validateProject(badSupply), /supply port must be an optical input/);
+  assert.throws(() => validateProject(badSupply), /供光端口必须是光输入端口/);
   const wrongMuxChannel = editComponent('mux', component => ({
     ...component, transfers: [{ kind: 'optical', fromPortId: 'IN_28', toPortId: 'COMMON', channelIds: ['DWDM_CH30'] }],
   }));
-  assert.throws(() => validateProject(wrongMuxChannel), /channel disallowed at route port/);
+  assert.throws(() => validateProject(wrongMuxChannel), /传输端口不支持此光通道/);
 });
 
 test('switch instances select states independently and undeclared states or invalid routes fail validation', () => {
@@ -48,22 +48,22 @@ test('switch instances select states independently and undeclared states or inva
       ...module, instances: module.instances.map(instance => instance.id === 'swA'
         ? { ...instance, switchStateId: unknownState } : instance),
     }));
-    assert.throws(() => validateProject(project), /missing or unknown switch state/);
+    assert.throws(() => validateProject(project), /光开关状态缺失或无效/);
   }
   const invalidRoute = editComponent('switch', component => ({
     ...component, switchStates: [{ id: 'a', name: 'A', routes: [{ fromPortId: 'OUT_A', toPortId: 'OUT_B' }] }],
   }));
-  assert.throws(() => validateProject(invalidRoute), /invalid route ports/);
+  assert.throws(() => validateProject(invalidRoute), /传输端口、类型或方向无效/);
   const invalidTable = editComponent('switch', component => ({
     ...component, switchStates: [{ id: 'a', name: 'A', routes: [{
       fromPortId: 'IN', toPortId: 'OUT_A', gainDb: { kind: 'channelTable', values: { CWDM_1370: -1 } },
     }] }],
   }));
-  assert.throws(() => validateProject(invalidTable), /invalid optical channel "CWDM_1370"/);
+  assert.throws(() => validateProject(invalidTable), /无效的光通道「CWDM_1370」/);
   const bypass = editComponent('switch', component => ({
     ...component, transfers: [{ kind: 'optical', fromPortId: 'IN', toPortId: 'OUT_A' }],
   }));
-  assert.throws(() => validateProject(bypass), /switch routes must be state-dependent/);
+  assert.throws(() => validateProject(bypass), /光路由必须由开关状态决定/);
 });
 
 test('ratings and empirical values are optional, and explicit zero remains a finite value', () => {
@@ -81,17 +81,17 @@ test('ratings and empirical values are optional, and explicit zero remains a fin
     ...component, ports: component.ports.map(port => port.direction === 'out'
       ? { ...port, inputRating: { unit: 'dBm', max: 0 } } : port),
   }));
-  assert.throws(() => validateProject(invalidRating), /rating unit or port direction is incompatible/);
+  assert.throws(() => validateProject(invalidRating), /额定值单位或端口方向不匹配/);
   const unsorted = editComponent('rf-pcb', component => ({
     ...component, transfers: [{ kind: 'rf', fromPortId: 'RF_IN', toPortId: 'RF_OUT',
       gainDb: { kind: 'rfCurve', points: [[10, 0], [10, -1]] } }],
   }));
-  assert.throws(() => validateProject(unsorted), /strictly increasing/);
+  assert.throws(() => validateProject(unsorted), /严格递增/);
   const notFinite = editComponent('rf-pcb', component => ({
     ...component, transfers: [{ kind: 'rf', fromPortId: 'RF_IN', toPortId: 'RF_OUT',
       gainDb: { kind: 'fixed', value: Infinity } }],
   }));
-  assert.throws(() => validateProject(notFinite), /finite value/);
+  assert.throws(() => validateProject(notFinite), /有限数值/);
 });
 
 test('a module forwards only compatible parameters exposed by direct children', () => {
@@ -99,25 +99,25 @@ test('a module forwards only compatible parameters exposed by direct children', 
   const bypass = editModule('board', module => ({
     ...module, parameterMappings: [{ parameterId: 'modulatorGain', target: { instanceId: 'mzm', parameterId: 'modulatorGain' } }],
   }));
-  assert.throws(() => validateProject(bypass), /must target a direct child/);
+  assert.throws(() => validateProject(bypass), /直接子实例/);
   const hidden = editModule('tx30', module => ({
     ...module, parameters: module.parameters?.map(parameter => ({ ...parameter, overridable: false })),
   }));
-  assert.throws(() => validateProject(hidden), /child parameter is not exposed/);
+  assert.throws(() => validateProject(hidden), /子实例参数未开放覆盖/);
   const incompatible = editModule('tx30', module => ({
     ...module, parameters: module.parameters?.map(parameter => parameter.kind === 'numeric' ? { ...parameter, unit: 'dBm' } : parameter),
   }));
-  assert.throws(() => validateProject(incompatible), /incompatible parameter types, units or accepted values/);
+  assert.throws(() => validateProject(incompatible), /参数类型、单位或允许的取值不兼容/);
   const invalidEnum = editModule('system', module => ({
     ...module, instances: module.instances.map(instance => instance.id === 'board'
       ? { ...instance, parameterOverrides: { mode: 'unsupported' } } : instance),
   }));
-  assert.throws(() => validateProject(invalidEnum), /invalid enum value/);
+  assert.throws(() => validateProject(invalidEnum), /枚举值无效/);
   const invalidOverride = editModule('system', module => ({
     ...module, instances: module.instances.map(instance => instance.id === 'board'
       ? { ...instance, parameterOverrides: { modulatorGain: { kind: 'fixed', value: 10 } } } : instance),
   }));
-  assert.throws(() => validateProject(invalidOverride), /within the declared range/);
+  assert.throws(() => validateProject(invalidOverride), /指定范围内/);
 });
 
 test('profiles retain a fixed PD reference, a declared K default and an optional RF curve', () => {
@@ -130,5 +130,5 @@ test('profiles retain a fixed PD reference, a declared K default and an optional
   });
   assert.throws(() => validateProject({
     ...deviceExample, conversionProfiles: [{ ...profile, pdPowerRefDbm: NaN }],
-  }), /reference power and any explicit k must be finite/);
+  }), /参考功率和指定的经验系数 K 必须为有限数值/);
 });

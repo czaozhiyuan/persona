@@ -58,7 +58,14 @@ export type ConversionBudget = {
   diagnostics: readonly Diagnostic[];
 };
 
-const noNf = () => unavailable('dB', 'Cross-domain noise figure is not modeled.');
+const supplyFailure = {
+  missing: '缺少到达调制器的供光路径。',
+  ambiguous: '有多条供光路径到达调制器。',
+  feedback_loop: '供光路径中存在反馈回路。',
+  search_limit: '供光路径搜索超出资源上限。',
+};
+
+const noNf = () => unavailable('dB', '跨域链路未建模噪声系数。');
 
 export function createConversionPathBudget(graph: SignalGraph, conversionProfiles: readonly ConversionProfile[] = []) {
   const opticalBudget = createOpticalBudgetForGraph(graph);
@@ -71,7 +78,7 @@ export function createConversionPathBudget(graph: SignalGraph, conversionProfile
     const supply = trace.supplies.find(item => item.edgeIndex === eoIndex);
     if (supply?.status !== 'resolved') {
       return { problem: { code: 'optical_supply', endpoint: terminal,
-        reason: `EO optical supply is ${supply?.status ?? 'not declared'}.` } } as const;
+        reason: supply ? supplyFailure[supply.status] : '未设置调制器供光。' } } as const;
     }
     const first = supply.path.steps[0];
     const key = signalPortKey(first.port.ref);
@@ -79,8 +86,8 @@ export function createConversionPathBudget(graph: SignalGraph, conversionProfile
       && (first.channelIds === undefined || first.channelIds.includes(source.channelId)));
     if (candidates.length !== 1) {
       return { problem: { code: 'optical_supply', endpoint: terminal, reason: candidates.length === 0
-        ? 'No supplied optical channel matches the selected span.'
-        : 'The optical supply power is ambiguous. Specify one value on the selected channel.' } } as const;
+        ? '供光通道与所选标定段不匹配。'
+        : '供光功率不唯一。请为所选通道指定一个功率值。' } } as const;
     }
     const optical = opticalBudget.calculateEoPath(supply.path, candidates[0], eo, trace.edges.slice(eoIndex + 1, oeIndex));
     return { optical, channelId: optical.stages.at(-1)!.channelId };
@@ -97,7 +104,7 @@ export function createConversionPathBudget(graph: SignalGraph, conversionProfile
         powerDbm: unavailable('dBm', problem.reason), segments, rfStages, diagnostics: [problem] };
     }
     if (!isRfFrequency(frequencyGHz)) {
-      return failed({ code: 'invalid_frequency', reason: 'RF frequency must be between 0 and 67 GHz.' });
+      return failed({ code: 'invalid_frequency', reason: '射频频率须在 0 至 67 GHz 范围内。' });
     }
     let blocked: Diagnostic | undefined;
     if (path.status !== 'resolved') {
@@ -118,7 +125,7 @@ export function createConversionPathBudget(graph: SignalGraph, conversionProfile
     }
     if (!pairs.size || pairs.size * 2 !== trace.conversions.length
       || trace.steps[0].port.definition.type !== 'RF' || trace.steps.at(-1)?.port.definition.type !== 'RF') {
-      block({ code: 'incomplete_conversion', reason: 'A cross-domain RF budget requires complete EO→OE spans between RF endpoints.' });
+      block({ code: 'incomplete_conversion', reason: '跨域射频预算要求射频端点之间的电光—光电标定段完整。' });
     }
     for (const match of trace.bindings) {
       if (match.matched && match.eoEdgeIndex !== undefined && match.oeEdgeIndex === pairs.get(match.eoEdgeIndex)) {
@@ -126,12 +133,12 @@ export function createConversionPathBudget(graph: SignalGraph, conversionProfile
       } else {
         const eo = match.binding.eo;
         block({ code: 'binding_mismatch', bindingId: match.binding.id, endpoint: { instancePath: eo.instancePath, portId: eo.fromPortId },
-          reason: 'The binding does not match one consecutive EO→OE span on the selected path. Its boundaries may be outside, reversed or overlapping.' });
+          reason: '标定绑定未匹配所选路径上的连续电光—光电转换段。请检查边界是否超出路径、顺序颠倒或重叠。' });
       }
     }
 
     let gainDb = budgetValue('dB', 0);
-    let powerDbm = inputPowerDbm === undefined ? unavailable('dBm', 'The RF input power is not provided.') : budgetValue('dBm', inputPowerDbm);
+    let powerDbm = inputPowerDbm === undefined ? unavailable('dBm', '未提供射频输入功率。') : budgetValue('dBm', inputPowerDbm);
 
     for (let i = 0; i < trace.edges.length; i++) {
       const edge = trace.edges[i];
@@ -142,13 +149,13 @@ export function createConversionPathBudget(graph: SignalGraph, conversionProfile
         const pdInput = trace.edges[oeIndex].from.ref;
         const { optical, channelId, problem } = opticalSegment(trace, i, oeIndex, opticalSources);
         if (problem) diagnostics.push(problem);
-        const pdPowerDbm = optical?.powerDbm ?? unavailable('dBm', problem?.reason ?? 'PD input power is unavailable.');
+        const pdPowerDbm = optical?.powerDbm ?? unavailable('dBm', problem?.reason ?? '无法确定探测器输入光功率。');
         const binding = bindings.get(i);
         const profile = binding && profiles.get(binding.profileId);
         let reference: ConversionSegment['reference'];
         let gain: BudgetMetric<'dB'>;
         if (!binding || !profile) {
-          const reason = 'No matching calibration binding exists for this EO→OE span.';
+          const reason = '该电光—光电转换段缺少匹配的标定绑定。';
           diagnostics.push({ code: 'missing_binding', endpoint: pdInput, reason });
           gain = unavailable('dB', reason);
         } else {
@@ -159,7 +166,7 @@ export function createConversionPathBudget(graph: SignalGraph, conversionProfile
           };
           const outsideProfile = channelId !== undefined && profile.applicability?.channelIds && !profile.applicability.channelIds.includes(channelId);
           if (outsideProfile) {
-            const reason = `Calibration profile "${profile.id}" does not cover PD channel "${channelId}".`;
+            const reason = `标定方案「${profile.id}」不适用探测器通道「${channelId}」。`;
             gain = unavailable('dB', reason);
           } else if (pdPowerDbm.availability === 'unavailable') {
             gain = unavailable('dB', pdPowerDbm.reason);
@@ -189,7 +196,7 @@ export function createConversionPathBudget(graph: SignalGraph, conversionProfile
         if (values.gainDb.availability === 'unavailable') diagnostics.push({ code: 'missing_gain',
           endpoint: edge.from.ref, reason: values.gainDb.reason });
       } else if (source.transfer.kind === 'eo' || source.transfer.kind === 'oe') {
-        powerDbm = unavailable('dBm', 'This conversion has no matching EO→OE span.');
+        powerDbm = unavailable('dBm', '该转换没有匹配的电光—光电转换段。');
       }
     }
 

@@ -41,7 +41,7 @@ export function LocalOpticalPanel({ options, settings, onChange }: {
     <h2 id="v1-optical-heading">局部光功率</h2>
     <label>计算方式<select name="opticalMode" value={mode} onChange={event => setMode(event.currentTarget.value === 'eo' ? 'eo' : 'direct')}>
       <option value="direct">纯光路径</option>
-      <option value="eo">经 EO 器件供光</option>
+      <option value="eo">外部供光的电光路径</option>
     </select></label>
     {!options.opticalEndpoints.length && <p className="empty">当前工程没有可查询的光端口。</p>}
     {mode === 'eo' && <LinkSupplyFields options={options.opticalSources} sources={sources}
@@ -65,10 +65,10 @@ export function LocalOpticalPanel({ options, settings, onChange }: {
     }}>
       <div className="v1-link-fields">
         {mode === 'direct' ? <PortSelect name="opticalSource" label="光源端口" options={options.opticalSources}
-          value={direct && signalPortKey(direct.endpoint)} /> : <PortSelect name="opticalEo" label="EO 边界" options={options.eo}
+          value={direct && signalPortKey(direct.endpoint)} /> : <PortSelect name="opticalEo" label="电光转换边界" options={options.eo}
           value={eo && conversionKey(eo.eo)} />}
         <PortSelect name="opticalTarget" label="目标光端口" options={options.opticalEndpoints} value={query && signalPortKey(query.to)} />
-        <ChannelField name="opticalChannel" label={mode === 'eo' ? 'EO 输出通道' : '光源通道'}
+        <ChannelField name="opticalChannel" label={mode === 'eo' ? '电光转换输出通道' : '光源通道'}
           value={mode === 'eo' ? eo?.channelId : direct?.channelId} required />
         {mode === 'direct' && <label>光源功率 (dBm，可选)
           <input name="opticalPower" type="number" step="any" placeholder="未知" defaultValue={direct?.powerDbm} />

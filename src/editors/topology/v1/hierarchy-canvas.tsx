@@ -1,3 +1,4 @@
+import { portDisplayName, portTypeLabels } from '../../../workbench/v1/labels';
 import { Background, Handle, Position, ReactFlow } from '@xyflow/react';
 import type { Edge, Node, NodeProps } from '@xyflow/react';
 import { useMemo } from 'react';
@@ -7,7 +8,7 @@ import type { SignalEdge, SignalGraph } from '../../../engine/v1/signal-graph';
 import type { InstancePath, PortDefinition } from '../../../model/v1/types';
 import { hierarchyKey, layoutHierarchy } from './hierarchy-view';
 import { boundaryPortSide, ModuleFrame } from './module-frame';
-import { CanvasControls, canvasFitOptions } from './canvas-controls';
+import { CanvasControls, canvasFitOptions, flowAriaLabels } from './canvas-controls';
 
 type OverviewNode = Node<{
   path: InstancePath;
@@ -33,7 +34,7 @@ function OverviewCard({ id, data, selected }: NodeProps<OverviewNode>) {
         return <div className={`v1-topology-port${data.activePorts.has(port.id) ? ' is-on-path' : ''}`} key={port.id}>
           <Handle id={portId(port.id, false)} type={right ? 'source' : 'target'}
             position={right ? Position.Right : Position.Left} className={port.type} isConnectable={false} />
-          <span title={port.id}>{port.id}</span><small>{port.type}</small>
+          <span title={port.id}>{portDisplayName(port.id)}</span><small>{portTypeLabels[port.type]}</small>
         </div>;
       })}
     </div>
@@ -68,7 +69,7 @@ export function HierarchyCanvas({ graph, scope, depth, treeHidden, result, selec
     const activePorts = new Set(paths.flatMap(path => path?.steps.map(step => signalPortKey(step.port.ref)) ?? []));
     const visible = new Set(projection.map(item => item.key));
     const nodes: OverviewNode[] = projection.map(({ item, key, parentKey, position, expanded, width, height }) => ({
-      id: nodeId(key), type: 'overview', position, parentId: parentKey === undefined ? undefined : nodeId(parentKey),
+      id: nodeId(key), ariaLabel: item.instance?.name ?? item.definition.name, type: 'overview', position, parentId: parentKey === undefined ? undefined : nodeId(parentKey),
       style: { width, height }, selected: active === key, selectable: key !== scopeKey,
       data: { path: item.instancePath, name: item.instance?.name ?? item.definition.name,
         ports: item.definition.ports, module: item.definition.kind === 'module', boundary: key === scopeKey, expanded,
@@ -87,6 +88,7 @@ export function HierarchyCanvas({ graph, scope, depth, treeHidden, result, selec
       const highlighted = activeEdges.has(id);
       edges.push({
         id, source: nodeId(from), target: nodeId(to),
+        ariaLabel: `连线：${portDisplayName(edge.from.ref.portId)} → ${portDisplayName(edge.to.ref.portId)}`,
         sourceHandle: portId(edge.from.ref.portId, from === outer), targetHandle: portId(edge.to.ref.portId, to === outer),
         label: source.kind === 'cableCore' ? `A:${source.aPin} / B:${source.bPin}` : undefined,
         zIndex: 2, className: highlighted ? 'v1-path-edge' : undefined,
@@ -98,7 +100,7 @@ export function HierarchyCanvas({ graph, scope, depth, treeHidden, result, selec
   }, [active, graph, projection, result, scopeKey]);
 
   return <div className="v1-topology-canvas" aria-label="多层逻辑拓扑">
-    <ReactFlow<OverviewNode, Edge> nodes={nodes} edges={edges} nodeTypes={nodeTypes}
+    <ReactFlow<OverviewNode, Edge> nodes={nodes} edges={edges} nodeTypes={nodeTypes} ariaLabelConfig={flowAriaLabels}
       fitView fitViewOptions={canvasFitOptions(treeHidden)}
       minZoom={0.001} maxZoom={2} nodesDraggable={false} nodesConnectable={false} deleteKeyCode={null}
       onPaneClick={() => select()}

@@ -92,7 +92,7 @@ test('EO/OE calibration uses fixed reference, selected optical route and only th
     assert.equal(numeric(result.gainDb), expectedGain + 10);
     assert.equal(numeric(result.powerDbm), expectedGain);
     assert.deepEqual(result.rfStages.map(stage => stage.input.instancePath[0]), ['pre', 'post']);
-    assert.deepEqual(result.nfDb, { unit: 'dB', availability: 'unavailable', reason: 'Cross-domain noise figure is not modeled.' });
+    assert.deepEqual(result.nfDb, { unit: 'dB', availability: 'unavailable', reason: '跨域链路未建模噪声系数。' });
     assert.deepEqual(result.diagnostics, []);
   }
   const alternate = calculateNamedLink({ ...link, via: [{ scopePath: [], connectionId: 'attenuated' }] },

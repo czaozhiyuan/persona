@@ -50,7 +50,7 @@ test('interface-first modules and incomplete or disconnected links remain editab
   };
   const restored = roundTrip(snapshot);
   assert.deepEqual(restored.moduleDefinitions.find(module => module.id === emptyChassis.id), emptyChassis);
-  assert.deepEqual(restored.namedLinks?.find(link => link.id === 'draft'), { id: 'draft', name: 'Optical budget' });
+  assert.deepEqual(restored.namedLinks?.find(link => link.id === 'draft'), { id: 'draft', name: '光功率预算' });
   assert.deepEqual(restored.namedLinks?.find(link => link.id === 'tx-only'), project.namedLinks?.find(link => link.id === 'tx-only'));
   assert.deepEqual(restored.namedLinks?.find(link => link.id === disconnected.id), disconnected);
 });
@@ -76,7 +76,7 @@ test('an atomically unbound snapshot can be saved and rebound with the same link
     }),
     namedLinks: before.namedLinks.map(link => link.id === identity.id ? identity : link),
   };
-  assert.throws(() => serializeProjectJson({ ...after, namedLinks: before.namedLinks }), /editable.*invalid start endpoint reference/);
+  assert.throws(() => serializeProjectJson({ ...after, namedLinks: before.namedLinks }), /editable.*起点端点引用无效/);
   const restored = roundTrip(after);
   assert.deepEqual(restored.namedLinks?.at(-1), identity);
 
@@ -97,12 +97,12 @@ test('invalid imports give a location or domain issue and leave the current snap
     name: 'ProjectStructureError', path: '$.project.moduleDefinitions[0].cableBundles[0].coreCount',
   });
   assert.throws(() => parseProjectJson(source.replace('"portId": "OPT_OUT"', '"portId": "missing"')), {
-    name: 'ProjectFileError', stage: 'domain', message: /Connection "spare" in "system".*endpoints/,
+    name: 'ProjectFileError', stage: 'domain', message: /模块「system」的连接「spare」.*端点/,
   });
   const recursiveInstance = { id: 'recursive', name: 'Recursive', definitionId: current.rootModuleDefinitionId };
   const cyclicFile = source.replace('"instances": [', `"instances": [${JSON.stringify(recursiveInstance)},`);
   assert.throws(() => parseProjectJson(cyclicFile), {
-    name: 'ProjectFileError', stage: 'domain', message: /Module definition cycle: system -> system/,
+    name: 'ProjectFileError', stage: 'domain', message: /模块定义存在循环引用： system -> system/,
   });
   const runtimeState = { ...current, calculationResults: [] };
   assert.throws(() => serializeProjectJson(runtimeState), error =>

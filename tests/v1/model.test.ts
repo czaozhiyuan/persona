@@ -58,25 +58,25 @@ test('definition cycles are rejected without imposing a depth limit on valid pro
 });
 
 test('invalid roots, child references and same-scope IDs are rejected', () => {
-  assert.throws(() => validateProject({ ...exampleProject, rootModuleDefinitionId: 'mzm-optical' }), /must reference a module/);
+  assert.throws(() => validateProject({ ...exampleProject, rootModuleDefinitionId: 'mzm-optical' }), /必须引用模块/);
   const missingDefinition = editModule('System', module => ({
     ...module, instances: [{ id: 'TX_A', name: 'Missing', definitionId: 'unknown' }],
   }));
-  assert.throws(() => validateProject(missingDefinition), /unknown definition/);
+  assert.throws(() => validateProject(missingDefinition), /引用了不存在的定义/);
   const duplicate = editModule('System', module => ({ ...module, instances: [module.instances[0], module.instances[0]] }));
-  assert.throws(() => validateProject(duplicate), /duplicate ID "TX_A"/);
+  assert.throws(() => validateProject(duplicate), /ID「TX_A」重复/);
 });
 
 test('existing mappings must target direct children and preserve type and direction', () => {
   const mappingTo = (instanceId: string, portId: string) => editModule('TX_CHASSIS', module => ({
     ...module, portMappings: [{ portId: 'OPT_OUT', target: { instanceId, portId } }],
   }));
-  assert.throws(() => validateProject(mappingTo('MZM_OPTICAL', 'OPT_OUT')), /direct child/);
-  assert.throws(() => validateProject(mappingTo('TX_SLOT', 'missing')), /unknown child port/);
+  assert.throws(() => validateProject(mappingTo('MZM_OPTICAL', 'OPT_OUT')), /直接子实例/);
+  assert.throws(() => validateProject(mappingTo('TX_SLOT', 'missing')), /不存在的子实例端口/);
   const wrongDirection = editModule('TX_CHASSIS', module => ({
     ...module, ports: [{ id: 'OPT_OUT', type: 'OPTICAL', direction: 'in' }],
   }));
-  assert.throws(() => validateProject(wrongDirection), /preserve port type and direction/);
+  assert.throws(() => validateProject(wrongDirection), /保持端口类型和方向一致/);
 });
 
 test('reused slot and CBB modules have independent placements in nested enclosures', () => {
@@ -105,10 +105,10 @@ test('physical placement needs a real instance, an enclosure and a valid quarter
   const logicalModule = ['TX_A', 'TX_SLOT', 'TX_CBB', 'MZM_MODULE'];
   const validatePlacement = (change: Partial<PhysicalPlacement>) =>
     validateProject({ ...exampleProject, layout: { physical: [{ ...placement, ...change }] } });
-  assert.throws(() => validatePlacement({ instancePath: ['TX_A', 'UNKNOWN_SLOT'] }), /component or enclosure module instance/);
-  assert.throws(() => validatePlacement({ instancePath: logicalModule }), /component or enclosure module instance/);
-  assert.throws(() => validatePlacement({ enclosurePath: logicalModule }), /enclosure module instance/);
-  assert.throws(() => validatePlacement({ rotationDeg: 45 }), /Invalid physical coordinates or rotation/);
+  assert.throws(() => validatePlacement({ instancePath: ['TX_A', 'UNKNOWN_SLOT'] }), /器件实例或机箱模块实例/);
+  assert.throws(() => validatePlacement({ instancePath: logicalModule }), /器件实例或机箱模块实例/);
+  assert.throws(() => validatePlacement({ enclosurePath: logicalModule }), /机箱模块实例/);
+  assert.throws(() => validatePlacement({ rotationDeg: 45 }), /物理坐标或旋转角度无效/);
 });
 
 test('physical containment can differ from logical parentage but cannot form cycles', () => {
@@ -118,6 +118,6 @@ test('physical containment can differ from logical parentage but cannot form cyc
   const validatePlacements = (...physical: PhysicalPlacement[]) =>
     validateProject({ ...exampleProject, layout: { physical } });
   validatePlacements(inSlot(slotA, slotB), slotB);
-  assert.throws(() => validatePlacements(inSlot(slotA, slotA)), /Physical containment cycle/);
-  assert.throws(() => validatePlacements(inSlot(slotA, slotB), inSlot(slotB, slotA)), /Physical containment cycle/);
+  assert.throws(() => validatePlacements(inSlot(slotA, slotA)), /物理包含关系存在循环/);
+  assert.throws(() => validatePlacements(inSlot(slotA, slotB), inSlot(slotB, slotA)), /物理包含关系存在循环/);
 });
