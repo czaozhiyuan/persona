@@ -54,8 +54,13 @@
             "kind": "numeric",
             "unit": "dB",
             "valueKind": "fixed",
-            "range": { "min": 0 },
-            "defaultValue": { "kind": "fixed", "value": 2 },
+            "range": {
+              "min": 0
+            },
+            "defaultValue": {
+              "kind": "fixed",
+              "value": 2
+            },
             "overridable": true
           }
         ],
@@ -66,8 +71,14 @@
             "toPortId": "OUT",
             "supplyPortId": "SUPPLY",
             "opticalLoss": {
-              "intrinsicLossDb": { "kind": "fixed", "value": 3 },
-              "operatingPointLossDb": { "kind": "parameter", "parameterId": "operatingPointLoss" }
+              "intrinsicLossDb": {
+                "kind": "fixed",
+                "value": 3
+              },
+              "operatingPointLossDb": {
+                "kind": "parameter",
+                "parameterId": "operatingPointLoss"
+              }
             }
           }
         ]
@@ -429,6 +440,229 @@
             ]
           }
         ]
+      },
+      {
+        "kind": "component",
+        "id": "demo-laser",
+        "name": "Laser",
+        "ports": [
+          {
+            "id": "OUT",
+            "type": "OPTICAL",
+            "direction": "out",
+            "channelIds": [
+              "DWDM_CH28",
+              "DWDM_CH30"
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "component",
+        "id": "demo-switch",
+        "name": "Optical switch",
+        "ports": [
+          {
+            "id": "IN",
+            "type": "OPTICAL",
+            "direction": "in"
+          },
+          {
+            "id": "OUT",
+            "type": "OPTICAL",
+            "direction": "out"
+          }
+        ],
+        "switchStates": [
+          {
+            "id": "pass",
+            "name": "Pass",
+            "routes": [
+              {
+                "fromPortId": "IN",
+                "toPortId": "OUT",
+                "gainDb": {
+                  "kind": "fixed",
+                  "value": 0
+                }
+              }
+            ]
+          },
+          {
+            "id": "block",
+            "name": "Block",
+            "routes": []
+          }
+        ]
+      },
+      {
+        "kind": "component",
+        "id": "demo-rf10",
+        "name": "RF amplifier 10 dB",
+        "ports": [
+          {
+            "id": "IN",
+            "type": "RF",
+            "direction": "in"
+          },
+          {
+            "id": "OUT",
+            "type": "RF",
+            "direction": "out"
+          }
+        ],
+        "transfers": [
+          {
+            "kind": "rf",
+            "fromPortId": "IN",
+            "toPortId": "OUT",
+            "gainDb": {
+              "kind": "fixed",
+              "value": 10
+            },
+            "nfDb": {
+              "kind": "fixed",
+              "value": 3
+            }
+          }
+        ]
+      },
+      {
+        "kind": "component",
+        "id": "demo-rf5",
+        "name": "RF amplifier 5 dB",
+        "ports": [
+          {
+            "id": "IN",
+            "type": "RF",
+            "direction": "in"
+          },
+          {
+            "id": "OUT",
+            "type": "RF",
+            "direction": "out"
+          }
+        ],
+        "transfers": [
+          {
+            "kind": "rf",
+            "fromPortId": "IN",
+            "toPortId": "OUT",
+            "gainDb": {
+              "kind": "fixed",
+              "value": 5
+            },
+            "nfDb": {
+              "kind": "fixed",
+              "value": 6
+            }
+          }
+        ]
+      },
+      {
+        "kind": "component",
+        "id": "demo-supply",
+        "name": "DC supply",
+        "ports": [
+          {
+            "id": "OUT",
+            "type": "DC_POWER",
+            "direction": "out"
+          }
+        ],
+        "dcSupply": {
+          "portId": "OUT",
+          "voltageV": {
+            "kind": "fixed",
+            "value": 10
+          },
+          "capacity": {
+            "unit": "W",
+            "value": {
+              "kind": "fixed",
+              "value": 7
+            }
+          }
+        }
+      },
+      {
+        "kind": "component",
+        "id": "demo-converter",
+        "name": "DC/DC converter",
+        "ports": [
+          {
+            "id": "IN",
+            "type": "DC_POWER",
+            "direction": "in"
+          },
+          {
+            "id": "OUT",
+            "type": "DC_POWER",
+            "direction": "out"
+          }
+        ],
+        "transfers": [
+          {
+            "kind": "dc",
+            "fromPortId": "IN",
+            "toPortId": "OUT",
+            "outputVoltageV": {
+              "kind": "fixed",
+              "value": 5
+            },
+            "efficiency": {
+              "kind": "fixed",
+              "value": 0.8
+            },
+            "capacity": {
+              "unit": "W",
+              "value": {
+                "kind": "fixed",
+                "value": 6
+              }
+            }
+          }
+        ]
+      },
+      {
+        "kind": "component",
+        "id": "demo-load",
+        "name": "DC load",
+        "ports": [
+          {
+            "id": "IN",
+            "type": "DC_POWER",
+            "direction": "in",
+            "inputRating": {
+              "unit": "V",
+              "min": 4
+            }
+          }
+        ],
+        "parameters": [
+          {
+            "id": "powerW",
+            "name": "负载功耗",
+            "kind": "numeric",
+            "unit": "W",
+            "valueKind": "fixed",
+            "range": {
+              "min": 0
+            },
+            "defaultValue": {
+              "kind": "fixed",
+              "value": 3
+            },
+            "overridable": true
+          }
+        ],
+        "dcLoad": {
+          "portId": "IN",
+          "powerW": {
+            "kind": "parameter",
+            "parameterId": "powerW"
+          }
+        }
       }
     ],
     "moduleDefinitions": [
@@ -598,13 +832,60 @@
             "id": "mzm",
             "name": "MZM",
             "definitionId": "mzm"
+          },
+          {
+            "id": "laser",
+            "name": "Laser",
+            "definitionId": "demo-laser"
+          },
+          {
+            "id": "optical-switch",
+            "name": "Optical switch",
+            "definitionId": "demo-switch",
+            "switchStateId": "pass"
+          },
+          {
+            "id": "rf10",
+            "name": "RF amplifier 10 dB",
+            "definitionId": "demo-rf10"
+          },
+          {
+            "id": "rf5",
+            "name": "RF amplifier 5 dB",
+            "definitionId": "demo-rf5"
+          },
+          {
+            "id": "dc-supply",
+            "name": "DC supply",
+            "definitionId": "demo-supply"
+          },
+          {
+            "id": "dc-converter",
+            "name": "DC/DC converter",
+            "definitionId": "demo-converter"
+          },
+          {
+            "id": "dc-direct",
+            "name": "Direct DC load",
+            "definitionId": "demo-load"
+          },
+          {
+            "id": "dc-converted",
+            "name": "Converted DC load",
+            "definitionId": "demo-load",
+            "parameterOverrides": {
+              "powerW": {
+                "kind": "fixed",
+                "value": 4
+              }
+            }
           }
         ],
         "portMappings": [
           {
             "portId": "OPT_OUT",
             "target": {
-              "instanceId": "mzm",
+              "instanceId": "optical-switch",
               "portId": "OUT"
             }
           }
@@ -616,15 +897,45 @@
             "kind": "numeric",
             "unit": "dB",
             "valueKind": "fixed",
-            "range": { "min": 0 },
-            "defaultValue": { "kind": "fixed", "value": 2 },
+            "range": {
+              "min": 0
+            },
+            "defaultValue": {
+              "kind": "fixed",
+              "value": 2
+            },
+            "overridable": true
+          },
+          {
+            "id": "dcDirectLoadW",
+            "name": "直供负载功耗",
+            "kind": "numeric",
+            "unit": "W",
+            "valueKind": "fixed",
+            "range": {
+              "min": 0
+            },
+            "defaultValue": {
+              "kind": "fixed",
+              "value": 3
+            },
             "overridable": true
           }
         ],
         "parameterMappings": [
           {
             "parameterId": "operatingPointLoss",
-            "target": { "instanceId": "mzm", "parameterId": "operatingPointLoss" }
+            "target": {
+              "instanceId": "mzm",
+              "parameterId": "operatingPointLoss"
+            }
+          },
+          {
+            "parameterId": "dcDirectLoadW",
+            "target": {
+              "instanceId": "dc-direct",
+              "parameterId": "powerW"
+            }
           }
         ],
         "connections": [
@@ -639,13 +950,99 @@
               "portId": "RF_IN"
             },
             "mediaKind": "RF_COAX"
+          },
+          {
+            "id": "laser-feed",
+            "from": {
+              "instanceId": "laser",
+              "portId": "OUT"
+            },
+            "to": {
+              "instanceId": "mzm",
+              "portId": "SUPPLY"
+            },
+            "mediaKind": "OPTICAL_FIBER"
+          },
+          {
+            "id": "mzm-switch",
+            "from": {
+              "instanceId": "mzm",
+              "portId": "OUT"
+            },
+            "to": {
+              "instanceId": "optical-switch",
+              "portId": "IN"
+            },
+            "mediaKind": "OPTICAL_FIBER"
+          },
+          {
+            "id": "rf-budget-in",
+            "from": {
+              "instanceId": "source",
+              "portId": "OUT"
+            },
+            "to": {
+              "instanceId": "rf10",
+              "portId": "IN"
+            },
+            "mediaKind": "RF_COAX"
+          },
+          {
+            "id": "rf-budget-between",
+            "from": {
+              "instanceId": "rf10",
+              "portId": "OUT"
+            },
+            "to": {
+              "instanceId": "rf5",
+              "portId": "IN"
+            },
+            "mediaKind": "RF_COAX"
+          },
+          {
+            "id": "dc-feed",
+            "from": {
+              "instanceId": "dc-supply",
+              "portId": "OUT"
+            },
+            "to": {
+              "instanceId": "dc-converter",
+              "portId": "IN"
+            }
+          },
+          {
+            "id": "dc-direct-feed",
+            "from": {
+              "instanceId": "dc-supply",
+              "portId": "OUT"
+            },
+            "to": {
+              "instanceId": "dc-direct",
+              "portId": "IN"
+            }
+          },
+          {
+            "id": "dc-converted-feed",
+            "from": {
+              "instanceId": "dc-converter",
+              "portId": "OUT"
+            },
+            "to": {
+              "instanceId": "dc-converted",
+              "portId": "IN"
+            }
           }
-        ]
+        ],
+        "physicalEnclosure": {
+          "widthMm": 440,
+          "depthMm": 350,
+          "heightMm": 44.45
+        }
       },
       {
         "kind": "module",
         "id": "rx",
-        "name": "Receiver chassis awaiting internal mapping",
+        "name": "Receiver chassis",
         "ports": [
           {
             "id": "OPT_IN",
@@ -684,6 +1081,15 @@
             "id": "pd",
             "name": "PD",
             "definitionId": "pd"
+          }
+        ],
+        "portMappings": [
+          {
+            "portId": "OPT_IN",
+            "target": {
+              "instanceId": "pd",
+              "portId": "IN"
+            }
           }
         ]
       },
@@ -1061,12 +1467,26 @@
     "conversionProfiles": [
       {
         "id": "reference",
-        "name": "Reference",
+        "name": "CH28 端到端标定",
         "rfGainRefDb": {
-          "kind": "fixed",
-          "value": -22
+          "kind": "rfCurve",
+          "points": [
+            [
+              1,
+              -22
+            ],
+            [
+              67,
+              -16
+            ]
+          ]
         },
-        "pdPowerRefDbm": -2
+        "pdPowerRefDbm": -5,
+        "applicability": {
+          "channelIds": [
+            "DWDM_CH28"
+          ]
+        }
       }
     ],
     "namedLinks": [
@@ -1086,7 +1506,7 @@
       },
       {
         "id": "full",
-        "name": "End-to-end budget",
+        "name": "跨机箱 EO→OE",
         "channelId": "DWDM_CH28",
         "from": {
           "instancePath": [
@@ -1134,9 +1554,6 @@
               ],
               "fromPortId": "IN",
               "toPortId": "RF_OUT"
-            },
-            "overrides": {
-              "k": 1.8
             }
           }
         ]
@@ -1164,6 +1581,24 @@
             "coreId": "wdm"
           }
         ]
+      },
+      {
+        "id": "pure-rf",
+        "name": "纯 RF 两级预算",
+        "from": {
+          "instancePath": [
+            "TX_A",
+            "source"
+          ],
+          "portId": "OUT"
+        },
+        "to": {
+          "instancePath": [
+            "TX_A",
+            "rf5"
+          ],
+          "portId": "OUT"
+        }
       }
     ],
     "layout": {
@@ -1264,6 +1699,18 @@
           ],
           "xMm": 35,
           "yMm": 60,
+          "rotationDeg": 0
+        },
+        {
+          "instancePath": [
+            "TX_A",
+            "mzm"
+          ],
+          "enclosurePath": [
+            "TX_A"
+          ],
+          "xMm": 20,
+          "yMm": 40,
           "rotationDeg": 0
         }
       ],
