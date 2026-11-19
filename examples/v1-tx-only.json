@@ -1,0 +1,295 @@
+{
+  "format": "persona-project",
+  "schemaVersion": 1,
+  "project": {
+    "id": "v1-tx-only",
+    "name": "V1 独立发射机箱",
+    "rootModuleDefinitionId": "system",
+    "componentDefinitions": [
+      {
+        "kind": "component",
+        "id": "rf-source",
+        "name": "RF source",
+        "ports": [
+          {
+            "id": "OUT",
+            "type": "RF",
+            "direction": "out"
+          }
+        ]
+      },
+      {
+        "kind": "component",
+        "id": "mzm",
+        "name": "MZM",
+        "ports": [
+          {
+            "id": "RF_IN",
+            "type": "RF",
+            "direction": "in"
+          },
+          {
+            "id": "SUPPLY",
+            "type": "OPTICAL",
+            "direction": "in",
+            "channelIds": [
+              "DWDM_CH28",
+              "DWDM_CH30"
+            ]
+          },
+          {
+            "id": "OUT",
+            "type": "OPTICAL",
+            "direction": "out",
+            "channelIds": [
+              "DWDM_CH28",
+              "DWDM_CH30"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "id": "operatingPointLoss",
+            "name": "控制点附加损耗",
+            "kind": "numeric",
+            "unit": "dB",
+            "valueKind": "fixed",
+            "range": {
+              "min": 0
+            },
+            "defaultValue": {
+              "kind": "fixed",
+              "value": 2
+            },
+            "overridable": true
+          }
+        ],
+        "transfers": [
+          {
+            "kind": "eo",
+            "fromPortId": "RF_IN",
+            "toPortId": "OUT",
+            "supplyPortId": "SUPPLY",
+            "opticalLoss": {
+              "intrinsicLossDb": {
+                "kind": "fixed",
+                "value": 3
+              },
+              "operatingPointLossDb": {
+                "kind": "parameter",
+                "parameterId": "operatingPointLoss"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "kind": "component",
+        "id": "demo-laser",
+        "name": "Laser",
+        "ports": [
+          {
+            "id": "OUT",
+            "type": "OPTICAL",
+            "direction": "out",
+            "channelIds": [
+              "DWDM_CH28",
+              "DWDM_CH30"
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "component",
+        "id": "demo-switch",
+        "name": "Optical switch",
+        "ports": [
+          {
+            "id": "IN",
+            "type": "OPTICAL",
+            "direction": "in"
+          },
+          {
+            "id": "OUT",
+            "type": "OPTICAL",
+            "direction": "out"
+          }
+        ],
+        "switchStates": [
+          {
+            "id": "pass",
+            "name": "Pass",
+            "routes": [
+              {
+                "fromPortId": "IN",
+                "toPortId": "OUT",
+                "gainDb": {
+                  "kind": "fixed",
+                  "value": 0
+                }
+              }
+            ]
+          },
+          {
+            "id": "block",
+            "name": "Block",
+            "routes": []
+          }
+        ]
+      }
+    ],
+    "moduleDefinitions": [
+      {
+        "kind": "module",
+        "id": "system",
+        "name": "System",
+        "ports": [],
+        "instances": [
+          {
+            "id": "TX_A",
+            "name": "Transmitter A",
+            "definitionId": "tx"
+          }
+        ]
+      },
+      {
+        "kind": "module",
+        "id": "tx",
+        "name": "Transmitter chassis",
+        "ports": [
+          {
+            "id": "OPT_OUT",
+            "type": "OPTICAL",
+            "direction": "out",
+            "channelIds": [
+              "DWDM_CH28",
+              "DWDM_CH30"
+            ]
+          },
+          {
+            "id": "TEST_OUT",
+            "type": "OPTICAL",
+            "direction": "out",
+            "channelIds": [
+              "DWDM_CH28"
+            ]
+          }
+        ],
+        "instances": [
+          {
+            "id": "source",
+            "name": "RF source",
+            "definitionId": "rf-source"
+          },
+          {
+            "id": "mzm",
+            "name": "MZM",
+            "definitionId": "mzm"
+          },
+          {
+            "id": "laser",
+            "name": "Laser",
+            "definitionId": "demo-laser"
+          },
+          {
+            "id": "optical-switch",
+            "name": "Optical switch",
+            "definitionId": "demo-switch",
+            "switchStateId": "pass"
+          }
+        ],
+        "portMappings": [
+          {
+            "portId": "OPT_OUT",
+            "target": {
+              "instanceId": "optical-switch",
+              "portId": "OUT"
+            }
+          }
+        ],
+        "parameters": [
+          {
+            "id": "operatingPointLoss",
+            "name": "控制点附加损耗",
+            "kind": "numeric",
+            "unit": "dB",
+            "valueKind": "fixed",
+            "range": {
+              "min": 0
+            },
+            "defaultValue": {
+              "kind": "fixed",
+              "value": 2
+            },
+            "overridable": true
+          }
+        ],
+        "parameterMappings": [
+          {
+            "parameterId": "operatingPointLoss",
+            "target": {
+              "instanceId": "mzm",
+              "parameterId": "operatingPointLoss"
+            }
+          }
+        ],
+        "physicalEnclosure": {
+          "widthMm": 440,
+          "depthMm": 350,
+          "heightMm": 44.45
+        },
+        "connections": [
+          {
+            "id": "rf-feed",
+            "from": {
+              "instanceId": "source",
+              "portId": "OUT"
+            },
+            "to": {
+              "instanceId": "mzm",
+              "portId": "RF_IN"
+            },
+            "mediaKind": "RF_COAX"
+          },
+          {
+            "id": "laser-feed",
+            "from": {
+              "instanceId": "laser",
+              "portId": "OUT"
+            },
+            "to": {
+              "instanceId": "mzm",
+              "portId": "SUPPLY"
+            },
+            "mediaKind": "OPTICAL_FIBER"
+          },
+          {
+            "id": "mzm-switch",
+            "from": {
+              "instanceId": "mzm",
+              "portId": "OUT"
+            },
+            "to": {
+              "instanceId": "optical-switch",
+              "portId": "IN"
+            },
+            "mediaKind": "OPTICAL_FIBER"
+          }
+        ]
+      }
+    ],
+    "namedLinks": [
+      {
+        "id": "tx-only",
+        "name": "未完成发射链路",
+        "channelId": "DWDM_CH28",
+        "from": {
+          "instancePath": [
+            "TX_A"
+          ],
+          "portId": "OPT_OUT"
+        }
+      }
+    ]
+  }
+}
