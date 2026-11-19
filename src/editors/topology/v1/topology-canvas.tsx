@@ -1,11 +1,12 @@
 import { Background, Controls, Handle, Position, ReactFlow, useUpdateNodeInternals } from '@xyflow/react';
-import type { Connection as FlowConnection, Edge, Node, NodeProps, XYPosition } from '@xyflow/react';
-import { useEffect, useState } from 'react';
+import type { Connection as FlowConnection, Edge, Node, NodeProps, ReactFlowInstance, Viewport, XYPosition } from '@xyflow/react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { signalPortKey } from '../../../engine/v1/signal-graph';
 import type { Connection, LocalEndpointRef } from '../../../model/v1/topology';
 import type { InstancePath, ModuleDefinition, PortDefinition, PortMapping, Project } from '../../../model/v1/types';
 import { canvasEdgeKey } from './path-highlight';
 import type { projectPathHighlight } from './path-highlight';
+import { keepGraphVisible } from './viewport';
 import '@xyflow/react/dist/style.css';
 
 type NodeData = { name: string; ports: readonly PortDefinition[]; boundary: boolean; pathPorts: ReadonlySet<string>; foldedPath?: boolean };
@@ -53,6 +54,20 @@ type Props = {
 
 export function TopologyCanvas({ project, module, modulePath, selectedInstance, highlight, selectInstance, enterModule, move, connect, mapPort }: Props) {
   const [drag, setDrag] = useState<{ id: string; position: XYPosition }>();
+  const [viewport, setViewport] = useState<Viewport>();
+  const canvas = useRef<HTMLDivElement>(null);
+  const flow = useRef<ReactFlowInstance<DeviceNode, Edge>>(null);
+
+  const changeViewport = useCallback((requested: Viewport) => {
+    const bounds = flow.current?.getNodes().flatMap(({ id }) => {
+      const node = flow.current?.getInternalNode(id);
+      const width = node?.measured.width ?? 0;
+      const height = node?.measured.height ?? 0;
+      return node && width > 0 && height > 0 ? [{ ...node.internals.positionAbsolute, width, height }] : [];
+    }) ?? [];
+    const next = keepGraphVisible(requested, canvas.current?.clientWidth ?? 0, canvas.current?.clientHeight ?? 0, bounds);
+    setViewport(next);
+  }, []);
   const definitions = new Map([...project.moduleDefinitions, ...project.componentDefinitions].map(def => [def.id, def]));
   const positions = new Map(project.layout?.topology?.map(item => [JSON.stringify(item.instancePath), item]));
   const instances = new Map(module.instances.map(instance => [nodeId(instance.id), instance]));
@@ -119,10 +134,10 @@ export function TopologyCanvas({ project, module, modulePath, selectedInstance, 
   }
 
   return (
-    <div className="v1-topology-canvas" aria-label="逻辑拓扑画布">
+    <div ref={canvas} className="v1-topology-canvas" aria-label="逻辑拓扑画布">
       <ReactFlow<DeviceNode, Edge> nodes={nodes} edges={edges.map(edge => highlight.edges.has(edge.id)
         ? { ...edge, className: 'v1-path-edge', style: { ...edge.style, stroke: '#a85618', strokeWidth: 3 }, zIndex: 2 } : edge)}
-        nodeTypes={nodeTypes} fitView
+        nodeTypes={nodeTypes} fitView viewport={viewport} onViewportChange={changeViewport} onInit={instance => { flow.current = instance; }}
         minZoom={0.2} maxZoom={2} deleteKeyCode={null} onConnect={onConnect} onPaneClick={() => selectInstance()}
         onNodeClick={(_, node) => {
           const instance = instances.get(node.id);
