@@ -206,5 +206,5 @@ export function createPathResolver(project: Project) {
     return resolve(request, options);
   }
 
-  return { resolveNamedLink, resolveLocalPath };
+  return { graph, resolveNamedLink, resolveLocalPath };
 }
