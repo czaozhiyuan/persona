@@ -2,5 +2,6 @@ node_modules/
 artifacts/npm-cache/
 artifacts/browser-profiles/
 artifacts/test-results/
+artifacts/v1/
 dist/
 *.local

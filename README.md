@@ -49,6 +49,21 @@ npm run verify
 
 安装依赖后运行 `npm run dev`，在 Vite 显示的地址后加 `/v1.html`（例如 `http://localhost:5173/v1.html`）。工作台默认加载 V1 示例，也可新建空工程。
 
+### 构建 V1 单 HTML
+
+在干净的 V1 提交上执行以下命令。发布入口为 `v1.html`，用锁文件安装构建依赖。
+
+```powershell
+npm ci
+npm run test:v1:model
+npm run build:v1
+Get-FileHash artifacts/v1/persona-v1.html -Algorithm SHA256
+```
+
+`artifacts/v1/` 包含 `persona-v1.html`、两份示例 JSON、第三方声明、`build-info.json` 和 `persona-v1.html.sha256`。构建信息记录源提交、工作树状态、最终 HTML 和示例文件的大小与 SHA256。HTML 内嵌运行资源及第三方声明，校验值以完成打包后的文件为准。
+
+将 `persona-v1.html` 单独复制到空目录，停止开发服务器并断网，用 Windows Chrome 或 Edge 直接打开。页签标题应为「persona · V1 工作台」。可直接加载内置完整示例。若要打开外部工程，在「工程」菜单选择 JSON 文件。
+
 ### V1 示例验收
 
 「工程 → 加载示例」打开[完整系统](examples/v1-project.json)。通过「工程 → 打开工程 JSON」也可打开该文件或[独立发射机箱](examples/v1-tx-only.json)。
