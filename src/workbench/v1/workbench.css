@@ -23,27 +23,52 @@ button:hover:not(:disabled) { background: #edf5f3; }
 button:disabled { opacity: .58; cursor: default; }
 button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid #138378; outline-offset: 2px; }
 
+.v1-workbench { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
 .toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: .75rem;
-  padding: .85rem max(1.25rem, calc((100vw - 66rem) / 2));
-  background: #173e40;
+  flex: none;
+  position: relative;
+  z-index: 4;
+  gap: .65rem;
+  min-height: 46px;
+  padding: 0 0 0 1rem;
+  background: #172f30;
   color: #fff;
 }
 
-.brand { font-size: 1.25rem; font-weight: 700; white-space: nowrap; }
-.brand span { margin-left: .4rem; font-size: .8rem; color: #b8ded3; }
-.actions, .form-row, .view-switch { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
-.divider { width: 1px; align-self: stretch; margin: .15rem .25rem; background: #648180; }
+.brand { font-size: 1.05rem; font-weight: 700; white-space: nowrap; }
+.brand span { margin-left: .2rem; font-size: .7rem; color: #b8ded3; }
+.actions, .form-row, .view-switch, .v1-main-menu { display: flex; align-items: center; gap: .35rem; }
+.form-row { flex-wrap: wrap; gap: .5rem; }
+.divider { flex: none; width: 1px; height: 20px; background: #496764; }
+.toolbar summary, .toolbar .actions button, .toolbar .view-switch button {
+  border: 0; background: transparent; color: #e0eeea; white-space: nowrap; font-size: .85rem;
+}
+.toolbar summary { border-radius: .25rem; list-style: none; padding: .35rem .4rem; cursor: pointer; }
+.toolbar summary::-webkit-details-marker { display: none; }
+.toolbar summary::after { content: '▾'; margin-left: .25rem; color: #a8c6bf; font-size: .7em; }
+.toolbar summary:hover, .toolbar details[open] > summary, .toolbar .actions button:hover:not(:disabled) { background: #294745; }
+.v1-main-menu details { position: relative; }
+.v1-menu-items {
+  position: absolute; top: calc(100% + .4rem); left: 0; min-width: 10rem;
+  padding: .25rem; border: 1px solid #c9d9d3; border-radius: .4rem; background: #fbfdfc;
+  box-shadow: 0 .35rem 1rem #203d3929;
+}
+.v1-menu-items button { width: 100%; padding: .4rem .55rem; border: none; background: transparent; font-size: .85rem; white-space: nowrap; text-align: left; }
+.toolbar .actions { gap: 0; }
+.toolbar .actions button { min-height: 1.8rem; width: 2rem; padding: 0; font-size: 1.25rem; }
+.toolbar .view-switch { align-self: stretch; align-items: stretch; gap: 0; margin-left: auto; }
+.toolbar .view-switch button { padding: 0 .9rem; border-radius: 0; border-bottom: 2px solid transparent; }
+.toolbar .view-switch button:hover, .toolbar .view-switch [aria-pressed="true"] { background: #254845; }
+.toolbar .view-switch [aria-pressed="true"] { border-color: #7ac9b5; }
 
-.workspace { width: min(calc(100% - 2.5rem), 66rem); margin: 2rem auto; }
-.heading { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
-.heading > div:first-child { min-width: 0; }
-h1 { margin: 0; font-size: clamp(1.75rem, 4vw, 2.5rem); }
-.heading p { margin: .35rem 0 0; color: #42605f; overflow-wrap: anywhere; }
+.v1-workbench-main { flex: 1; position: relative; min-height: 0; }
+.v1-canvas-page, .v1-page-scroll { position: absolute; inset: 0; }
+.v1-canvas-page[aria-hidden="true"] { visibility: hidden; }
+.v1-page-scroll { overflow: auto; }
+.workspace { width: min(calc(100% - 2.5rem), 66rem); margin: 1.25rem auto; }
+.v1-workbench-notice { flex: none; margin: 0; padding: .45rem 1rem; background: #fff4f2; }
 .columns { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 1rem; align-items: start; }
 .panel { padding: 1.25rem; border: 1px solid #d2dfdb; border-radius: .7rem; background: #fff; }
 .panel h2 { margin: 0; font-size: 1.05rem; }
@@ -76,5 +101,8 @@ button.primary:hover:not(:disabled) { background: #194f47; }
 
 @media (max-width: 46rem) {
   .columns { grid-template-columns: minmax(0, 1fr); }
-  .workspace { margin-top: 1.25rem; }
+  .toolbar { padding: .25rem .4rem 0; flex-wrap: wrap; gap: .2rem; }
+  .toolbar .divider { display: none; }
+  .brand { margin-right: .3rem; }
+  .toolbar .view-switch { min-height: 2rem; }
 }

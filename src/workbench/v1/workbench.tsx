@@ -1,4 +1,4 @@
-import { useMemo, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { LayoutEditor } from '../../editors/layout/v1/layout-editor';
 import { TopologyEditor } from '../../editors/topology/v1/topology-editor';
 import type { Project } from '../../model/v1/types';
@@ -16,10 +16,18 @@ type Props = {
   newProject: () => Project;
 };
 
+type Page = 'canvas' | 'project' | 'links' | 'library' | 'properties' | 'profiles';
+
+function closeWorkbenchMenu() {
+  for (const menu of document.querySelectorAll<HTMLDetailsElement>('.v1-main-menu details[open]')) menu.open = false;
+}
+
 export function Workbench({ store, loadExample, newProject }: Props) {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const { project, selection, canUndo, canRedo } = state;
   const [error, setError] = useState('');
+  const [page, setPage] = useState<Page>('canvas');
+  const [treeHidden, setTreeHidden] = useState(() => window.matchMedia('(max-width: 46rem)').matches);
   const [expandedHierarchy, setExpandedHierarchy] = useState<ReadonlySet<string>>(new Set(['[]']));
   const [supplies, setSupplies] = useState<ReadonlyMap<string, readonly string[]>>(new Map());
   const activeOccurrence = store.resolveInstance(selection.modulePath);
@@ -36,14 +44,39 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const pathResult = useMemo(() => selectedLink && linkOptions.resolveNamedLink(selectedLink,
     { opticalSources: selectedSources.map(item => item.value) }), [selectedLink, linkOptions, selectedSources]);
 
+  useEffect(() => {
+    function dismiss(event: PointerEvent | KeyboardEvent) {
+      if (!(event.target instanceof Element)) return;
+      if (event instanceof KeyboardEvent && (event.key !== 'Escape' || document.querySelector('dialog[open]'))) return;
+      for (const popup of document.querySelectorAll<HTMLDetailsElement>('details[data-workbench-popup][open]')) {
+        if (event instanceof PointerEvent && popup.contains(event.target)) continue;
+        popup.open = false;
+        if (event instanceof KeyboardEvent) popup.querySelector('summary')?.focus();
+      }
+    }
+    document.addEventListener('pointerdown', dismiss);
+    document.addEventListener('keydown', dismiss);
+    return () => {
+      document.removeEventListener('pointerdown', dismiss);
+      document.removeEventListener('keydown', dismiss);
+    };
+  }, []);
+
   function openProject(load: () => Project) {
+    closeWorkbenchMenu();
     if ((canUndo || canRedo) && !window.confirm('打开其他工程会清除当前编辑历史。是否继续？')) return;
     const result = store.replaceProject(load());
     setError(result.ok ? '' : result.message);
     if (result.ok) {
       setSupplies(new Map());
       setExpandedHierarchy(new Set(['[]']));
+      setPage('canvas');
     }
+  }
+
+  function openPage(next: Page) {
+    closeWorkbenchMenu();
+    setPage(next);
   }
 
   function showTopology() {
@@ -53,43 +86,68 @@ export function Workbench({ store, loadExample, newProject }: Props) {
       store.selectInstance(path);
     }
     store.setView('topology');
+    openPage('canvas');
   }
 
   return (
-    <>
+    <div className="v1-workbench">
       <header className="toolbar">
         <div className="brand">persona <span>V1</span></div>
+        <span className="divider" />
+        <nav className="v1-main-menu" aria-label="工作台菜单">
+          <details name="workbench-menu" data-workbench-popup><summary>工程</summary>
+            <div className="v1-menu-items">
+              <button type="button" onClick={() => openProject(newProject)}>新建空工程</button>
+              <button type="button" onClick={() => openProject(loadExample)}>加载示例</button>
+              <button type="button" onClick={() => openPage('project')}>工程状态</button>
+            </div>
+          </details>
+          <details name="workbench-menu" data-workbench-popup><summary>链路</summary>
+            <div className="v1-menu-items"><button type="button" onClick={() => openPage('links')}>命名链路</button></div>
+          </details>
+          <details name="workbench-menu" data-workbench-popup><summary>器件库</summary>
+            <div className="v1-menu-items"><button type="button" disabled={active?.kind !== 'module'}
+              onClick={() => openPage('library')}>器件与模块库</button></div>
+          </details>
+          <details name="workbench-menu" data-workbench-popup><summary>属性与标定</summary>
+            <div className="v1-menu-items">
+              <button type="button" disabled={!properties} onClick={() => openPage('properties')}>对象属性</button>
+              <button type="button" onClick={() => openPage('profiles')}>工程标定 Profile</button>
+            </div>
+          </details>
+        </nav>
+        <span className="divider" />
         <div className="actions">
-          <button type="button" onClick={() => openProject(newProject)}>新建空工程</button>
-          <button type="button" onClick={() => openProject(loadExample)}>加载示例</button>
-          <span className="divider" />
-          <button type="button" disabled={!canUndo} onClick={() => { store.undo(); setError(''); }}>撤销</button>
-          <button type="button" disabled={!canRedo} onClick={() => { store.redo(); setError(''); }}>重做</button>
+          <button type="button" aria-label="撤销" title="撤销" disabled={!canUndo} onClick={() => { store.undo(); setError(''); }}>↶</button>
+          <button type="button" aria-label="重做" title="重做" disabled={!canRedo} onClick={() => { store.redo(); setError(''); }}>↷</button>
+        </div>
+        <div className="view-switch" role="group" aria-label="视图选择">
+          <button type="button" aria-pressed={page === 'canvas' && selection.view === 'topology'} onClick={showTopology}>逻辑拓扑</button>
+          <button type="button" aria-pressed={page === 'canvas' && selection.view === 'physical'}
+            onClick={() => { store.setView('physical'); openPage('canvas'); }}>物理布局</button>
         </div>
       </header>
-      <main className="workspace">
-        <section className="heading" aria-labelledby="workbench-title">
-          <div>
-            <h1 id="workbench-title">V1 工作台</h1>
-            <p>{project.name}</p>
-          </div>
-          <div className="view-switch" role="group" aria-label="视图选择">
-            <button type="button" aria-pressed={selection.view === 'topology'} onClick={showTopology}>逻辑拓扑</button>
-            <button type="button" aria-pressed={selection.view === 'physical'} onClick={() => store.setView('physical')}>物理布局</button>
-          </div>
-        </section>
+      {error && <p className="v1-workbench-notice error" role="alert">{error}</p>}
+      <main className="v1-workbench-main">
+        <div className="v1-canvas-page" inert={page !== 'canvas'} aria-hidden={page !== 'canvas'}>
         {selection.view === 'topology' && active?.kind === 'module' &&
           <TopologyEditor key={JSON.stringify(['topology', project.id, selection.modulePath])}
             store={store} state={state} module={active} pathResult={pathResult} graph={linkOptions.graph}
-            expandedHierarchy={expandedHierarchy} setExpandedHierarchy={setExpandedHierarchy} />}
+            expandedHierarchy={expandedHierarchy} setExpandedHierarchy={setExpandedHierarchy}
+            treeHidden={treeHidden} setTreeHidden={setTreeHidden} />}
         {selection.view === 'physical' &&
-          <LayoutEditor key={JSON.stringify(['physical', project.id])} store={store} state={state} />}
-        <LinkEditor key={JSON.stringify(['link', project.id, selectedLink?.id])} store={store} project={project}
+          <div className="v1-page-scroll"><div className="workspace">
+            <LayoutEditor key={JSON.stringify(['physical', project.id])} store={store} state={state} />
+          </div></div>}
+        </div>
+        {page !== 'canvas' && <div className="v1-page-scroll">
+          <div className="workspace">
+        {page === 'links' && <LinkEditor key={JSON.stringify(['link', project.id, selectedLink?.id])} store={store} project={project}
           options={linkOptions} selected={selectedLink} result={pathResult} sourceKeys={selectedSources.map(item => item.key)}
           setSources={keys => {
             if (selectedLink) setSupplies(previous => new Map(previous).set(selectedLink.id, keys));
-          }} />
-        <div className="columns">
+          }} />}
+        {page === 'project' && <div className="columns">
           <section className="panel" aria-labelledby="module-title">
             <div className="panel-header">
               <h2 id="module-title">当前模块</h2>
@@ -141,19 +199,20 @@ export function Workbench({ store, loadExample, newProject }: Props) {
                 <button className="primary" type="submit">保存名称</button>
               </div>
             </form>
-            {error && <p className="error" role="alert">{error}</p>}
             <dl>
               <div><dt>选中实例</dt><dd>{selected?.instance?.name ?? '未选择'}</dd></div>
               <div><dt>布局记录</dt><dd>{layout?.length ?? 0}</dd></div>
             </dl>
           </section>
-        </div>
-        {active?.kind === 'module' && <LibraryPanel key={JSON.stringify(['library', project.id, selection.modulePath])}
+        </div>}
+        {page === 'library' && active?.kind === 'module' && <LibraryPanel key={JSON.stringify(['library', project.id, selection.modulePath])}
           store={store} state={state} module={active} />}
-        {properties && <PropertiesPanel key={JSON.stringify(['properties', project.id, properties.instancePath])}
+        {page === 'properties' && properties && <PropertiesPanel key={JSON.stringify(['properties', project.id, properties.instancePath])}
           store={store} occurrence={properties} />}
-        <ProfilePanel key={JSON.stringify(['profiles', project.id])} store={store} profiles={project.conversionProfiles ?? []} />
+        {page === 'profiles' && <ProfilePanel key={JSON.stringify(['profiles', project.id])} store={store} profiles={project.conversionProfiles ?? []} />}
+          </div>
+        </div>}
       </main>
-    </>
+    </div>
   );
 }

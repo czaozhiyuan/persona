@@ -1,20 +1,48 @@
-.v1-topology { margin-bottom: 1rem; }
-.v1-hierarchy-workspace { display: grid; grid-template-columns: minmax(9rem, 13rem) minmax(0, 1fr) 4rem; gap: .7rem; margin-top: .8rem; }
-.v1-hierarchy-workspace .v1-topology-canvas { margin-top: 0; }
-.v1-hierarchy-tree { border: 1px solid #d2dfdb; border-radius: .5rem; background: #f4f8f7; min-width: 0; }
-.v1-hierarchy-tree h3 { margin: 0; padding: .65rem; border-bottom: 1px solid #d2dfdb; font-size: .9rem; }
-.v1-hierarchy-tree ul { margin: 0; padding: .3rem; max-height: clamp(15rem, 46vh, 31rem); overflow: auto; list-style: none; }
+.v1-topology { height: 100%; display: flex; flex-direction: column; }
+.v1-hierarchy-workspace { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+.v1-hierarchy-tree, .v1-topology-path, .v1-hierarchy-depth, .v1-canvas-zoom {
+  border: 1px solid #ccdad5; border-radius: .45rem; background: #fbfdfc; box-shadow: 0 2px 10px #203d3910;
+}
+.v1-topology-path, .v1-hierarchy-tree, .v1-hierarchy-depth { position: absolute; z-index: 2; }
+.v1-topology-path {
+  top: 14px; left: 14px; max-width: calc(100% - 112px); height: 32px;
+  display: flex; align-items: center; gap: .45rem; padding: 0 .55rem; overflow-x: auto;
+  white-space: nowrap; font-size: .78rem; color: #214d46;
+}
+.v1-topology-path > span { display: flex; align-items: center; gap: .25rem; }
+.v1-topology-path button { border: 0; min-height: 1.5rem; background: transparent; padding: 0 .2rem; color: #4a6861; }
+.v1-hierarchy-tree { top: 60px; left: 14px; width: min(13rem, 48vw); }
+.v1-hierarchy-tree:has(ul[hidden]) { width: auto; }
+.v1-hierarchy-tree header { display: flex; justify-content: space-between; align-items: center; gap: .35rem; padding: .25rem .5rem; }
+.v1-hierarchy-tree h3 { margin: 0; padding-left: .25rem; font-size: .85rem; }
+.v1-hierarchy-tree ul {
+  margin: 0; padding: .3rem; max-height: min(48vh, 26rem); overflow: auto;
+  list-style: none; border-top: 1px solid #dbe5e0;
+}
 .v1-hierarchy-tree li { display: flex; align-items: center; width: max-content; min-width: 100%; }
-.v1-hierarchy-tree button { min-height: 1.75rem; border: 0; padding: .15rem .3rem; background: transparent; }
+.v1-hierarchy-tree button { min-height: 1.75rem; border: 0; padding: .15rem .3rem; background: transparent; font-size: .8rem; }
 .v1-hierarchy-disclosure { width: 1.4rem; flex-shrink: 0; color: #315d56; }
 .v1-hierarchy-entry { display: flex; gap: .4rem; align-items: center; white-space: nowrap; }
 .v1-hierarchy-entry[aria-pressed="true"], .v1-hierarchy-entry[aria-current] { background: #deefe9; }
 .v1-hierarchy-icon { width: .45rem; height: .45rem; border-radius: 50%; background: #327970; }
 .v1-hierarchy-icon.module { width: .55rem; height: .55rem; border-radius: .13rem; background: #fff; border: 1px solid #327970; }
-.v1-hierarchy-depth { display: flex; flex-direction: column; align-items: center; gap: .35rem; font-size: .76rem; color: #42605f; }
+.v1-hierarchy-depth {
+  top: 14px; right: 14px; width: 70px; padding: .5rem .3rem;
+  display: flex; flex-direction: column; align-items: center; gap: .35rem; font-size: .72rem; color: #42605f;
+}
 .v1-hierarchy-depth label { font-weight: 600; }
-.v1-hierarchy-depth input { writing-mode: vertical-lr; direction: ltr; height: clamp(8rem, 36vh, 18rem); accent-color: #267e73; }
-.v1-hierarchy-caption { margin: .35rem 0 0; color: #42605f; font-size: .78rem; }
+.v1-hierarchy-depth input { writing-mode: vertical-lr; direction: ltr; height: clamp(4rem, 24vh, 11rem); accent-color: #267e73; }
+.v1-hierarchy-caption, .v1-topology-message {
+  position: absolute; z-index: 2; left: 14px; margin: 0; padding: .4rem .6rem;
+  max-width: calc(100% - 180px); border-radius: .35rem; pointer-events: none;
+}
+.v1-hierarchy-caption { bottom: 14px; color: #42605f; background: #fbfdfc; font-size: .78rem; }
+.v1-topology-message { bottom: 54px; background: #fff1ef; border: 1px solid #ebc0bb; font-size: .85rem; }
+.v1-canvas-zoom.react-flow__panel {
+  display: flex; align-items: center; gap: .15rem; margin: 14px; padding: .15rem; color: #375951; z-index: 2;
+}
+.v1-canvas-zoom button { min-height: 1.75rem; width: 1.75rem; border: 0; padding: 0; background: transparent; }
+.v1-canvas-zoom output { min-width: 2.7rem; text-align: center; font-size: .73rem; }
 .v1-overview-card { box-sizing: border-box; width: 100%; height: 100%; border: 1px solid #8faeab; border-radius: .5rem; background: #fff; }
 .v1-overview-card.is-selected { outline: 3px solid #267e73; }
 .v1-overview-header { width: 200px; padding: .5rem .75rem; color: #183039; }
@@ -34,13 +62,11 @@
 .v1-module-pins.left .v1-frame-outer-handle { left: -3px; }
 .v1-module-pins.right .v1-frame-inner-handle { left: calc(100% - 3px); }
 .v1-module-pins.right .v1-frame-outer-handle { left: calc(100% + 3px); }
-@media (max-width: 46rem) {
-  .v1-hierarchy-workspace { grid-template-columns: minmax(0, 1fr) 3.4rem; }
-  .v1-hierarchy-tree { grid-column: 1 / -1; }
-  .v1-hierarchy-tree ul { max-height: 9rem; }
+.v1-topology-canvas { position: absolute; inset: 0; overflow: hidden; background: #f6faf9; }
+.v1-topology-empty {
+  position: absolute; top: 50%; left: 50%; translate: -50% -50%;
+  text-align: center; color: #536867; pointer-events: none;
 }
-.v1-topology-canvas { position: relative; height: clamp(18rem, 52vh, 34rem); margin-top: .8rem; border: 1px solid #d2dfdb; border-radius: .5rem; overflow: hidden; background: #f6faf9; }
-.v1-topology-empty { position: absolute; inset: 1rem auto auto 1rem; color: #536867; pointer-events: none; }
 .v1-topology-device { width: 11rem; padding: .7rem .8rem; background: #fff; border: 1px solid #8faeab; border-radius: .55rem; box-shadow: 0 2px 8px #173e4014; }
 .v1-topology-device.is-selected { outline: 2px solid #267e73; outline-offset: 2px; }
 .v1-topology-device.has-folded-path { border-color: #a85618; }
@@ -56,9 +82,34 @@
 .v1-topology-port .OPTICAL { background: #7856b7; }
 .v1-topology-port .RF { background: #2076ad; }
 .v1-topology-port .DC_POWER { background: #ad5420; }
-.v1-topology-tools { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); gap: .6rem; margin-top: .8rem; align-items: start; }
-.v1-topology-tools details { border: 1px solid #d2dfdb; border-radius: .4rem; padding: .7rem; }
-.v1-topology-tools summary { cursor: pointer; font-weight: 600; }
+.v1-topology-tools {
+  position: relative; z-index: 3; flex: none; min-height: 52px;
+  display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: .5rem;
+  padding: .45rem .75rem; border-top: 1px solid #cbdad5; background: #f9fbfa;
+}
+.v1-topology-tools details { position: relative; }
+.v1-topology-tools summary {
+  display: flex; justify-content: space-between; align-items: center; gap: .55rem;
+  min-width: 8.25rem; min-height: 2rem; padding: .25rem .65rem; border: 1px solid #c9d9d3; border-radius: .35rem;
+  list-style: none; background: #fff; font-size: .82rem; cursor: pointer;
+}
+.v1-topology-tools summary::-webkit-details-marker { display: none; }
+.v1-topology-tools summary::after { content: '▴'; color: #5e7b72; }
+.v1-topology-tools details[open] > summary { background: #deefe9; border-color: #70a99e; }
+.v1-topology-popup {
+  position: absolute; bottom: calc(100% + .75rem); left: 50%; translate: -50% 0;
+  width: min(25rem, calc(100vw - 1.5rem)); max-height: min(36rem, calc(100dvh - 10rem)); overflow: auto;
+  padding: .85rem; border: 1px solid #c9d9d3; border-radius: .5rem; background: #fbfdfc; box-shadow: 0 .3rem 1rem #203d3929;
+}
+@media (max-width: 58rem) {
+  .v1-topology-tools details { position: static; }
+  .v1-topology-popup { bottom: calc(100% + .25rem); }
+}
+@media (max-width: 46rem) {
+  .v1-topology-tools { gap: .3rem; }
+  .v1-topology-tools summary { min-width: 0; padding-inline: .55rem; }
+  .v1-hierarchy-tree ul { max-height: min(42vh, 15rem); }
+}
 .v1-topology-tools form { margin-top: .65rem; }
 .v1-topology-tools label { display: block; margin-top: .5rem; font-size: .85rem; }
 .v1-topology-tools input, .v1-topology-tools select { display: block; min-width: 0; width: 100%; margin-top: .22rem; min-height: 2rem; border: 1px solid #becfce; border-radius: .3rem; padding-inline: .35rem; }

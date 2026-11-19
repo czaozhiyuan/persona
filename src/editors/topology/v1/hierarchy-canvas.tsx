@@ -1,4 +1,4 @@
-import { Background, Controls, Handle, Position, ReactFlow } from '@xyflow/react';
+import { Background, Handle, Position, ReactFlow } from '@xyflow/react';
 import type { Edge, Node, NodeProps } from '@xyflow/react';
 import { useMemo } from 'react';
 import type { PathResult } from '../../../engine/v1/path-resolver';
@@ -7,6 +7,7 @@ import type { SignalEdge, SignalGraph } from '../../../engine/v1/signal-graph';
 import type { InstancePath, PortDefinition } from '../../../model/v1/types';
 import { hierarchyKey, layoutHierarchy } from './hierarchy-view';
 import { boundaryPortSide, ModuleFrame } from './module-frame';
+import { CanvasControls, canvasFitOptions } from './canvas-controls';
 
 type OverviewNode = Node<{
   path: InstancePath;
@@ -48,10 +49,11 @@ function visualKey(edge: SignalEdge): string | undefined {
   if (source.kind === 'cableCore') return JSON.stringify(['core', source.ref.scopePath, source.ref.bundleId, source.ref.coreId]);
 }
 
-export function HierarchyCanvas({ graph, scope, depth, result, selected, select, navigate }: {
+export function HierarchyCanvas({ graph, scope, depth, treeHidden, result, selected, select, navigate }: {
   graph: SignalGraph;
   scope: InstancePath;
   depth: number;
+  treeHidden: boolean;
   result?: PathResult;
   selected?: InstancePath;
   select: (path?: InstancePath) => void;
@@ -97,12 +99,13 @@ export function HierarchyCanvas({ graph, scope, depth, result, selected, select,
 
   return <div className="v1-topology-canvas" aria-label="多层逻辑拓扑">
     <ReactFlow<OverviewNode, Edge> nodes={nodes} edges={edges} nodeTypes={nodeTypes}
-      fitView minZoom={0.001} maxZoom={2} nodesDraggable={false} nodesConnectable={false} deleteKeyCode={null}
+      fitView fitViewOptions={canvasFitOptions(treeHidden)}
+      minZoom={0.001} maxZoom={2} nodesDraggable={false} nodesConnectable={false} deleteKeyCode={null}
       onPaneClick={() => select()}
       onNodeClick={(_, node) => { if (!node.data.boundary) select(node.data.path); }}
       onNodeDoubleClick={(_, node) => { if (!node.data.boundary && node.data.module) navigate(node.data.path); }}>
       <Background />
-      <Controls showInteractive={false} />
+      <CanvasControls treeHidden={treeHidden} />
     </ReactFlow>
   </div>;
 }
