@@ -63,6 +63,40 @@ test('explicit compatible update preserves scoped wiring and retained instance c
   assert.equal(store.getSnapshot().canUndo, false);
 });
 
+test('compatible replacement exposes valid local wiring, open mappings, and parameter changes before commit', () => {
+  const installed = addTemplateInstance(empty, builtInDefinitions, stage.id, 'system', 'stage', 'Stage');
+  const localConnection = { id: 'local-feed',
+    from: { instanceId: 'amplifier', portId: 'RF_OUT' }, to: { instanceId: 'amplifier', portId: 'RF_IN' } };
+  const defaultValue = { kind: 'fixed', value: 0 } as const;
+  const project: Project = {
+    ...installed.project,
+    moduleDefinitions: installed.project.moduleDefinitions.map(module => module.id === stage.id ? {
+      ...module, connections: [localConnection], portMappings: [], parameterMappings: [],
+      parameters: [{ ...stage.parameters[0], defaultValue }],
+      physicalEnclosure: { widthMm: 120, depthMm: 80, heightMm: 35 },
+    } : module),
+  };
+  const store = createProjectStore(project);
+  const before = store.getSnapshot();
+  const preview = previewTemplateUpdate(before.project, builtInDefinitions, stage.id);
+  assert.equal(preview.ok, true);
+  assert.deepEqual(preview.definitionChanges.find(change => change.field === '连接'), {
+    field: '连接', id: 'local-feed', before: localConnection, after: undefined,
+  });
+  assert.deepEqual(preview.definitionChanges.filter(change => change.field === '端口映射').map(change => change.after), stage.portMappings);
+  assert.deepEqual(preview.definitionChanges.find(change => change.field === '参数映射')?.after, stage.parameterMappings[0]);
+  assert.deepEqual(preview.definitionChanges.find(change => change.field === '参数定义')?.before, { ...stage.parameters[0], defaultValue });
+  assert.deepEqual(preview.definitionChanges.find(change => change.field === '物理包络')?.before,
+    { widthMm: 120, depthMm: 80, heightMm: 35 });
+  assert.equal(store.getSnapshot(), before);
+  assert.equal(store.commit(() => preview.project).ok, true);
+  const unchanged = previewTemplateUpdate(store.getSnapshot().project, builtInDefinitions, stage.id);
+  assert.equal(unchanged.ok, true);
+  assert.deepEqual(unchanged.definitionChanges, []);
+  store.undo();
+  assert.equal(store.getSnapshot().project, before.project);
+});
+
 test('type collisions and updates that remove referenced ports are diagnosed without modifying the project', () => {
   const conflicting: Project = { ...empty, moduleDefinitions: [...empty.moduleDefinitions, {
     kind: 'module', id: gain.id, name: 'Existing module', instances: [], ports: [],

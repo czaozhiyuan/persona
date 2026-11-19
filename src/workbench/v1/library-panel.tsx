@@ -6,13 +6,13 @@ import { addTemplateInstance, previewTemplateUpdate } from '../../library/v1/pro
 import type { TemplateChanges } from '../../library/v1/project-snapshots';
 import type { ModuleDefinition, Project } from '../../model/v1/types';
 import type { ProjectStore, ProjectStoreSnapshot } from '../../state/v1/project-store';
+import './library-panel.css';
 
 type Props = { store: ProjectStore; state: ProjectStoreSnapshot; module: ModuleDefinition };
 type Preview = {
   base: Project;
   result: ReturnType<typeof previewTemplateUpdate>;
   paths: readonly string[];
-  removedChildren: readonly string[];
 };
 
 function describe(changes: TemplateChanges) {
@@ -31,6 +31,8 @@ export function LibraryPanel({ store, state, module }: Props) {
   const template = builtInDefinitions.find(item => item.id === templateId)!;
   const existing = [...project.componentDefinitions, ...project.moduleDefinitions].find(item => item.id === templateId);
   const activePreview = preview?.base === project ? preview : undefined;
+  const compatible = activePreview?.result.ok ? activePreview.result : undefined;
+  const hasChanges = !!(compatible?.definitionChanges.length || compatible?.changes.added.length);
 
   function prepareUpdate() {
     if (!existing) return;
@@ -39,15 +41,12 @@ export function LibraryPanel({ store, state, module }: Props) {
     for (const occurrence of resolveHierarchy(project).walkInstances()) {
       if (occurrence.definition.id === templateId) paths.push(JSON.stringify(occurrence.instancePath));
     }
-    const removedChildren = existing.kind === 'module' && template.kind === 'module'
-      ? existing.instances.filter(item => !template.instances.some(child => child.id === item.id)).map(item => item.id)
-      : [];
-    setPreview({ base: project, result, paths, removedChildren });
+    setPreview({ base: project, result, paths });
     setFeedback(undefined);
   }
 
   function applyUpdate() {
-    if (!activePreview?.result.ok || store.getSnapshot().project !== activePreview.base) return;
+    if (!activePreview?.result.ok || !hasChanges || store.getSnapshot().project !== activePreview.base) return;
     const { project: candidate, changes } = activePreview.result;
     const result = store.commit(() => candidate);
     if (result.ok) setPreview(undefined);
@@ -100,12 +99,29 @@ export function LibraryPanel({ store, state, module }: Props) {
       {activePreview.paths.length > 0 && <details><summary>受影响实例路径（{activePreview.paths.length}）</summary>
         <ul>{activePreview.paths.map(path => <li key={path}><code>{path}</code></li>)}</ul>
       </details>}
-      {activePreview.removedChildren.length > 0 && <p>模板移除内部实例：{activePreview.removedChildren.join('、')}</p>}
-      {activePreview.result.removedPorts.length > 0 && <p>模板移除端口：{activePreview.result.removedPorts.join('、')}</p>}
+      {compatible && <>
+        {compatible.changes.added.length > 0 && <p>将复制依赖：{compatible.changes.added.map(item => item.name).join('、')}</p>}
+        {compatible.definitionChanges.length > 0 && <details open className="v1-library-diff">
+          <summary>将应用的定义变更（{compatible.definitionChanges.length} 项）</summary>
+          <ul>{compatible.definitionChanges.map(change => (
+            <li key={JSON.stringify([change.field, change.id])}>
+              <strong>{change.before === undefined ? '新增' : change.after === undefined ? '移除' : '修改'}{change.field}</strong>
+              {change.id && <> · <code>{change.id}</code></>}
+              <div className="v1-library-diff-values">
+                <div>当前工程<pre>{change.before === undefined ? '无' : JSON.stringify(change.before, null, 2)}</pre></div>
+                <div>更新后<pre>{change.after === undefined ? '无' : JSON.stringify(change.after, null, 2)}</pre></div>
+              </div>
+            </li>
+          ))}</ul>
+        </details>}
+        {!hasChanges && <p>工程定义已与此次更新的内容一致。</p>}
+      </>}
+      {!activePreview.result.ok && activePreview.result.removedPorts.length > 0 &&
+        <p>模板移除端口：{activePreview.result.removedPorts.join('、')}</p>}
       {!activePreview.result.ok && <p className="error" role="alert">{activePreview.result.message}</p>}
       <div className="actions">
         <button type="button" onClick={() => setPreview(undefined)}>取消更新</button>
-        {activePreview.result.ok ? <button type="button" onClick={applyUpdate}>确认从库更新</button>
+        {activePreview.result.ok ? (hasChanges && <button type="button" onClick={applyUpdate}>确认应用上述变更</button>)
           : activePreview.result.removedPorts.map(port => <button type="button" key={port}
             onClick={() => setUnlink(port)}>预览解绑 {port}</button>)}
       </div>

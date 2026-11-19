@@ -1,5 +1,6 @@
 import type { ComponentDefinition, Instance, ModuleDefinition, Project } from '../../model/v1/types';
 import { validateProjectSnapshot } from '../../storage/v1/project-json';
+import { describeDefinitionChanges } from './definition-changes';
 
 export type LibraryDefinition = ComponentDefinition | ModuleDefinition;
 
@@ -86,7 +87,8 @@ export function previewTemplateUpdate(project: Project, library: readonly Librar
   try {
     const candidate = installDefinitions(project, library, templateId, true);
     validateProjectSnapshot(candidate.project);
-    return { ok: true as const, project: candidate.project, changes: candidate.changes, removedPorts };
+    return { ok: true as const, project: candidate.project, changes: candidate.changes,
+      definitionChanges: describeDefinitionChanges(current, candidate.root) };
   } catch (error) {
     return { ok: false as const, message: (error as Error).message, removedPorts };
   }
