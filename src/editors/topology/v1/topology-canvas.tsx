@@ -1,4 +1,4 @@
-import { Background, Handle, Position, ReactFlow, useNodesState, useUpdateNodeInternals } from '@xyflow/react';
+import { Background, ReactFlow, useNodesState, useUpdateNodeInternals } from '@xyflow/react';
 import type { Connection as FlowConnection, Edge, Node, NodeChange, NodeProps, ReactFlowInstance, Rect, Viewport, XYPosition } from '@xyflow/react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { signalPortKey } from '../../../engine/v1/signal-graph';
@@ -6,6 +6,7 @@ import type { Connection, LocalEndpointRef } from '../../../model/v1/topology';
 import type { InstancePath, ModuleDefinition, PortDefinition, PortMapping, Project } from '../../../model/v1/types';
 import { canvasEdgeKey } from './path-highlight';
 import type { projectPathHighlight } from './path-highlight';
+import { BlockPorts, blockPortRows } from './block-ports';
 import { frameInsets, ModuleFrame } from './module-frame';
 import { fitModuleFrame, keepNodeInside, minimumFrame, moduleExtent } from './frame-geometry';
 import { FrameResizeHandles } from './frame-resize-handles';
@@ -29,16 +30,7 @@ function Device({ id, data, selected }: NodeProps<DeviceNode>) {
     <div className={`v1-topology-device${selected ? ' is-selected' : ''}${data.foldedPath ? ' has-folded-path' : ''}`}>
       <strong>{data.name}</strong>
       {data.foldedPath && <span className="v1-topology-path-label">路径经过内部</span>}
-      {data.ports.map(port => {
-        const output = port.direction === 'out';
-        return (
-          <div key={port.id} className={`v1-topology-port ${output ? 'out' : 'in'}${data.pathPorts.has(port.id) ? ' is-on-path' : ''}`} title={port.id}>
-            <Handle id={handleId(port.id)} type={output ? 'source' : 'target'}
-              position={output ? Position.Right : Position.Left} className={port.type} />
-            <span>{port.id}</span><small>{port.type}</small>
-          </div>
-        );
-      })}
+      <BlockPorts ports={data.ports} highlighted={data.pathPorts} handleId={handleId} editable />
     </div>
   );
 }
@@ -60,7 +52,7 @@ function moduleFrame(data: FrameNode['data']): FrameNode {
 }
 
 function nodeBounds(node: DeviceNode, position = node.position): Rect {
-  return { ...position, width: node.measured?.width ?? 202, height: node.measured?.height ?? (48 + node.data.ports.length * 24) };
+  return { ...position, width: node.measured?.width ?? 202, height: node.measured?.height ?? (48 + blockPortRows(node.data.ports) * 24) };
 }
 
 type Props = {

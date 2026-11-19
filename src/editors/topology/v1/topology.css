@@ -45,9 +45,12 @@
 .v1-canvas-zoom output { min-width: 2.7rem; text-align: center; font-size: .73rem; }
 .v1-overview-card { box-sizing: border-box; width: 100%; height: 100%; border: 1px solid #8faeab; border-radius: .5rem; background: #fff; }
 .v1-overview-card.is-selected { outline: 3px solid #267e73; }
-.v1-overview-header { width: 200px; padding: .5rem .75rem; color: #183039; }
-.v1-overview-header strong, .v1-overview-header .v1-topology-port span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.v1-overview-header .v1-topology-port { height: 24px; min-height: 24px; }
+.v1-overview-header { box-sizing: border-box; width: 100%; padding: .5rem .8rem; color: #183039; }
+.v1-overview-header strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.v1-block-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: .5rem; }
+.v1-block-column .v1-topology-port { height: 24px; min-height: 24px; }
+.v1-block-column.right .v1-topology-port { justify-content: flex-end; }
+.v1-block-column .v1-topology-port span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .v1-module-frame { box-sizing: border-box; width: 100%; height: 100%; border: 2px solid #729c88; border-radius: .5rem; background: #e7f4ee; }
 .v1-frame-resize { position: absolute; z-index: 2; pointer-events: auto; touch-action: none; }
 .v1-frame-resize:hover { background: #267e7366; }
@@ -89,7 +92,6 @@
 .v1-topology-port.is-on-path .react-flow__handle { outline: 2px solid #a85618; }
 .v1-topology-device strong { display: block; overflow-wrap: anywhere; margin-bottom: .25rem; }
 .v1-topology-port { position: relative; display: flex; gap: .3rem; align-items: center; justify-content: space-between; min-height: 1.5rem; font-size: .78rem; overflow-wrap: anywhere; }
-.v1-topology-port small { white-space: nowrap; color: #42605f; }
 .v1-topology-port .react-flow__handle { width: .65rem; height: .65rem; background: #526865; border-color: #fff; }
 .v1-topology-port .react-flow__handle-left { left: -.83rem; }
 .v1-topology-port .react-flow__handle-right { right: -.83rem; }
