@@ -1,0 +1,18 @@
+.v1-properties { margin-top: 1rem; }
+.v1-properties h3 { margin: 1rem 0 .6rem; font-size: .95rem; color: #275d56; }
+.v1-property-columns, .v1-property-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .85rem; }
+.v1-properties form { margin: .7rem 0; max-width: 36rem; }
+.v1-properties label { display: block; margin: .6rem 0; font-size: .87rem; }
+.v1-properties input, .v1-properties select, .v1-properties textarea {
+  display: block; width: 100%; min-height: 2.15rem; margin-top: .2rem; padding: .35rem .55rem;
+  border: 1px solid #becfce; border-radius: .35rem; background: #fff; color: inherit; font: inherit;
+}
+.v1-properties textarea { resize: vertical; }
+.v1-properties details { margin: .55rem 0; padding: .6rem .75rem; border: 1px solid #d2dfdb; border-radius: .4rem; }
+.v1-properties summary { cursor: pointer; overflow-wrap: anywhere; }
+.v1-properties fieldset { min-width: 0; margin: .55rem 0; border: 1px solid #d2dfdb; border-radius: .35rem; }
+.v1-properties form button + button { margin-left: .4rem; }
+.v1-property-effective { margin: .45rem 0; color: #42605f; overflow-wrap: anywhere; }
+@media (max-width: 44rem) {
+  .v1-property-columns { grid-template-columns: minmax(0, 1fr); }
+}
