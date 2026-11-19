@@ -20,6 +20,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const { project, selection, canUndo, canRedo } = state;
   const [error, setError] = useState('');
+  const [expandedHierarchy, setExpandedHierarchy] = useState<ReadonlySet<string>>(new Set(['[]']));
   const [supplies, setSupplies] = useState<ReadonlyMap<string, readonly string[]>>(new Map());
   const activeOccurrence = store.resolveInstance(selection.modulePath);
   const active = activeOccurrence?.definition;
@@ -39,7 +40,10 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     if ((canUndo || canRedo) && !window.confirm('打开其他工程会清除当前编辑历史。是否继续？')) return;
     const result = store.replaceProject(load());
     setError(result.ok ? '' : result.message);
-    if (result.ok) setSupplies(new Map());
+    if (result.ok) {
+      setSupplies(new Map());
+      setExpandedHierarchy(new Set(['[]']));
+    }
   }
 
   function showTopology() {
@@ -76,7 +80,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
         </section>
         {selection.view === 'topology' && active?.kind === 'module' &&
           <TopologyEditor key={JSON.stringify(['topology', project.id, selection.modulePath])}
-            store={store} state={state} module={active} pathResult={pathResult} />}
+            store={store} state={state} module={active} pathResult={pathResult} graph={linkOptions.graph}
+            expandedHierarchy={expandedHierarchy} setExpandedHierarchy={setExpandedHierarchy} />}
         {selection.view === 'physical' &&
           <LayoutEditor key={JSON.stringify(['physical', project.id])} store={store} state={state} />}
         <LinkEditor key={JSON.stringify(['link', project.id, selectedLink?.id])} store={store} project={project}
