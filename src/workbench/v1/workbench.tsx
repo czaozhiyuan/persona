@@ -1,4 +1,5 @@
 import { useState, useSyncExternalStore } from 'react';
+import { LayoutEditor } from '../../editors/layout/v1/layout-editor';
 import { TopologyEditor } from '../../editors/topology/v1/topology-editor';
 import type { Project } from '../../model/v1/types';
 import type { ProjectStore } from '../../state/v1/project-store';
@@ -28,6 +29,15 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     setError(result.ok ? '' : result.message);
   }
 
+  function showTopology() {
+    const path = selection.instancePath;
+    if (selection.view === 'physical' && path) {
+      store.selectModule(path.slice(0, -1));
+      store.selectInstance(path);
+    }
+    store.setView('topology');
+  }
+
   return (
     <>
       <header className="toolbar">
@@ -42,11 +52,19 @@ export function Workbench({ store, loadExample, newProject }: Props) {
       </header>
       <main className="workspace">
         <section className="heading" aria-labelledby="workbench-title">
-          <h1 id="workbench-title">V1 工作台</h1>
-          <p>{project.name}</p>
+          <div>
+            <h1 id="workbench-title">V1 工作台</h1>
+            <p>{project.name}</p>
+          </div>
+          <div className="view-switch" role="group" aria-label="视图选择">
+            <button type="button" aria-pressed={selection.view === 'topology'} onClick={showTopology}>逻辑拓扑</button>
+            <button type="button" aria-pressed={selection.view === 'physical'} onClick={() => store.setView('physical')}>物理布局</button>
+          </div>
         </section>
         {selection.view === 'topology' && active?.kind === 'module' &&
           <TopologyEditor key={JSON.stringify(['topology', project.id, selection.modulePath])} store={store} state={state} module={active} />}
+        {selection.view === 'physical' &&
+          <LayoutEditor key={JSON.stringify(['physical', project.id])} store={store} state={state} />}
         <div className="columns">
           <section className="panel" aria-labelledby="module-title">
             <div className="panel-header">
@@ -109,10 +127,6 @@ export function Workbench({ store, loadExample, newProject }: Props) {
               <div><dt>选中实例</dt><dd>{selected?.instance?.name ?? '未选择'}</dd></div>
               <div><dt>布局记录</dt><dd>{layout?.length ?? 0}</dd></div>
             </dl>
-            <div className="view-switch" role="group" aria-label="视图选择">
-              <button type="button" aria-pressed={selection.view === 'topology'} onClick={() => store.setView('topology')}>逻辑拓扑</button>
-              <button type="button" aria-pressed={selection.view === 'physical'} onClick={() => store.setView('physical')}>物理布局</button>
-            </div>
           </section>
         </div>
         {properties && <PropertiesPanel key={JSON.stringify(['properties', project.id, properties.instancePath])}
