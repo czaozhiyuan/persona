@@ -3,7 +3,10 @@ import { useState } from 'react';
 import type { PathResult } from '../../../engine/v1/path-resolver';
 import type { SignalGraph } from '../../../engine/v1/signal-graph';
 import { builtInDefinitions } from '../../../library/v1/built-in';
-import { addTemplateInstance } from '../../../library/v1/project-snapshots';
+import { insertLibraryItem } from '../../../library/v1/insert-library-item';
+import type { LibraryItem } from '../../../library/v1/insert-library-item';
+import { removeTopologyInstance, removeWiring } from '../../../state/v1/remove-topology-object';
+import type { WiringSelection } from '../../../state/v1/remove-topology-object';
 import type { ModuleDefinition, PortDirection, PortType, Project } from '../../../model/v1/types';
 import type { ProjectStore, ProjectStoreSnapshot } from '../../../state/v1/project-store';
 import { editModule, editModuleWiring, moveTopologyNode, resizeTopologyFrame } from '../../../state/v1/topology-edits';
@@ -16,8 +19,8 @@ import { CableForm, ConnectionForm, MappingForm, TopologyTool, field } from './w
 import type { LocalPort, UpdateWiring } from './wiring-forms';
 import './topology.css';
 
-export function TopologyEditor({ store, state, module, pathResult, graph }: {
-  store: ProjectStore; state: ProjectStoreSnapshot; module: ModuleDefinition; pathResult?: PathResult; graph: SignalGraph;
+export function TopologyEditor({ store, state, module, pathResult, graph, rename }: {
+  store: ProjectStore; state: ProjectStoreSnapshot; module: ModuleDefinition; pathResult?: PathResult; graph: SignalGraph; rename: () => void;
 }) {
   const { project, selection } = state;
   const scope = selection.modulePath;
@@ -40,6 +43,18 @@ export function TopologyEditor({ store, state, module, pathResult, graph }: {
     const result = store.commit(change);
     setMessage(result.ok ? '' : result.message);
     return result.ok;
+  }
+
+  function add(item: LibraryItem, position?: { x: number; y: number }) {
+    const id = crypto.randomUUID();
+    if (!commit(draft => insertLibraryItem(draft, item, module.id, scope, id, position))) return false;
+    store.selectInstance([...scope, id]);
+    return true;
+  }
+
+  function deleteSelection(instanceId?: string, wire?: WiringSelection) {
+    if (instanceId) return commit(draft => removeTopologyInstance(draft, module.id, instanceId));
+    return !!wire && commit(draft => removeWiring(draft, module.id, wire));
   }
 
   const updateModule: UpdateWiring = change => commit(draft => editModule(draft, module.id, change));
@@ -66,6 +81,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph }: {
       modulePath={scope} selectedInstance={selection.instancePath}
       highlight={projectPathHighlight(pathResult, scope)}
       selectInstance={store.selectInstance} enterModule={store.selectModule}
+      add={add} deleteSelection={deleteSelection} rename={rename} report={setMessage} undo={store.undo} redo={store.redo}
       move={(id, position, frame) => commit(draft => {
         const placed = moveTopologyNode(draft, [...scope, id], position);
         return frame ? resizeTopologyFrame(placed, { modulePath: scope, ...frame }) : placed;
@@ -117,15 +133,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph }: {
           const definitionId = field(data, 'definition');
           const name = field(data, 'name');
           if (!definitionId || !name) return;
-          const id = crypto.randomUUID();
-          const definition = definitions.get(definitionId);
-          const added = definition
-            ? updateModule(current => ({ ...current, instances: [...current.instances, {
-              id, name, definitionId,
-              switchStateId: definition.kind === 'component' ? definition.switchStates?.[0]?.id : undefined,
-            }] }))
-            : commit(draft => addTemplateInstance(draft, builtInDefinitions, definitionId, module.id, id, name).project);
-          if (added) form.reset();
+          if (add({ source: definitions.has(definitionId) ? 'project' : 'template', id: definitionId, name })) form.reset();
         }}>
           <label>器件或模块<select name="definition" required>
             <option value="">请选择</option>
@@ -156,7 +164,10 @@ export function TopologyEditor({ store, state, module, pathResult, graph }: {
               ...current, instances: [...current.instances, { id, name, definitionId: id }],
             }));
             return { ...updated, moduleDefinitions: [...updated.moduleDefinitions, enclosure] };
-          })) form.reset();
+          })) {
+            form.reset();
+            store.selectInstance([...scope, id]);
+          }
         }}>
           <p>新建发射或接收机箱时，直接填写机箱名称和尺寸。</p>
           <label>机箱名称<input name="name" required /></label>

@@ -1,19 +1,31 @@
 import type { NumericParameter } from '../../model/v1/parameters';
 import type { ComponentDefinition, ModuleDefinition, PortDefinition } from '../../model/v1/types';
 
-const rfPorts: readonly PortDefinition[] = [
-  { id: 'RF_IN', type: 'RF', direction: 'in' },
-  { id: 'RF_OUT', type: 'RF', direction: 'out' },
-];
-const gain: NumericParameter = {
-  id: 'gain', name: '增益', kind: 'numeric', unit: 'dB', valueKind: 'fixed', overridable: true,
-};
+function port(id: string, type: PortDefinition['type'], direction: PortDefinition['direction']): PortDefinition {
+  return { id, type, direction };
+}
+
+function numeric(id: string, name: string, unit: NumericParameter['unit'], range?: NumericParameter['range']): NumericParameter {
+  return { id, name, unit, range, kind: 'numeric', valueKind: 'fixed', overridable: true };
+}
+
+const parameter = (parameterId: string) => ({ kind: 'parameter' as const, parameterId });
+const rfPorts = [port('RF_IN', 'RF', 'in'), port('RF_OUT', 'RF', 'out')];
+const opticalPorts = [port('OPT_IN', 'OPTICAL', 'in'), port('OPT_OUT', 'OPTICAL', 'out')];
+const dcPorts = [port('DC_IN', 'DC_POWER', 'in'), port('DC_OUT', 'DC_POWER', 'out')];
+const gain = numeric('gain', '增益', 'dB');
+const attenuation = numeric('gain', '净增益（带符号）', 'dB', { max: 0 });
+const voltage = numeric('voltage', '输出电压', 'V', { min: Number.MIN_VALUE });
+const capacity = numeric('capacity', '额定输出功率', 'W', { min: 0 });
+
+export const blankModuleId = 'library-empty-module';
+export const blankEnclosureId = 'library-empty-enclosure';
 
 export const builtInDefinitions = [
   {
-    kind: 'component', id: 'library-rf-gain', name: '射频增益器件', ports: rfPorts,
+    kind: 'component', id: 'library-rf-gain', name: '射频增益器件（示例）', ports: rfPorts,
     parameters: [{ ...gain, defaultValue: { kind: 'fixed', value: 6 } }],
-    transfers: [{ kind: 'rf', fromPortId: 'RF_IN', toPortId: 'RF_OUT', gainDb: { kind: 'parameter', parameterId: 'gain' } }],
+    transfers: [{ kind: 'rf', fromPortId: 'RF_IN', toPortId: 'RF_OUT', gainDb: parameter('gain') }],
   },
   {
     kind: 'component', id: 'library-optical-source', name: '双通道光源', ports: [
@@ -21,9 +33,60 @@ export const builtInDefinitions = [
     ],
   },
   {
-    kind: 'module', id: 'library-rf-stage', name: '射频增益模块', ports: rfPorts, parameters: [gain],
+    kind: 'module', id: 'library-rf-stage', name: '射频增益模块（示例）', ports: rfPorts, parameters: [gain],
     instances: [{ id: 'amplifier', name: '内部增益器件', definitionId: 'library-rf-gain' }],
     portMappings: rfPorts.map(port => ({ portId: port.id, target: { instanceId: 'amplifier', portId: port.id } })),
     parameterMappings: [{ parameterId: 'gain', target: { instanceId: 'amplifier', parameterId: 'gain' } }],
+  },
+  { kind: 'module', id: blankModuleId, name: '空白模块', ports: [], instances: [] },
+  { kind: 'module', id: blankEnclosureId, name: '空机箱', ports: [], instances: [],
+    physicalEnclosure: { widthMm: 440, depthMm: 350, heightMm: 44.45 } },
+  { kind: 'component', id: 'library-laser', name: '激光器', ports: [port('OPT_OUT', 'OPTICAL', 'out')] },
+  {
+    kind: 'component', id: 'library-mzm', name: '调制器（MZM）',
+    ports: [port('RF_IN', 'RF', 'in'), port('LASER_IN', 'OPTICAL', 'in'), port('OPT_OUT', 'OPTICAL', 'out')],
+    parameters: [numeric('intrinsicLoss', '固有插损', 'dB', { min: 0 }),
+      numeric('operatingPointLoss', '控制点附加损耗', 'dB', { min: 0 })],
+    transfers: [{ kind: 'eo', fromPortId: 'RF_IN', toPortId: 'OPT_OUT', supplyPortId: 'LASER_IN',
+      opticalLoss: { intrinsicLossDb: parameter('intrinsicLoss'), operatingPointLossDb: parameter('operatingPointLoss') } }],
+  },
+  {
+    kind: 'component', id: 'library-pd', name: '探测器（PD）',
+    ports: [port('OPT_IN', 'OPTICAL', 'in'), port('RF_OUT', 'RF', 'out')],
+    transfers: [{ kind: 'oe', fromPortId: 'OPT_IN', toPortId: 'RF_OUT' }],
+  },
+  {
+    kind: 'component', id: 'library-optical-switch', name: '光开关', ports: opticalPorts,
+    parameters: [attenuation],
+    switchStates: [
+      { id: 'pass', name: '导通', routes: [{ fromPortId: 'OPT_IN', toPortId: 'OPT_OUT', gainDb: parameter('gain') }] },
+      { id: 'block', name: '阻断', routes: [] },
+    ],
+  },
+  {
+    kind: 'component', id: 'library-optical-attenuator', name: '光衰减器', ports: opticalPorts,
+    parameters: [attenuation],
+    transfers: [{ kind: 'optical', fromPortId: 'OPT_IN', toPortId: 'OPT_OUT', gainDb: parameter('gain') }],
+  },
+  {
+    kind: 'component', id: 'library-rf-amplifier', name: '射频放大器（RF）', ports: rfPorts,
+    parameters: [gain, numeric('nf', '噪声系数', 'dB', { min: 0 })],
+    transfers: [{ kind: 'rf', fromPortId: 'RF_IN', toPortId: 'RF_OUT', gainDb: parameter('gain'), nfDb: parameter('nf') }],
+  },
+  {
+    kind: 'component', id: 'library-rf-attenuator', name: '射频衰减器（RF）', ports: rfPorts,
+    parameters: [attenuation],
+    transfers: [{ kind: 'rf', fromPortId: 'RF_IN', toPortId: 'RF_OUT', gainDb: parameter('gain') }],
+  },
+  {
+    kind: 'component', id: 'library-dc-supply', name: '直流电源', ports: [dcPorts[1]],
+    parameters: [voltage, capacity],
+    dcSupply: { portId: 'DC_OUT', voltageV: parameter('voltage'), capacity: { unit: 'W', value: parameter('capacity') } },
+  },
+  {
+    kind: 'component', id: 'library-dc-converter', name: '直流变换器（DC/DC）', ports: dcPorts,
+    parameters: [voltage, numeric('efficiency', '效率', 'ratio', { min: Number.MIN_VALUE, max: 1 }), capacity],
+    transfers: [{ kind: 'dc', fromPortId: 'DC_IN', toPortId: 'DC_OUT', outputVoltageV: parameter('voltage'),
+      efficiency: parameter('efficiency'), capacity: { unit: 'W', value: parameter('capacity') } }],
   },
 ] as const satisfies readonly (ComponentDefinition | ModuleDefinition)[];

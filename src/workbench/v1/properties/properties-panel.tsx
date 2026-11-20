@@ -69,7 +69,7 @@ export function PropertiesPanel({ store, occurrence }: { store: ProjectStore; oc
           if (!name) { setError('名称不能为空。'); return; }
           changeInstance(current => ({ ...current, name, switchStateId: choice(data, 'switch') || undefined }));
         }}>
-          <label>名称<input name="name" defaultValue={instance.name} required /></label>
+          <label>名称<input name="name" defaultValue={instance.name} data-object-name required /></label>
           {definition.kind === 'component' && definition.switchStates && <label>开关状态
             <select name="switch" defaultValue={instance.switchStateId}>
               {definition.switchStates.map(state => <option key={state.id} value={state.id}>{state.name}</option>)}

@@ -82,6 +82,9 @@
 .v1-topology-device.has-folded-path { border-color: #a85618; }
 .v1-topology-path-label { display: block; margin-bottom: .2rem; color: #8a4a1d; font-size: .72rem; }
 .v1-topology-port.is-on-path { background: #fff0dc; color: #82400e; border-radius: .25rem; }
+.v1-topology-port[data-wire="origin"] .react-flow__handle { outline: 2px solid #a85618; }
+.v1-topology-port[data-wire="target"] .react-flow__handle { outline: 3px solid #0a8a6c; }
+.v1-topology-canvas .react-flow__edge.selected .react-flow__edge-path { stroke: #137d6c; stroke-width: 3; }
 .v1-topology-port.is-on-path .react-flow__handle { outline: 2px solid #a85618; }
 .v1-topology-device strong { display: block; overflow-wrap: anywhere; margin-bottom: .25rem; }
 .v1-topology-port { position: relative; display: flex; gap: .3rem; align-items: center; justify-content: space-between; min-height: 1.5rem; font-size: .78rem; overflow-wrap: anywhere; }
