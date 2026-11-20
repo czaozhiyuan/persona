@@ -178,6 +178,7 @@ const projectShape = shape({
   layout: shape({}, {
     physical: list(shape({ instancePath, enclosurePath: instancePath, xMm: number, yMm: number, rotationDeg: number })),
     topology: list(shape({ instancePath, x: number, y: number })),
+    topologyFrames: list(shape({ modulePath: instancePath, x: number, y: number, width: number, height: number })),
   }),
 });
 

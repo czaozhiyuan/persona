@@ -2,9 +2,11 @@ import { portDisplayName, portTypeLabels } from '../../../workbench/v1/labels';
 import { useEffect, useState } from 'react';
 import type { PathResult } from '../../../engine/v1/path-resolver';
 import type { SignalGraph } from '../../../engine/v1/signal-graph';
+import { builtInDefinitions } from '../../../library/v1/built-in';
+import { addTemplateInstance } from '../../../library/v1/project-snapshots';
 import type { InstancePath, ModuleDefinition, PortDirection, PortType, Project } from '../../../model/v1/types';
 import type { ProjectStore, ProjectStoreSnapshot } from '../../../state/v1/project-store';
-import { editModule, editModuleWiring, moveTopologyNode } from '../../../state/v1/topology-edits';
+import { editModule, editModuleWiring, moveTopologyNode, resizeTopologyFrame } from '../../../state/v1/topology-edits';
 import { PortDeletionDialog } from './port-deletion-dialog';
 import { projectPathHighlight } from './path-highlight';
 import { TopologyCanvas } from './topology-canvas';
@@ -31,6 +33,9 @@ export function TopologyEditor({ store, state, module, pathResult, graph, expand
   const depth = Math.min(requestedDepth, maxDepth);
   const [preview, setPreview] = useState<{ definitionId: string; portId: string }>();
   const definitions = new Map([...project.moduleDefinitions, ...project.componentDefinitions].map(definition => [definition.id, definition]));
+  const projectDefinitions = [...definitions.values()].filter(definition =>
+    definition.id !== module.id && definition.id !== project.rootModuleDefinitionId);
+  const availableTemplates = builtInDefinitions.filter(template => !definitions.has(template.id));
   const selected = selection.instancePath && store.resolveInstance(selection.instancePath)?.definition;
   const ports: LocalPort[] = module.instances.flatMap(instance => definitions.get(instance.definitionId)!.ports.map(port => ({
     ref: { instanceId: instance.id, portId: port.id }, port, label: `${instance.name} / ${portDisplayName(port.id, true)} · ${portTypeLabels[port.type]}`,
@@ -82,7 +87,15 @@ export function TopologyEditor({ store, state, module, pathResult, graph, expand
       modulePath={scope} treeHidden={treeHidden} selectedInstance={selection.instancePath}
       highlight={projectPathHighlight(pathResult, scope)}
       selectInstance={store.selectInstance} enterModule={store.selectModule}
-      move={(id, position) => commit(draft => moveTopologyNode(draft, [...scope, id], position))}
+      move={(id, position, frame) => commit(draft => {
+        const placed = moveTopologyNode(draft, [...scope, id], position);
+        return frame ? resizeTopologyFrame(placed, { modulePath: scope, ...frame }) : placed;
+      })}
+      resize={(frame, adjustments) => commit(draft => {
+        const placed = adjustments.reduce((current, { instanceId, position }) =>
+          moveTopologyNode(current, [...scope, instanceId], position), draft);
+        return resizeTopologyFrame(placed, { modulePath: scope, ...frame });
+      })}
       connect={connection => updateModule(current => ({
         ...current, connections: [...(current.connections ?? []), { ...connection, id: crypto.randomUUID() }],
       }))}
@@ -121,7 +134,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, expand
         <span>全部</span>
         <output htmlFor="topology-depth">{depth} / {maxDepth}</output>
       </div>
-      {depth > 1 && <p className="v1-hierarchy-caption">多层总览 · 回到第 1 层可拖动节点和画布接线。</p>}
+      {depth > 1 && <p className="v1-hierarchy-caption">多层总览 · 回到第 1 层可调整边框、拖动节点和接线。</p>}
       {message && !preview && <p className="v1-topology-message error" role="alert">{message}</p>}
     </div>
     <div className="v1-topology-tools">
@@ -130,18 +143,28 @@ export function TopologyEditor({ store, state, module, pathResult, graph, expand
           event.preventDefault();
           const form = event.currentTarget;
           const data = new FormData(form);
-          const definition = definitions.get(field(data, 'definition'));
+          const definitionId = field(data, 'definition');
           const name = field(data, 'name');
-          if (!definition || !name) return;
-          if (updateModule(current => ({ ...current, instances: [...current.instances, {
-            id: crypto.randomUUID(), name, definitionId: definition.id,
-            switchStateId: definition.kind === 'component' ? definition.switchStates?.[0]?.id : undefined,
-          }] }))) form.reset();
+          if (!definitionId || !name) return;
+          const id = crypto.randomUUID();
+          const definition = definitions.get(definitionId);
+          const added = definition
+            ? updateModule(current => ({ ...current, instances: [...current.instances, {
+              id, name, definitionId,
+              switchStateId: definition.kind === 'component' ? definition.switchStates?.[0]?.id : undefined,
+            }] }))
+            : commit(draft => addTemplateInstance(draft, builtInDefinitions, definitionId, module.id, id, name).project);
+          if (added) form.reset();
         }}>
           <label>定义<select name="definition" required>
             <option value="">请选择</option>
-            {[...definitions.values()].filter(definition => definition.id !== module.id).map(definition =>
-              <option key={definition.id} value={definition.id}>{definition.name} ({definition.id})</option>)}
+            {!!projectDefinitions.length && <optgroup label="工程定义">
+              {projectDefinitions.map(definition =>
+                <option key={definition.id} value={definition.id}>{definition.name} ({definition.id})</option>)}
+            </optgroup>}
+            {!!availableTemplates.length && <optgroup label="内置模板">
+              {availableTemplates.map(template => <option key={template.id} value={template.id}>{template.name}</option>)}
+            </optgroup>}
           </select></label>
           <label>实例名称<input name="name" required /></label>
           <button type="submit">添加实例</button>
@@ -164,6 +187,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, expand
             return { ...updated, moduleDefinitions: [...updated.moduleDefinitions, enclosure] };
           })) form.reset();
         }}>
+          <p>新建发射或接收机箱时，直接填写机箱名称和尺寸。</p>
           <label>机箱名称<input name="name" required /></label>
           <div className="v1-topology-dimensions">
             <label>宽 (mm)<input name="width" type="number" min="0.001" step="any" defaultValue={440} required /></label>

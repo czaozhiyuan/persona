@@ -1,5 +1,5 @@
-import { portDisplayName, portTypeLabels } from '../../../workbench/v1/labels';
-import { Background, Handle, Position, ReactFlow } from '@xyflow/react';
+import { portDisplayName } from '../../../workbench/v1/labels';
+import { Background, ReactFlow } from '@xyflow/react';
 import type { Edge, Node, NodeProps } from '@xyflow/react';
 import { useMemo } from 'react';
 import type { PathResult } from '../../../engine/v1/path-resolver';
@@ -7,7 +7,8 @@ import { signalPortKey } from '../../../engine/v1/signal-graph';
 import type { SignalEdge, SignalGraph } from '../../../engine/v1/signal-graph';
 import type { InstancePath, PortDefinition } from '../../../model/v1/types';
 import { hierarchyKey, layoutHierarchy } from './hierarchy-view';
-import { boundaryPortSide, ModuleFrame } from './module-frame';
+import { BlockPorts } from './block-ports';
+import { ModuleFrame } from './module-frame';
 import { CanvasControls, canvasFitOptions, flowAriaLabels } from './canvas-controls';
 
 type OverviewNode = Node<{
@@ -29,14 +30,7 @@ function OverviewCard({ id, data, selected }: NodeProps<OverviewNode>) {
   return <div className={`v1-overview-card${selected ? ' is-selected' : ''}`}>
     <div className="v1-overview-header">
       <strong title={data.name}>{data.name}</strong>
-      {data.ports.map(port => {
-        const right = boundaryPortSide(port.direction) === 'right';
-        return <div className={`v1-topology-port${data.activePorts.has(port.id) ? ' is-on-path' : ''}`} key={port.id}>
-          <Handle id={portId(port.id, false)} type={right ? 'source' : 'target'}
-            position={right ? Position.Right : Position.Left} className={port.type} isConnectable={false} />
-          <span title={port.id}>{portDisplayName(port.id)}</span><small>{portTypeLabels[port.type]}</small>
-        </div>;
-      })}
+      <BlockPorts ports={data.ports} highlighted={data.activePorts} handleId={id => portId(id, false)} />
     </div>
   </div>;
 }
