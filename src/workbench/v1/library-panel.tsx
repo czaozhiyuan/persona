@@ -18,12 +18,18 @@ type Preview = {
 function describe(changes: TemplateChanges) {
   return [
     changes.added.length ? `已复制 ${changes.added.map(item => item.name).join('、')}` : '',
-    changes.reused.length ? `沿用工程定义 ${changes.reused.map(item => item.name).join('、')}` : '',
+    changes.reused.length ? `沿用工程内的 ${changes.reused.map(item => item.name).join('、')}` : '',
   ].filter(Boolean).join('。');
+}
+
+function matchingTemplates(query: string) {
+  const search = query.trim().toLowerCase();
+  return builtInDefinitions.filter(item => item.name.toLowerCase().includes(search));
 }
 
 export function LibraryPanel({ store, state, module }: Props) {
   const { project, selection } = state;
+  const [query, setQuery] = useState('');
   const [templateId, setTemplateId] = useState<string>(builtInDefinitions[0].id);
   const [preview, setPreview] = useState<Preview>();
   const [unlink, setUnlink] = useState<string>();
@@ -54,24 +60,33 @@ export function LibraryPanel({ store, state, module }: Props) {
       : { text: result.message, error: true });
   }
 
-  return <section className="panel v1-properties" aria-labelledby="v1-library-heading">
-    <h2 id="v1-library-heading">器件与模块库</h2>
-    <label>离线模板<select value={templateId} onChange={event => {
-      setTemplateId(event.target.value);
-      setPreview(undefined);
-      setFeedback(undefined);
-    }}>
-      {builtInDefinitions.map(item => <option key={item.id} value={item.id}>{item.name} · {item.kind === 'module' ? '模块' : '器件'}</option>)}
+  function selectTemplate(id: string) {
+    setTemplateId(id);
+    setPreview(undefined);
+    setFeedback(undefined);
+  }
+
+  const matches = matchingTemplates(query);
+  return <section className="panel v1-properties" aria-label="离线器件与模块库">
+    <label>搜索器件库<input type="search" value={query} onChange={event => {
+      const next = event.target.value;
+      const results = matchingTemplates(next);
+      setQuery(next);
+      if (results[0] && !results.some(item => item.id === templateId)) selectTemplate(results[0].id);
+    }} /></label>
+    {matches.length > 0 ? <>
+    <label>器件或模块<select value={templateId} onChange={event => selectTemplate(event.target.value)}>
+      {matches.map(item => <option key={item.id} value={item.id}>{item.name} · {item.kind === 'module' ? '模块' : '器件'}</option>)}
     </select></label>
     <p className="v1-property-effective">
-      {existing ? (existing.kind === template.kind ? `现有快照「${existing.name}」 · 添加实例时优先沿用工程定义`
-        : `定义 ID 冲突：${templateId} 在工程中属于另一种定义类型。`)
-        : `${template.name} · 添加时把模板及缺少的依赖复制到工程`}
+      {existing ? (existing.kind === template.kind ? `添加时沿用工程中的「${existing.name}」`
+        : '该模板与工程内已有的类型冲突。')
+        : `添加位置 · ${store.resolveInstance(selection.modulePath)?.instance?.name ?? module.name}`}
     </p>
     <form key={templateId} onSubmit={event => {
       event.preventDefault();
       const name = String(new FormData(event.currentTarget).get('instanceName') ?? '').trim();
-      if (!name) { setFeedback({ error: true, text: '实例名称不能为空。' }); return; }
+      if (!name) { setFeedback({ error: true, text: '名称不能为空。' }); return; }
       const id = crypto.randomUUID();
       let changes: TemplateChanges | undefined;
       const result = store.commit(draft => {
@@ -81,15 +96,13 @@ export function LibraryPanel({ store, state, module }: Props) {
       });
       if (result.ok) store.selectInstance([...selection.modulePath, id]);
       setPreview(undefined);
-      setFeedback(result.ok ? { text: `已添加实例「${name}」。${changes ? describe(changes) : ''}`, snapshot: store.getSnapshot().project }
+      setFeedback(result.ok ? { text: `已添加「${name}」。${changes ? describe(changes) : ''}`, snapshot: store.getSnapshot().project }
         : { error: true, text: result.message });
     }}>
-      <label>实例名称<input name="instanceName" defaultValue={template.name} required /></label>
-      <div className="actions">
-        <button type="submit" disabled={!!existing && existing.kind !== template.kind}>添加到当前模块</button>
-        <button type="button" disabled={!existing} onClick={prepareUpdate}>预检从库更新</button>
-      </div>
+      <label>名称<input name="instanceName" defaultValue={template.name} required /></label>
+      <button type="submit" disabled={!!existing && existing.kind !== template.kind}>添加到当前模块</button>
     </form>
+    {existing && <details><summary>高级库设置</summary><button type="button" onClick={prepareUpdate}>预检从库更新</button></details>}
     {feedback && (!feedback.snapshot || feedback.snapshot === project) &&
       <p role={feedback.error ? 'alert' : 'status'} className={feedback.error ? 'error' : 'v1-property-effective'}>{feedback.text}</p>}
     {preview && !activePreview && <p role="status">工程已变化，请重新预检。</p>}
@@ -131,5 +144,6 @@ export function LibraryPanel({ store, state, module }: Props) {
         setUnlink(undefined);
         if (store.getSnapshot().project !== preview?.base) setPreview(undefined);
       }} />}
+    </> : <p className="empty" role="status">没有匹配的器件或模块。</p>}
   </section>;
 }

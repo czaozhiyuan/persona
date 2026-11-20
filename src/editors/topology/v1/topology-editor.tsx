@@ -1,28 +1,23 @@
 import { portDisplayName, portTypeLabels } from '../../../workbench/v1/labels';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { PathResult } from '../../../engine/v1/path-resolver';
 import type { SignalGraph } from '../../../engine/v1/signal-graph';
 import { builtInDefinitions } from '../../../library/v1/built-in';
 import { addTemplateInstance } from '../../../library/v1/project-snapshots';
-import type { InstancePath, ModuleDefinition, PortDirection, PortType, Project } from '../../../model/v1/types';
+import type { ModuleDefinition, PortDirection, PortType, Project } from '../../../model/v1/types';
 import type { ProjectStore, ProjectStoreSnapshot } from '../../../state/v1/project-store';
 import { editModule, editModuleWiring, moveTopologyNode, resizeTopologyFrame } from '../../../state/v1/topology-edits';
 import { PortDeletionDialog } from './port-deletion-dialog';
 import { projectPathHighlight } from './path-highlight';
 import { TopologyCanvas } from './topology-canvas';
 import { HierarchyCanvas } from './hierarchy-canvas';
-import { HierarchyTree } from './hierarchy-tree';
 import { displayDepth, hierarchyKey } from './hierarchy-view';
 import { CableForm, ConnectionForm, MappingForm, TopologyTool, field } from './wiring-forms';
 import type { LocalPort, UpdateWiring } from './wiring-forms';
 import './topology.css';
 
-export function TopologyEditor({ store, state, module, pathResult, graph, expandedHierarchy, setExpandedHierarchy, treeHidden, setTreeHidden }: {
+export function TopologyEditor({ store, state, module, pathResult, graph }: {
   store: ProjectStore; state: ProjectStoreSnapshot; module: ModuleDefinition; pathResult?: PathResult; graph: SignalGraph;
-  expandedHierarchy: ReadonlySet<string>;
-  setExpandedHierarchy: (update: (current: ReadonlySet<string>) => ReadonlySet<string>) => void;
-  treeHidden: boolean;
-  setTreeHidden: (hidden: boolean) => void;
 }) {
   const { project, selection } = state;
   const scope = selection.modulePath;
@@ -40,22 +35,6 @@ export function TopologyEditor({ store, state, module, pathResult, graph, expand
   const ports: LocalPort[] = module.instances.flatMap(instance => definitions.get(instance.definitionId)!.ports.map(port => ({
     ref: { instanceId: instance.id, portId: port.id }, port, label: `${instance.name} / ${portDisplayName(port.id, true)} · ${portTypeLabels[port.type]}`,
   })));
-
-  useEffect(() => {
-    setExpandedHierarchy(current => {
-      const next = new Set(current);
-      for (let i = 0; i <= scope.length; i++) next.add(hierarchyKey(scope.slice(0, i)));
-      return next.size === current.size ? current : next;
-    });
-  }, [scope, setExpandedHierarchy]);
-
-  function navigate(path: InstancePath, isModule: boolean) {
-    if (isModule) store.selectModule(path);
-    else {
-      store.selectModule(path.slice(0, -1));
-      store.selectInstance(path);
-    }
-  }
 
   function commit(change: (draft: Project) => Project) {
     const result = store.commit(change);
@@ -81,10 +60,10 @@ export function TopologyEditor({ store, state, module, pathResult, graph, expand
     </form>;
   }
 
-  return <section className="v1-topology" aria-label={`逻辑拓扑 · ${moduleName}`}>
+  return <section className="v1-topology" aria-label={`框图 · ${moduleName}`}>
     <div className="v1-hierarchy-workspace">
     {depth === 1 ? <TopologyCanvas key={hierarchyKey(scope)} project={project} module={module} moduleName={moduleName}
-      modulePath={scope} treeHidden={treeHidden} selectedInstance={selection.instancePath}
+      modulePath={scope} selectedInstance={selection.instancePath}
       highlight={projectPathHighlight(pathResult, scope)}
       selectInstance={store.selectInstance} enterModule={store.selectModule}
       move={(id, position, frame) => commit(draft => {
@@ -102,7 +81,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, expand
       mapPort={mapping => updateModule(current => ({
         ...current, portMappings: [...(current.portMappings ?? []).filter(item => item.portId !== mapping.portId), mapping],
       }))} /> : <HierarchyCanvas key={JSON.stringify([scope, depth])} graph={graph} scope={scope} depth={depth}
-        treeHidden={treeHidden} result={pathResult}
+        result={pathResult}
         selected={selection.instancePath} select={store.selectInstance} navigate={store.selectModule} />}
       <nav className="v1-topology-path" aria-label="模块路径">
         {Array.from({ length: scope.length + 1 }, (_, index) => {
@@ -114,17 +93,6 @@ export function TopologyEditor({ store, state, module, pathResult, graph, expand
             : <span key={index}><button type="button" onClick={() => store.selectModule(path)}>{name}</button><span aria-hidden="true">›</span></span>;
         })}
       </nav>
-      <HierarchyTree instances={graph.instances} modulePath={scope} selected={selection.instancePath}
-        hidden={treeHidden} toggleTree={() => setTreeHidden(!treeHidden)}
-        expanded={expandedHierarchy} navigate={navigate} toggle={path => {
-          setExpandedHierarchy(current => {
-            const next = new Set(current);
-            const key = hierarchyKey(path);
-            if (next.has(key)) next.delete(key);
-            else next.add(key);
-            return next;
-          });
-        }} />
       <div className="v1-hierarchy-depth">
         <label htmlFor="topology-depth">展开深度</label>
         <span>当前层</span>
@@ -138,7 +106,10 @@ export function TopologyEditor({ store, state, module, pathResult, graph, expand
       {message && !preview && <p className="v1-topology-message error" role="alert">{message}</p>}
     </div>
     <div className="v1-topology-tools">
-      <TopologyTool title="添加实例">
+      <details className="v1-topology-toolgroup" data-workbench-popup>
+        <summary>编辑工具</summary>
+        <div className="v1-topology-tool-list">
+      <TopologyTool title="添加器件或模块">
         <form onSubmit={event => {
           event.preventDefault();
           const form = event.currentTarget;
@@ -156,7 +127,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, expand
             : commit(draft => addTemplateInstance(draft, builtInDefinitions, definitionId, module.id, id, name).project);
           if (added) form.reset();
         }}>
-          <label>定义<select name="definition" required>
+          <label>器件或模块<select name="definition" required>
             <option value="">请选择</option>
             {!!projectDefinitions.length && <optgroup label="工程定义">
               {projectDefinitions.map(definition =>
@@ -166,8 +137,8 @@ export function TopologyEditor({ store, state, module, pathResult, graph, expand
               {availableTemplates.map(template => <option key={template.id} value={template.id}>{template.name}</option>)}
             </optgroup>}
           </select></label>
-          <label>实例名称<input name="name" required /></label>
-          <button type="submit">添加实例</button>
+          <label>名称<input name="name" required /></label>
+          <button type="submit">添加到框图</button>
         </form>
         <form onSubmit={event => {
           event.preventDefault();
@@ -197,7 +168,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, expand
           <button type="submit">新建空机箱</button>
         </form>
       </TopologyTool>
-      <TopologyTool title="公开端口">
+      <TopologyTool title="对外端口">
         <form onSubmit={event => {
           event.preventDefault();
           const form = event.currentTarget;
@@ -212,7 +183,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, expand
             {Object.entries(portTypeLabels).map(([type, label]) => <option key={type} value={type}>{label}</option>)}
           </select></label>
           <label>端口方向<select name="direction"><option value="in">输入</option><option value="out">输出</option></select></label>
-          <button type="submit">声明公开端口</button>
+          <button type="submit">添加对外端口</button>
         </form>
         {portRemoval(module.id, '删除公开端口')}
         {selected && selected.id !== module.id && portRemoval(selected.id, `删除所选实例的定义端口 · ${selected.name}`)}
@@ -220,6 +191,8 @@ export function TopologyEditor({ store, state, module, pathResult, graph, expand
       <ConnectionForm module={module} ports={ports} update={updateWiring} />
       <MappingForm module={module} ports={ports} update={updateModule} />
       <CableForm module={module} ports={ports} update={updateWiring} />
+        </div>
+      </details>
     </div>
     {preview && <PortDeletionDialog store={store} {...preview} close={() => setPreview(undefined)} />}
   </section>;

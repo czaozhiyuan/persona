@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { LayoutEditor } from '../../editors/layout/v1/layout-editor';
+import { HierarchyTree } from '../../editors/topology/v1/hierarchy-tree';
+import { hierarchyKey } from '../../editors/topology/v1/hierarchy-view';
 import { TopologyEditor } from '../../editors/topology/v1/topology-editor';
 import { createLinkBudget } from '../../engine/v1/link-budget';
 import type { LinkBudgetConditions } from '../../engine/v1/link-budget';
 import { signalPortKey } from '../../engine/v1/signal-graph';
-import type { Project } from '../../model/v1/types';
+import type { InstancePath, Project } from '../../model/v1/types';
 import type { ProjectStore } from '../../state/v1/project-store';
 import { parseProjectJson, serializeProjectJson } from '../../storage/v1/project-json';
 import { DcBudgetPanel } from './budgets/dc-budget-panel';
@@ -23,7 +25,7 @@ type Props = {
   newProject: () => Project;
 };
 
-type Page = 'canvas' | 'project' | 'links' | 'library' | 'properties' | 'profiles' | 'optical-budget' | 'dc-budget';
+type Page = 'canvas' | 'project' | 'links' | 'profiles' | 'optical-budget' | 'dc-budget';
 const emptyBudgetConditions: LinkBudgetConditions = {};
 
 function closeWorkbenchMenu() {
@@ -36,9 +38,12 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const [error, setError] = useState('');
   const fileInput = useRef<HTMLInputElement>(null);
   const importAttempt = useRef(0);
+  const topologySelection = useRef<string | undefined>(undefined);
   const [projectSession, setProjectSession] = useState(0);
   const [page, setPage] = useState<Page>('canvas');
-  const [treeHidden, setTreeHidden] = useState(() => window.matchMedia('(max-width: 46rem)').matches);
+  const [leftTab, setLeftTab] = useState<'structure' | 'library' | undefined>(() =>
+    window.matchMedia('(max-width: 48rem)').matches ? undefined : 'structure');
+  const [propertiesOpen, setPropertiesOpen] = useState(() => !window.matchMedia('(max-width: 48rem)').matches);
   const [expandedHierarchy, setExpandedHierarchy] = useState<ReadonlySet<string>>(new Set(['[]']));
   const [linkInputs, setLinkInputs] = useState<ReadonlyMap<string, LinkBudgetConditions>>(new Map());
   const [localOptical, setLocalOptical] = useState<LocalOpticalSettings>({ sources: [] });
@@ -77,11 +82,43 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     };
   }, []);
 
+  useEffect(() => {
+    setExpandedHierarchy(current => {
+      const next = new Set(current);
+      for (let depth = 0; depth <= selection.modulePath.length; depth++) {
+        next.add(hierarchyKey(selection.modulePath.slice(0, depth)));
+      }
+      return next.size === current.size ? current : next;
+    });
+  }, [selection.modulePath]);
+
+  function toggleBranch(path: InstancePath) {
+    setExpandedHierarchy(current => {
+      const next = new Set(current);
+      const key = hierarchyKey(path);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function navigate(path: InstancePath, isModule: boolean) {
+    if (isModule) {
+      store.selectModule(path);
+      store.selectInstance(undefined);
+    } else {
+      store.selectModule(path.slice(0, -1));
+      store.selectInstance(path);
+    }
+    openPage('canvas');
+  }
+
   function replaceProject(candidate: Project) {
     const result = store.replaceProject(candidate);
     setError(result.ok ? '' : result.message);
     if (result.ok) {
       importAttempt.current++;
+      topologySelection.current = undefined;
       setProjectSession(session => session + 1);
       setLinkInputs(new Map());
       setLocalOptical({ sources: [] });
@@ -142,7 +179,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
 
   function showTopology() {
     const path = selection.instancePath;
-    if (selection.view === 'physical' && path) {
+    if (selection.view === 'physical' && path && JSON.stringify(path) !== topologySelection.current) {
       store.selectModule(path.slice(0, -1));
       store.selectInstance(path);
     }
@@ -165,22 +202,11 @@ export function Workbench({ store, loadExample, newProject }: Props) {
               <button type="button" onClick={() => openPage('project')}>工程状态</button>
             </div>
           </details>
-          <details name="workbench-menu" data-workbench-popup><summary>链路</summary>
-            <div className="v1-menu-items"><button type="button" onClick={() => openPage('links')}>命名链路</button></div>
-          </details>
-          <details name="workbench-menu" data-workbench-popup><summary>预算</summary>
+          <details name="workbench-menu" data-workbench-popup><summary>计算</summary>
             <div className="v1-menu-items">
+              <button type="button" onClick={() => openPage('links')}>命名链路</button>
               <button type="button" onClick={() => openPage('optical-budget')}>局部光功率</button>
               <button type="button" onClick={() => openPage('dc-budget')}>直流供电预算</button>
-            </div>
-          </details>
-          <details name="workbench-menu" data-workbench-popup><summary>器件库</summary>
-            <div className="v1-menu-items"><button type="button" disabled={active?.kind !== 'module'}
-              onClick={() => openPage('library')}>器件与模块库</button></div>
-          </details>
-          <details name="workbench-menu" data-workbench-popup><summary>属性与标定</summary>
-            <div className="v1-menu-items">
-              <button type="button" disabled={!properties} onClick={() => openPage('properties')}>对象属性</button>
               <button type="button" onClick={() => openPage('profiles')}>工程标定方案</button>
             </div>
           </details>
@@ -190,10 +216,19 @@ export function Workbench({ store, loadExample, newProject }: Props) {
           <button type="button" aria-label="撤销" title="撤销" disabled={!canUndo} onClick={() => { store.undo(); setError(''); }}>↶</button>
           <button type="button" aria-label="重做" title="重做" disabled={!canRedo} onClick={() => { store.redo(); setError(''); }}>↷</button>
         </div>
+        <div className="v1-project-heading">
+          <button className="v1-project-name" type="button" onClick={() => openPage('project')}
+            title={project.name}>{project.name}</button>
+          <span className="v1-project-status" />
+        </div>
         <div className="view-switch" role="group" aria-label="视图选择">
-          <button type="button" aria-pressed={page === 'canvas' && selection.view === 'topology'} onClick={showTopology}>逻辑拓扑</button>
+          <button type="button" aria-pressed={page === 'canvas' && selection.view === 'topology'} onClick={showTopology}>框图</button>
           <button type="button" aria-pressed={page === 'canvas' && selection.view === 'physical'}
-            onClick={() => { store.setView('physical'); openPage('canvas'); }}>物理布局</button>
+            onClick={() => {
+              if (selection.view === 'topology') topologySelection.current = JSON.stringify(selection.instancePath);
+              store.setView('physical');
+              openPage('canvas');
+            }}>机箱布局</button>
         </div>
       </header>
       <input ref={fileInput} type="file" accept=".json,application/json" hidden aria-label="工程 JSON 文件"
@@ -204,18 +239,33 @@ export function Workbench({ store, loadExample, newProject }: Props) {
           if (file) void openProjectFile(file);
         }} />
       {error && <p className="v1-workbench-notice error" role="alert">{error}</p>}
-      <main className="v1-workbench-main">
-        <div className="v1-canvas-page" inert={page !== 'canvas'} aria-hidden={page !== 'canvas'}>
-        {selection.view === 'topology' && active?.kind === 'module' &&
-          <TopologyEditor key={JSON.stringify(['topology', projectSession, project.id, selection.modulePath])}
-            store={store} state={state} module={active} pathResult={pathResult} graph={linkOptions.graph}
-            expandedHierarchy={expandedHierarchy} setExpandedHierarchy={setExpandedHierarchy}
-            treeHidden={treeHidden} setTreeHidden={setTreeHidden} />}
-        {selection.view === 'physical' &&
-          <div className="v1-page-scroll"><div className="workspace">
-            <LayoutEditor key={JSON.stringify(['physical', projectSession, project.id])} store={store} state={state} />
-          </div></div>}
-        </div>
+      <div className="v1-workbench-body" data-left-open={leftTab !== undefined} data-right-open={propertiesOpen}>
+        <aside className="v1-side v1-side-left" aria-label="结构与器件库">
+          <div className="v1-side-tools">
+            <button type="button" aria-expanded={leftTab === 'structure'} aria-controls="workbench-structure"
+              onClick={() => setLeftTab(current => current === 'structure' ? undefined : 'structure')}>结构</button>
+            <button type="button" aria-expanded={leftTab === 'library'} aria-controls="workbench-library"
+              onClick={() => setLeftTab(current => current === 'library' ? undefined : 'library')}>器件库</button>
+          </div>
+          <div id="workbench-structure" className="v1-side-scroll" hidden={leftTab !== 'structure'}>
+            <HierarchyTree instances={linkOptions.graph.instances} modulePath={selection.modulePath}
+              selected={selection.instancePath} expanded={expandedHierarchy} toggle={toggleBranch} navigate={navigate} />
+          </div>
+          <div id="workbench-library" className="v1-side-scroll" hidden={leftTab !== 'library'}>
+            {active?.kind === 'module' && <LibraryPanel key={projectSession} store={store} state={state} module={active} />}
+          </div>
+        </aside>
+        <main className="v1-workbench-main">
+          <div className="v1-canvas-page" inert={page !== 'canvas' || selection.view !== 'topology'}
+            aria-hidden={page !== 'canvas' || selection.view !== 'topology'}>
+            {active?.kind === 'module' &&
+              <TopologyEditor key={JSON.stringify(['topology', projectSession, selection.modulePath])}
+                store={store} state={state} module={active} pathResult={pathResult} graph={linkOptions.graph} />}
+          </div>
+          <div className="v1-canvas-page v1-layout-scroll" inert={page !== 'canvas' || selection.view !== 'physical'}
+            aria-hidden={page !== 'canvas' || selection.view !== 'physical'}>
+            <LayoutEditor key={projectSession} store={store} state={state} />
+          </div>
         {page !== 'canvas' && <div className="v1-page-scroll">
           <div className="workspace">
         {page === 'links' && <LinkEditor key={JSON.stringify(['link', project.id, selectedLink?.id])} store={store} project={project}
@@ -281,16 +331,23 @@ export function Workbench({ store, loadExample, newProject }: Props) {
             </dl>
           </section>
         </div>}
-        {page === 'library' && active?.kind === 'module' && <LibraryPanel key={JSON.stringify(['library', project.id, selection.modulePath])}
-          store={store} state={state} module={active} />}
-        {page === 'properties' && properties && <PropertiesPanel key={JSON.stringify(['properties', project.id, properties.instancePath])}
-          store={store} occurrence={properties} />}
         {page === 'profiles' && <ProfilePanel key={JSON.stringify(['profiles', project.id])} store={store} profiles={project.conversionProfiles ?? []} />}
         {page === 'optical-budget' && <LocalOpticalPanel options={linkOptions} settings={localOptical} onChange={setLocalOptical} />}
         {page === 'dc-budget' && <DcBudgetPanel project={project} />}
           </div>
         </div>}
-      </main>
+        </main>
+        <aside className="v1-side v1-side-right" aria-label="属性栏">
+          <div className="v1-side-tools">
+            <button type="button" aria-expanded={propertiesOpen} aria-controls="workbench-properties"
+              onClick={() => setPropertiesOpen(open => !open)}>属性</button>
+          </div>
+          <div id="workbench-properties" className="v1-side-scroll" hidden={!propertiesOpen}>
+            {properties && <PropertiesPanel key={JSON.stringify([projectSession, properties.instancePath])}
+              store={store} occurrence={properties} />}
+          </div>
+        </aside>
+      </div>
     </div>
   );
 }
