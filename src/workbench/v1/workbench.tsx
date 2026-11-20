@@ -17,6 +17,8 @@ import { LinkEditor } from './links/link-editor';
 import { createLinkOptions } from './links/link-options';
 import { ProfilePanel } from './properties/profile-panel';
 import { PropertiesPanel } from './properties/properties-panel';
+import { returnToTopology } from './view-navigation';
+import type { TopologyLocation } from './view-navigation';
 import './properties/properties.css';
 
 type Props = {
@@ -38,7 +40,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const [error, setError] = useState('');
   const fileInput = useRef<HTMLInputElement>(null);
   const importAttempt = useRef(0);
-  const topologySelection = useRef<string | undefined>(undefined);
+  const topologyLocation = useRef<TopologyLocation | undefined>(undefined);
   const [projectSession, setProjectSession] = useState(0);
   const [page, setPage] = useState<Page>('canvas');
   const [leftTab, setLeftTab] = useState<'structure' | 'library' | undefined>(() =>
@@ -118,7 +120,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     setError(result.ok ? '' : result.message);
     if (result.ok) {
       importAttempt.current++;
-      topologySelection.current = undefined;
+      topologyLocation.current = undefined;
       setProjectSession(session => session + 1);
       setLinkInputs(new Map());
       setLocalOptical({ sources: [] });
@@ -178,12 +180,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   }
 
   function showTopology() {
-    const path = selection.instancePath;
-    if (selection.view === 'physical' && path && JSON.stringify(path) !== topologySelection.current) {
-      store.selectModule(path.slice(0, -1));
-      store.selectInstance(path);
-    }
-    store.setView('topology');
+    returnToTopology(store, topologyLocation.current);
     openPage('canvas');
   }
 
@@ -225,7 +222,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
           <button type="button" aria-pressed={page === 'canvas' && selection.view === 'topology'} onClick={showTopology}>框图</button>
           <button type="button" aria-pressed={page === 'canvas' && selection.view === 'physical'}
             onClick={() => {
-              if (selection.view === 'topology') topologySelection.current = JSON.stringify(selection.instancePath);
+              if (selection.view === 'topology') topologyLocation.current = selection;
               store.setView('physical');
               openPage('canvas');
             }}>机箱布局</button>
