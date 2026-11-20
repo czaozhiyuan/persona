@@ -1,9 +1,9 @@
-import { portDisplayName, portTypeLabels } from '../../../workbench/v1/labels';
+import { portTypeLabels } from '../../../workbench/v1/labels';
 import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react';
 import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 import type { PortDefinition } from '../../../model/v1/types';
-import { boundaryPortSide, portSides } from './block-ports';
+import { boundaryPortSide, PortLabel, portSides } from './block-ports';
 export const framePortRow = 28;
 export const frameHeader = 52;
 export const framePadding = 28;
@@ -19,7 +19,7 @@ export function frameInsets(ports: readonly PortDefinition[]) {
   };
 }
 
-export function ModuleFrame({ id, name, ports, highlighted, handleId, editable = false, outerHandles = false, selected = false, wireState, controls }: {
+export function ModuleFrame({ id, name, ports, highlighted, handleId, editable = false, outerHandles = false, selected = false, wireState, controls, openPort }: {
   id: string;
   name: string;
   ports: readonly PortDefinition[];
@@ -30,6 +30,7 @@ export function ModuleFrame({ id, name, ports, highlighted, handleId, editable =
   selected?: boolean;
   wireState?: (id: string, inner: boolean) => 'origin' | 'target' | undefined;
   controls?: ReactNode;
+  openPort?: (id: string) => void;
 }) {
   const updateInternals = useUpdateNodeInternals();
   useEffect(() => updateInternals(id), [id, ports, outerHandles, updateInternals]);
@@ -50,7 +51,7 @@ export function ModuleFrame({ id, name, ports, highlighted, handleId, editable =
           {outerHandles && <Handle id={handleId(port.id, false)} type={input ? 'target' : 'source'}
             position={input ? Position.Left : Position.Right} className={`${port.type} v1-frame-outer-handle`} data-wire={wireState?.(port.id, false)}
             isConnectable={editable} />}
-          <span>{portDisplayName(port.id)}</span>
+          <PortLabel port={port} open={openPort} />
         </div>;
       })}
     </div>)}

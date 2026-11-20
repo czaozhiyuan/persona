@@ -2,6 +2,7 @@ import { mediaLabels, portDisplayName } from '../../../workbench/v1/labels';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import type { CableBundle, Connection, LocalEndpointRef } from '../../../model/v1/topology';
+import { channelSetsOverlap } from '../../../model/v1/validate-device';
 import type { ModuleDefinition, PortDefinition } from '../../../model/v1/types';
 
 export type LocalPort = { ref: LocalEndpointRef; port: PortDefinition; label: string };
@@ -64,29 +65,28 @@ export function ConnectionForm({ module, ports, update }: { module: ModuleDefini
   </TopologyTool>;
 }
 
-export function MappingForm({ module, ports, update }: { module: ModuleDefinition; ports: readonly LocalPort[]; update: UpdateWiring }) {
+export function MappingForm({ module, ports, connect }: {
+  module: ModuleDefinition; ports: readonly LocalPort[]; connect: (portId: string, target?: LocalEndpointRef) => void;
+}) {
   const [selected, setSelected] = useState('');
   const publicPort = module.ports.find(item => item.id === selected);
   const mapping = module.portMappings?.find(item => item.portId === selected);
-  const candidates = ports.filter(item => item.port.type === publicPort?.type && item.port.direction === publicPort.direction);
-  return <TopologyTool title="对外端口接线">
-    <label>公开端口<select value={publicPort?.id ?? ''} onChange={event => setSelected(event.target.value)}>
+  const candidates = publicPort ? ports.filter(item => item.port.type === publicPort.type
+    && item.port.direction === publicPort.direction && channelSetsOverlap(publicPort, item.port)) : [];
+  return <TopologyTool title="连接到内部端口">
+    <label>对外端口<select value={publicPort?.id ?? ''} onChange={event => setSelected(event.target.value)}>
       <option value="">请选择</option>
-      {module.ports.map(port => <option key={port.id} value={port.id}>{portDisplayName(port.id, true)}{module.portMappings?.some(item => item.portId === port.id) ? '' : '（开放）'}</option>)}
+      {module.ports.map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true)}{module.portMappings?.some(item => item.portId === port.id) ? '' : '（开放）'}</option>)}
     </select></label>
     {publicPort && <form key={JSON.stringify([selected, mapping])} onSubmit={event => {
       event.preventDefault();
       const target = endpointAt(field(new FormData(event.currentTarget), 'target'), candidates);
       if (!target) return;
-      update(current => ({ ...current, portMappings: [
-        ...(current.portMappings ?? []).filter(item => item.portId !== selected), { portId: selected, target },
-      ] }));
+      connect(selected, target);
     }}>
       <EndpointSelect name="target" label="内部端口" ports={candidates} value={mapping?.target} />
-      <button type="submit">保存映射</button>
-      {mapping && <button type="button" onClick={() => update(current => ({
-        ...current, portMappings: current.portMappings?.filter(item => item.portId !== selected),
-      }))}>清除映射</button>}
+      <button type="submit">保存内部连接</button>
+      {mapping && <button type="button" onClick={() => connect(selected)}>解除内部连接</button>}
     </form>}
   </TopologyTool>;
 }

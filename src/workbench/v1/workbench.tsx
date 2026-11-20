@@ -202,6 +202,19 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     });
   }
 
+  function navigatePort(path: InstancePath, portId: string) {
+    navigate(path, true);
+    store.setView('topology');
+    setPropertiesOpen(true);
+    requestAnimationFrame(() => {
+      const port = document.querySelector<HTMLDetailsElement>(`#workbench-properties [data-port-id="${CSS.escape(portId)}"]`);
+      if (!port) return;
+      port.open = true;
+      port.querySelector('summary')?.focus();
+      port.scrollIntoView({ block: 'nearest' });
+    });
+  }
+
   function renameSelection() {
     setPropertiesOpen(true);
     requestAnimationFrame(() => {
@@ -278,7 +291,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
           </div>
           <div id="workbench-structure" className="v1-side-scroll" hidden={leftTab !== 'structure'}>
             <HierarchyTree instances={linkOptions.graph.instances} modulePath={selection.modulePath}
-              selected={selection.instancePath} expanded={expandedHierarchy} toggle={toggleBranch} navigate={navigate} />
+              selected={selection.instancePath} expanded={expandedHierarchy} toggle={toggleBranch} navigate={navigate} navigatePort={navigatePort} />
           </div>
           <div id="workbench-library" className="v1-side-scroll" hidden={leftTab !== 'library'}>
             {active?.kind === 'module' && <LibraryPanel key={projectSession} store={store} state={state} module={active} />}
@@ -365,7 +378,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
         </div>}
         {page === 'profiles' && <ProfilePanel key={JSON.stringify(['profiles', project.id])} store={store} profiles={project.conversionProfiles ?? []} />}
         {page === 'optical-budget' && <LocalOpticalPanel options={linkOptions} settings={localOptical} onChange={setLocalOptical} />}
-        {page === 'dc-budget' && <DcBudgetPanel project={project} />}
+        {page === 'dc-budget' && <DcBudgetPanel project={project} labels={linkOptions} />}
           </div>
         </div>}
         </main>

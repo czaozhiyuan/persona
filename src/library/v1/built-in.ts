@@ -1,8 +1,8 @@
 import type { NumericParameter } from '../../model/v1/parameters';
 import type { ComponentDefinition, ModuleDefinition, PortDefinition } from '../../model/v1/types';
 
-function port(id: string, type: PortDefinition['type'], direction: PortDefinition['direction']): PortDefinition {
-  return { id, type, direction };
+function port(id: string, name: string, type: PortDefinition['type'], direction: PortDefinition['direction']): PortDefinition {
+  return { id, name, type, direction };
 }
 
 function numeric(id: string, name: string, unit: NumericParameter['unit'], range?: NumericParameter['range']): NumericParameter {
@@ -10,9 +10,9 @@ function numeric(id: string, name: string, unit: NumericParameter['unit'], range
 }
 
 const parameter = (parameterId: string) => ({ kind: 'parameter' as const, parameterId });
-const rfPorts = [port('RF_IN', 'RF', 'in'), port('RF_OUT', 'RF', 'out')];
-const opticalPorts = [port('OPT_IN', 'OPTICAL', 'in'), port('OPT_OUT', 'OPTICAL', 'out')];
-const dcPorts = [port('DC_IN', 'DC_POWER', 'in'), port('DC_OUT', 'DC_POWER', 'out')];
+const rfPorts = [port('RF_IN', '射频输入', 'RF', 'in'), port('RF_OUT', '射频输出', 'RF', 'out')];
+const opticalPorts = [port('OPT_IN', '光输入', 'OPTICAL', 'in'), port('OPT_OUT', '光输出', 'OPTICAL', 'out')];
+const dcPorts = [port('DC_IN', '直流输入', 'DC_POWER', 'in'), port('DC_OUT', '直流输出', 'DC_POWER', 'out')];
 const gain = numeric('gain', '增益', 'dB');
 const attenuation = numeric('gain', '净增益（带符号）', 'dB', { max: 0 });
 const voltage = numeric('voltage', '输出电压', 'V', { min: Number.MIN_VALUE });
@@ -29,7 +29,7 @@ export const builtInDefinitions = [
   },
   {
     kind: 'component', id: 'library-optical-source', name: '双通道光源', ports: [
-      { id: 'OPT_OUT', type: 'OPTICAL', direction: 'out', channelIds: ['DWDM_CH28', 'DWDM_CH30'] },
+      { id: 'OPT_OUT', name: '光输出', type: 'OPTICAL', direction: 'out', channelIds: ['DWDM_CH28', 'DWDM_CH30'] },
     ],
   },
   {
@@ -41,10 +41,10 @@ export const builtInDefinitions = [
   { kind: 'module', id: blankModuleId, name: '空白模块', ports: [], instances: [] },
   { kind: 'module', id: blankEnclosureId, name: '空机箱', ports: [], instances: [],
     physicalEnclosure: { widthMm: 440, depthMm: 350, heightMm: 44.45 } },
-  { kind: 'component', id: 'library-laser', name: '激光器', ports: [port('OPT_OUT', 'OPTICAL', 'out')] },
+  { kind: 'component', id: 'library-laser', name: '激光器', ports: [port('OPT_OUT', '光输出', 'OPTICAL', 'out')] },
   {
     kind: 'component', id: 'library-mzm', name: '调制器（MZM）',
-    ports: [port('RF_IN', 'RF', 'in'), port('LASER_IN', 'OPTICAL', 'in'), port('OPT_OUT', 'OPTICAL', 'out')],
+    ports: [port('RF_IN', '射频输入', 'RF', 'in'), port('LASER_IN', '激光输入', 'OPTICAL', 'in'), port('OPT_OUT', '光输出', 'OPTICAL', 'out')],
     parameters: [numeric('intrinsicLoss', '固有插损', 'dB', { min: 0 }),
       numeric('operatingPointLoss', '控制点附加损耗', 'dB', { min: 0 })],
     transfers: [{ kind: 'eo', fromPortId: 'RF_IN', toPortId: 'OPT_OUT', supplyPortId: 'LASER_IN',
@@ -52,7 +52,7 @@ export const builtInDefinitions = [
   },
   {
     kind: 'component', id: 'library-pd', name: '探测器（PD）',
-    ports: [port('OPT_IN', 'OPTICAL', 'in'), port('RF_OUT', 'RF', 'out')],
+    ports: [port('OPT_IN', '光输入', 'OPTICAL', 'in'), port('RF_OUT', '射频输出', 'RF', 'out')],
     transfers: [{ kind: 'oe', fromPortId: 'OPT_IN', toPortId: 'RF_OUT' }],
   },
   {

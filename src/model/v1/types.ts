@@ -22,6 +22,7 @@ export type PortDirection = 'in' | 'out';
 
 export type PortDefinition = {
   id: string;
+  name?: string;
   type: PortType;
   direction: PortDirection;
   channelIds?: readonly OpticalChannelId[];

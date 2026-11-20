@@ -13,6 +13,7 @@
         "ports": [
           {
             "id": "OUT",
+            "name": "输出",
             "type": "RF",
             "direction": "out"
           }
@@ -25,11 +26,13 @@
         "ports": [
           {
             "id": "RF_IN",
+            "name": "射频输入",
             "type": "RF",
             "direction": "in"
           },
           {
             "id": "SUPPLY",
+            "name": "供光输入",
             "type": "OPTICAL",
             "direction": "in",
             "channelIds": [
@@ -39,6 +42,7 @@
           },
           {
             "id": "OUT",
+            "name": "输出",
             "type": "OPTICAL",
             "direction": "out",
             "channelIds": [
@@ -90,6 +94,7 @@
         "ports": [
           {
             "id": "OUT",
+            "name": "输出",
             "type": "OPTICAL",
             "direction": "out",
             "channelIds": [
@@ -106,11 +111,13 @@
         "ports": [
           {
             "id": "IN",
+            "name": "输入",
             "type": "OPTICAL",
             "direction": "in"
           },
           {
             "id": "OUT",
+            "name": "输出",
             "type": "OPTICAL",
             "direction": "out"
           }
@@ -159,6 +166,7 @@
         "ports": [
           {
             "id": "OPT_OUT",
+            "name": "光输出",
             "type": "OPTICAL",
             "direction": "out",
             "channelIds": [
@@ -168,6 +176,7 @@
           },
           {
             "id": "TEST_OUT",
+            "name": "测试输出",
             "type": "OPTICAL",
             "direction": "out",
             "channelIds": [

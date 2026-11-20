@@ -13,10 +13,11 @@ export const requiredEdgeKey = (ref: RequiredEdge): string => JSON.stringify('bu
 export const conversionKey = ({ instancePath, fromPortId, toPortId }: ConversionBoundary): string =>
   JSON.stringify([instancePath, fromPortId, toPortId]);
 export const showPath = (path: InstancePath) => path.length ? path.join(' / ') : '系统根层级';
-export const showEndpoint = (ref: EndpointRef) => `${showPath(ref.instancePath)} · ${portDisplayName(ref.portId, true)}`;
 
 export function createLinkOptions(project: Project) {
   const { graph, resolveNamedLink } = createPathResolver(project);
+  const showPort = (ref: EndpointRef) => portDisplayName(graph.ports.get(signalPortKey(ref))?.definition ?? { id: ref.portId }, true);
+  const showEndpoint = (ref: EndpointRef) => `${showPath(ref.instancePath)} · ${showPort(ref)}`;
   const endpoints: Option<EndpointRef>[] = [];
   const opticalEndpoints: Option<EndpointRef>[] = [];
   const opticalSources: Option<EndpointRef>[] = [];
@@ -54,11 +55,11 @@ export function createLinkOptions(project: Project) {
         const key = conversionKey(value);
         const options = transfer.kind === 'eo' ? eo : oe;
         if (!options.some(item => item.key === key)) options.push({ key, value,
-          label: `${instance?.name ?? definition.name} · ${showPath(instancePath)} · ${portDisplayName(value.fromPortId, true)} → ${portDisplayName(value.toPortId, true)}` });
+          label: `${instance?.name ?? definition.name} · ${showPath(instancePath)} · ${portDisplayName(definition.ports.find(port => port.id === value.fromPortId)!, true)} → ${portDisplayName(definition.ports.find(port => port.id === value.toPortId)!, true)}` });
       }
     }
   }
-  return { graph, endpoints, opticalEndpoints, opticalSources, via, eo, oe, resolveNamedLink };
+  return { graph, endpoints, opticalEndpoints, opticalSources, via, eo, oe, resolveNamedLink, showEndpoint, showPort };
 }
 
 export type LinkOptions = ReturnType<typeof createLinkOptions>;

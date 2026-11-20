@@ -19,10 +19,11 @@ export function PortFields({ port, save, remove }: {
       const min = numberField(data, 'minimum');
       const max = numberField(data, 'maximum');
       const unit = ratings.find(candidate => candidate === choice(data, 'ratingUnit'));
-      return { ...port, type, direction, channelIds: type === 'OPTICAL' ? channelList(data, 'channels') : undefined,
+      return { ...port, name: choice(data, 'name').trim() || undefined, type, direction, channelIds: type === 'OPTICAL' ? channelList(data, 'channels') : undefined,
         inputRating: unit !== undefined && (min !== undefined || max !== undefined) ? { unit, min, max } : undefined };
     });
   }}>
+    <label>显示名称<input name="name" defaultValue={port.name} placeholder={port.id} /></label>
     <label>端口类型<select value={type} onChange={event => setType(event.target.value as PortType)}>
       {Object.entries(portTypeLabels).map(([type, label]) => <option key={type} value={type}>{label}</option>)}
     </select></label>
@@ -84,16 +85,16 @@ export function TransferFields({ transfer, definition, save }: {
     save(() => readTransfer(data, transfer));
   }}>
     <label>输入端口<select name="from" defaultValue={transfer.fromPortId} required>
-      {inputPorts.map(port => <option key={port.id} value={port.id}>{portDisplayName(port.id, true)} · {portTypeLabels[port.type]}</option>)}
+      {inputPorts.map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true)} · {portTypeLabels[port.type]}</option>)}
     </select></label>
     <label>输出端口<select name="to" defaultValue={transfer.toPortId} required>
-      {outputPorts.map(port => <option key={port.id} value={port.id}>{portDisplayName(port.id, true)} · {portTypeLabels[port.type]}</option>)}
+      {outputPorts.map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true)} · {portTypeLabels[port.type]}</option>)}
     </select></label>
     {(transfer.kind === 'optical' || transfer.kind === 'eo' || transfer.kind === 'oe') &&
       <ChannelField name="channels" label="适用通道（未选择表示不限）" value={transfer.channelIds} multiple />}
     {transfer.kind === 'eo' && <label>供光输入<select name="supply" defaultValue={transfer.supplyPortId ?? ''}>
       <option value="">未设置</option>
-      {inputPorts.filter(port => port.type === 'OPTICAL').map(port => <option key={port.id} value={port.id}>{portDisplayName(port.id, true)}</option>)}
+      {inputPorts.filter(port => port.type === 'OPTICAL').map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true)}</option>)}
     </select></label>}
     {transfer.kind === 'wavelengthConversion' && <div className="v1-property-pair">
       <ChannelField name="fromChannel" label="输入通道" value={transfer.fromChannelId} required />

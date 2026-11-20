@@ -18,6 +18,7 @@
 .v1-hierarchy-entry { display: flex; gap: .4rem; align-items: center; white-space: nowrap; }
 .v1-hierarchy-entry[aria-pressed="true"], .v1-hierarchy-entry[aria-current] { background: #deefe9; }
 .v1-hierarchy-icon { width: .45rem; height: .45rem; border-radius: 50%; background: #327970; }
+.v1-hierarchy-tree .v1-tree-port button { padding-inline-start: 1.4rem; color: #42605f; text-align: left; }
 .v1-hierarchy-icon.module { width: .55rem; height: .55rem; border-radius: .13rem; background: #fff; border: 1px solid #327970; }
 .v1-hierarchy-depth {
   top: 14px; right: 14px; width: 70px; padding: .5rem .3rem;
@@ -40,6 +41,13 @@
 .v1-block-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: .5rem; }
 .v1-block-column .v1-topology-port { height: 24px; min-height: 24px; }
 .v1-block-column.right .v1-topology-port { justify-content: flex-end; }
+.v1-topology-port .v1-port-label {
+  border: 0; background: transparent; color: inherit; padding: 0; min-height: 0; min-width: 0; max-width: 100%;
+  font: inherit; text-align: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; pointer-events: auto;
+}
+.v1-topology-port .v1-port-label:hover { text-decoration: underline; }
+.v1-port-actions label { display: block; margin-block: .45rem; }
+.v1-port-actions form + form { border-top: 1px solid #ccdad5; margin-top: .8rem; padding-top: .6rem; }
 .v1-block-column .v1-topology-port span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .v1-module-frame { box-sizing: border-box; width: 100%; height: 100%; border: 2px solid #729c88; border-radius: .5rem; background: #e7f4ee; }
 .v1-frame-resize { position: absolute; z-index: 2; pointer-events: auto; touch-action: none; }

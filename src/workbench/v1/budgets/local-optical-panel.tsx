@@ -3,7 +3,7 @@ import { createOpticalBudgetForGraph } from '../../../engine/v1/optical-budget';
 import type { LocalOpticalRequest, OpticalSource } from '../../../engine/v1/optical-budget';
 import { signalPortKey } from '../../../engine/v1/signal-graph';
 import { resolveOpticalChannel } from '../../../model/v1/channels';
-import { conversionKey, showEndpoint } from '../links/link-options';
+import { conversionKey } from '../links/link-options';
 import type { LinkOptions, Option } from '../links/link-options';
 import { LinkSupplyFields } from '../links/link-supply-fields';
 import { ChannelField } from '../properties/channel-field';
@@ -29,6 +29,7 @@ export function LocalOpticalPanel({ options, settings, onChange }: {
   options: LinkOptions; settings: LocalOpticalSettings; onChange: (settings: LocalOpticalSettings) => void;
 }) {
   const { query, sources } = settings;
+  const { showEndpoint } = options;
   const [mode, setMode] = useState<'direct' | 'eo'>(query && 'eo' in query ? 'eo' : 'direct');
   const budget = useMemo(() => createOpticalBudgetForGraph(options.graph), [options.graph]);
   const result = useMemo(() => query && budget.calculateLocal('eo' in query ? { ...query, sources } : query),
