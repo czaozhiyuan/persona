@@ -1,3 +1,4 @@
+import { portDisplayName, portTypeLabels } from '../../../workbench/v1/labels';
 import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react';
 import { useEffect } from 'react';
 import type { PortDefinition } from '../../../model/v1/types';
@@ -36,14 +37,14 @@ export function ModuleFrame({ id, name, ports, highlighted, handleId, editable =
       {ports.filter(port => boundaryPortSide(port.direction) === side).map(port => {
         const input = port.direction === 'in';
         return <div key={port.id} className={`v1-topology-port${highlighted.has(port.id) ? ' is-on-path' : ''}`}
-          title={`${port.id} · ${port.type}`} data-port-direction={port.direction}>
+          title={`${port.id} · ${portTypeLabels[port.type]}`} data-port-direction={port.direction}>
           <Handle id={handleId(port.id, true)} type={input ? 'source' : 'target'}
             position={input ? Position.Right : Position.Left} className={`${port.type} v1-frame-inner-handle`}
             isConnectable={editable} />
           {outerHandles && <Handle id={handleId(port.id, false)} type={input ? 'target' : 'source'}
             position={input ? Position.Left : Position.Right} className={`${port.type} v1-frame-outer-handle`}
             isConnectable={false} />}
-          <span>{port.id}</span>
+          <span>{portDisplayName(port.id)}</span>
         </div>;
       })}
     </div>)}

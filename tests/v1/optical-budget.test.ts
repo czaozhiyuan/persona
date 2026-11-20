@@ -69,8 +69,8 @@ test('empirical values preserve zero, interpolate RF endpoints, and require exac
   for (const [frequencyGHz, expected] of [[0, 0], [33.5, -1], [67, -2]]) {
     assert.deepEqual(resolveEmpiricalValue('dB', curve, { frequencyGHz }), { unit: 'dB', availability: 'available', value: expected });
   }
-  unavailableBecause(resolveEmpiricalValue('dB', curve, { frequencyGHz: 68 }), /outside/);
-  unavailableBecause(resolveEmpiricalValue('dB', undefined), /not declared/);
+  unavailableBecause(resolveEmpiricalValue('dB', curve, { frequencyGHz: 68 }), /超出经验曲线范围/);
+  unavailableBecause(resolveEmpiricalValue('dB', undefined), /未设置经验值/);
   const table = { kind: 'channelTable' as const, values: { [ch30]: 0 } };
   unavailableBecause(resolveEmpiricalValue('dB', table, { channelId: ch28 }), /DWDM_CH28/);
   assert.deepEqual(resolveEmpiricalValue('dB', table, { channelId: ch30 }), { unit: 'dB', availability: 'available', value: 0 });
@@ -115,7 +115,7 @@ test('missing, mismatched and ambiguous supply remain unavailable while a suppli
   for (const sources of [[], [{ ...source, channelId: ch28 }]] as const) {
     const result = calculateLocal({ ...query, sources });
     assert.equal(result.pathIssue?.status, 'missing_supply');
-    assert.match(result.pathIssue!.reason, /compatible channel/);
+    assert.match(result.pathIssue!.reason, /兼容通道/);
     assert.equal(result.powerDbm.availability, 'unavailable');
   }
   const multi = calculateLocal({ ...query, sources: [source, laser('board', 'backup')] });
@@ -140,8 +140,8 @@ test('an undeclared optical transfer gain does not become a lossless device', ()
     to: ref(['board'], 'TX_OUT') });
   assert.equal(result.status, 'partial');
   assert.deepEqual(result.stages[1].powerDbm, { unit: 'dBm', availability: 'available', value: 0 });
-  unavailableBecause(result.powerDbm, /not declared/);
-  unavailableBecause(result.gainDb, /not declared/);
+  unavailableBecause(result.powerDbm, /未设置经验值/);
+  unavailableBecause(result.gainDb, /未设置经验值/);
 });
 
 const splitTransfer = topologyExample.componentDefinitions.find(definition => definition.id === 'mzm')
@@ -201,11 +201,11 @@ test('split losses reject negative or conflicting values and identify missing op
     intrinsicLossDb, operatingPointLossDb: { kind: 'channelTable', values: { [ch30]: 2 } },
   }] as const) {
     const result = splitLossBudget(splitLossProject({ ...splitTransfer, opticalLoss }), 'TX_A');
-    unavailableBecause(result.powerDbm, /Operating-point loss:.*(not declared|DWDM_CH28)/);
+    unavailableBecause(result.powerDbm, /控制点附加损耗：.*(未设置经验值|DWDM_CH28)/);
     assert.equal(result.status, 'partial');
   }
   assert.throws(() => serializeProjectJson(splitLossProject({ ...splitTransfer,
     opticalLoss: { intrinsicLossDb: fixed(-3), operatingPointLossDb: fixed(2) },
-  })), /intrinsic loss: expected a finite value within the declared range/);
-  assert.throws(() => serializeProjectJson(splitLossProject({ ...splitTransfer, gainDb: fixed(-5) })), /either net gain or split optical losses/);
+  })), /固有插损: 应为指定范围内的有限数值/);
+  assert.throws(() => serializeProjectJson(splitLossProject({ ...splitTransfer, gainDb: fixed(-5) })), /净增益和独立光损耗只能选一种方式设置/);
 });

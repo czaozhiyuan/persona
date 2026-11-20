@@ -27,7 +27,7 @@ function validateAcyclic(modules: readonly ModuleDefinition[], definitions: Read
       if (child?.kind !== 'module' || complete.has(child.id)) continue;
       if (active.has(child.id)) {
         const cycle = stack.slice(stack.findIndex(entry => entry.module.id === child.id)).map(entry => entry.module.id);
-        throw new Error(`Module definition cycle: ${[...cycle, child.id].join(' -> ')}`);
+        throw new Error(`模块定义存在循环引用： ${[...cycle, child.id].join(' -> ')}`);
       }
       active.add(child.id);
       stack.push({ module: child, nextChild: 0 });
@@ -41,7 +41,7 @@ function validatePhysicalContainment(parentByPlacement: ReadonlyMap<string, stri
     const chain = new Set<string>();
     let current: string | undefined = start;
     while (current !== undefined && !checked.has(current)) {
-      requireValid(!chain.has(current), `Physical containment cycle at ${current}`);
+      requireValid(!chain.has(current), `物理包含关系存在循环： ${current}`);
       chain.add(current);
       current = parentByPlacement.get(current);
     }
@@ -51,51 +51,51 @@ function validatePhysicalContainment(parentByPlacement: ReadonlyMap<string, stri
 
 /** Validates typed V1 domain data. Parsing and schema validation belong to storage. */
 export function validateProject(project: Project): void {
-  requireValid(project.id.trim(), 'Project ID must not be blank');
-  const definitions = indexById<Definition>([...project.componentDefinitions, ...project.moduleDefinitions], 'Definitions');
+  requireValid(project.id.trim(), '工程 ID 不得为空');
+  const definitions = indexById<Definition>([...project.componentDefinitions, ...project.moduleDefinitions], '工程定义');
   const root = definitions.get(project.rootModuleDefinitionId);
-  requireValid(root?.kind === 'module', `Root definition "${project.rootModuleDefinitionId}" must reference a module`);
+  requireValid(root?.kind === 'module', `根定义「${project.rootModuleDefinitionId}」必须引用模块`);
 
   const portsByDefinition = new Map<string, Map<string, PortDefinition>>();
   const paramsByDefinition = new Map<string, Map<string, ParameterDefinition>>();
   const childrenByModule = new Map<string, Map<string, Instance>>();
   for (const definition of definitions.values()) {
-    const ports = indexById(definition.ports, `Ports of "${definition.id}"`);
+    const ports = indexById(definition.ports, `定义「${definition.id}」的端口`);
     for (const port of ports.values()) {
       requireValid(portTypes.has(port.type) && (port.direction === 'in' || port.direction === 'out'),
-        `Invalid type or direction for port "${port.id}" in "${definition.id}"`);
-      validatePortConstraints(port, `Port "${port.id}" in "${definition.id}"`);
+        `定义「${definition.id}」的端口「${port.id}」类型或方向无效`);
+      validatePortConstraints(port, `定义「${definition.id}」的端口「${port.id}」`);
     }
     portsByDefinition.set(definition.id, ports);
-    const parameters = indexById(definition.parameters ?? [], `Parameters of "${definition.id}"`);
+    const parameters = indexById(definition.parameters ?? [], `定义「${definition.id}」的参数`);
     for (const parameter of parameters.values()) {
-      validateParameterDefinition(parameter, `Parameter "${parameter.id}" in "${definition.id}"`);
+      validateParameterDefinition(parameter, `定义「${definition.id}」的参数「${parameter.id}」`);
     }
     paramsByDefinition.set(definition.id, parameters);
     if (definition.kind === 'component') validateDevice(definition, ports, parameters);
   }
-  const profiles = indexById(project.conversionProfiles ?? [], 'Conversion profiles');
+  const profiles = indexById(project.conversionProfiles ?? [], '标定方案');
   for (const profile of profiles.values()) {
     validateConversionProfile(profile);
   }
 
   for (const module of project.moduleDefinitions) {
-    const children = indexById(module.instances, `Instances in "${module.id}"`);
+    const children = indexById(module.instances, `模块「${module.id}」的实例`);
     childrenByModule.set(module.id, children);
     for (const instance of children.values()) {
       const definition = definitions.get(instance.definitionId);
       requireValid(definition,
-        `Instance "${instance.id}" in "${module.id}" references unknown definition "${instance.definitionId}"`);
-      const context = `Instance "${instance.id}" in "${module.id}"`;
+        `模块「${module.id}」的实例「${instance.id}」引用了不存在的定义「${instance.definitionId}」`);
+      const context = `模块「${module.id}」的实例「${instance.id}」`;
       if (definition.kind === 'component' && definition.switchStates) {
         requireValid(definition.switchStates.some(state => state.id === instance.switchStateId),
-          `${context}: missing or unknown switch state "${instance.switchStateId}"`);
+          `${context}: 光开关状态缺失或无效「${instance.switchStateId}」`);
       } else {
-        requireValid(instance.switchStateId === undefined, `${context}: only optical switch instances accept switch states`);
+        requireValid(instance.switchStateId === undefined, `${context}: 仅光开关实例可以设置开关状态`);
       }
       for (const [id, value] of Object.entries(instance.parameterOverrides ?? {})) {
         const parameter = paramsByDefinition.get(definition.id)?.get(id);
-        requireValid(parameter?.overridable, `${context}: parameter "${id}" is not exposed for override`);
+        requireValid(parameter?.overridable, `${context}: 参数「${id}」未开放覆盖`);
         validateParameterValue(parameter, value, `${context}, parameter "${id}"`);
       }
     }
@@ -106,35 +106,35 @@ export function validateProject(project: Project): void {
     const mapped = new Set<string>();
     for (const mapping of module.portMappings ?? []) {
       const port = portsByDefinition.get(module.id)?.get(mapping.portId);
-      requireValid(port, `Unknown public port "${mapping.portId}" in "${module.id}"`);
-      requireValid(!mapped.has(port.id), `Duplicate mapping for port "${port.id}" in "${module.id}"`);
+      requireValid(port, `模块「${module.id}」没有公开端口「${mapping.portId}」`);
+      requireValid(!mapped.has(port.id), `模块「${module.id}」的端口「${port.id}」存在重复映射`);
       const child = children.get(mapping.target.instanceId);
-      requireValid(child, `Mapping "${port.id}" in "${module.id}" must target a direct child`);
+      requireValid(child, `模块「${module.id}」的端口「${port.id}」须映射到直接子实例`);
       const target = portsByDefinition.get(child.definitionId)?.get(mapping.target.portId);
-      requireValid(target, `Mapping "${port.id}" in "${module.id}" references unknown child port "${mapping.target.portId}"`);
+      requireValid(target, `模块「${module.id}」的端口「${port.id}」映射到不存在的子实例端口「${mapping.target.portId}」`);
       requireValid(port.type === target.type && port.direction === target.direction,
-        `Mapping "${port.id}" in "${module.id}" must preserve port type and direction`);
-      requireValid(channelSetsOverlap(port, target), `Mapping "${port.id}" in "${module.id}" has no shared optical channel`);
+        `模块「${module.id}」的端口「${port.id}」映射前后须保持端口类型和方向一致`);
+      requireValid(channelSetsOverlap(port, target), `模块「${module.id}」的端口「${port.id}」与映射端口没有共同的光通道`);
       mapped.add(port.id);
     }
     const mappedParameters = new Set<string>();
     for (const mapping of module.parameterMappings ?? []) {
-      const context = `Parameter mapping "${mapping.parameterId}" in "${module.id}"`;
+      const context = `模块「${module.id}」的参数映射「${mapping.parameterId}」`;
       const source = paramsByDefinition.get(module.id)?.get(mapping.parameterId);
-      requireValid(source, `${context}: unknown module parameter`);
+      requireValid(source, `${context}: 模块参数不存在`);
       const child = children.get(mapping.target.instanceId);
-      requireValid(child, `${context}: must target a direct child`);
+      requireValid(child, `${context}: 目标必须是直接子实例`);
       const target = paramsByDefinition.get(child.definitionId)?.get(mapping.target.parameterId);
-      requireValid(target?.overridable, `${context}: child parameter is not exposed for override`);
-      requireValid(parameterCanFeed(source, target), `${context}: incompatible parameter types, units or accepted values`);
+      requireValid(target?.overridable, `${context}: 子实例参数未开放覆盖`);
+      requireValid(parameterCanFeed(source, target), `${context}: 参数类型、单位或允许的取值不兼容`);
       const key = JSON.stringify([child.id, target.id]);
-      requireValid(!mappedParameters.has(key), `${context}: child parameter has multiple mappings`);
+      requireValid(!mappedParameters.has(key), `${context}: 子实例参数存在多条映射`);
       mappedParameters.add(key);
     }
     if (module.physicalEnclosure) {
       const { widthMm, depthMm, heightMm } = module.physicalEnclosure;
       requireValid([widthMm, depthMm, heightMm].every(value => Number.isFinite(value) && value > 0),
-        `Enclosure "${module.id}" must have positive finite dimensions in mm`);
+        `机箱「${module.id}」的尺寸须为以 mm 计量的有限正数`);
     }
   }
   validateAcyclic(project.moduleDefinitions, definitions);
@@ -156,13 +156,13 @@ export function validateProject(project: Project): void {
     const key = JSON.stringify(placement.instancePath);
     const placed = definitionAtPath(placement.instancePath);
     requireValid(placement.instancePath.length && placed && (placed.kind === 'component' || placed.physicalEnclosure),
-      `Physical placement must reference a component or enclosure module instance: ${key}`);
+      `物理布局必须引用器件实例或机箱模块实例：${key}`);
     const enclosure = definitionAtPath(placement.enclosurePath);
     requireValid(enclosure?.kind === 'module' && enclosure.physicalEnclosure,
-      `Physical placement ${key} must reference an enclosure module instance`);
-    requireValid(!parentByPlacement.has(key), `Duplicate physical placement: ${key}`);
+      `物理布局位置 ${key} 必须指定一个机箱模块实例`);
+    requireValid(!parentByPlacement.has(key), `物理布局位置重复: ${key}`);
     requireValid(Number.isFinite(placement.xMm) && Number.isFinite(placement.yMm) && placement.rotationDeg % 90 === 0,
-      `Invalid physical coordinates or rotation: ${key}`);
+      `物理坐标或旋转角度无效: ${key}`);
     parentByPlacement.set(key, JSON.stringify(placement.enclosurePath));
   }
   validatePhysicalContainment(parentByPlacement);
@@ -170,9 +170,9 @@ export function validateProject(project: Project): void {
   for (const placement of project.layout?.topology ?? []) {
     const key = JSON.stringify(placement.instancePath);
     requireValid(placement.instancePath.length && definitionAtPath(placement.instancePath),
-      `Topology placement must reference an instance: ${key}`);
-    requireValid(!positions.has(key), `Duplicate topology placement: ${key}`);
-    requireValid(Number.isFinite(placement.x) && Number.isFinite(placement.y), `Invalid topology coordinates: ${key}`);
+      `拓扑位置必须引用一个实例: ${key}`);
+    requireValid(!positions.has(key), `拓扑位置重复: ${key}`);
+    requireValid(Number.isFinite(placement.x) && Number.isFinite(placement.y), `拓扑坐标无效: ${key}`);
     positions.add(key);
   }
   const frames = new Set<string>();

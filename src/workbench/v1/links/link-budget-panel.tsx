@@ -19,9 +19,9 @@ function PointDetails({ point }: { point: LinkBudgetPoint }) {
     </dl>
     {issue && <p role="status">{issue.reason}{issue.endpoint && ` · ${showEndpoint(issue.endpoint)}`}</p>}
     {point.kind === 'rf' && point.stages.length > 0 && <details>
-      <summary>纯 RF 逐级结果</summary>
+      <summary>纯射频逐级结果</summary>
       <div className="v1-budget-table"><table><thead><tr>
-        <th>端口</th><th>RF 功率</th><th>本级增益</th><th>累计增益</th><th>累计 NF</th><th>输入额定</th>
+        <th>端口</th><th>射频功率</th><th>本级增益</th><th>累计增益</th><th>累计噪声系数</th><th>输入额定</th>
       </tr></thead><tbody>{point.stages.map(stage => <tr key={JSON.stringify(stage.endpoint)}>
         <th scope="row">{showEndpoint(stage.endpoint)}</th>
         <td><Metric metric={stage.powerDbm} /></td><td><Metric metric={stage.incoming?.device?.gainDb} /></td>
@@ -34,11 +34,11 @@ function PointDetails({ point }: { point: LinkBudgetPoint }) {
         {item.reason}{item.endpoint && ` · ${showEndpoint(item.endpoint)}`}{item.bindingId && ` · ${item.bindingId}`}
       </li>)}</ul>}
       {point.segments.map(segment => <details key={segment.eoEdgeIndex}>
-        <summary>EO→OE · {showEndpoint(segment.pdInput)}{segment.channelId && ` · ${segment.channelId}`}</summary>
+        <summary>电光—光电标定段 · {showEndpoint(segment.pdInput)}{segment.channelId && ` · ${segment.channelId}`}</summary>
         <dl className="v1-budget-metrics">
-          <div><dt>PD 光功率</dt><dd data-metric="pd-power"><Metric metric={segment.pdPowerDbm} /></dd></div>
+          <div><dt>探测器光功率</dt><dd data-metric="pd-power"><Metric metric={segment.pdPowerDbm} /></dd></div>
           <div><dt>标定段增益</dt><dd data-metric="conversion-gain"><Metric metric={segment.gainDb} /></dd></div>
-          <div><dt>段输出 RF 功率</dt><dd><Metric metric={segment.rfOutputDbm} /></dd></div>
+          <div><dt>标定段输出射频功率</dt><dd><Metric metric={segment.rfOutputDbm} /></dd></div>
         </dl>
         {segment.optical?.stages.length ? <div className="v1-budget-table"><table><thead><tr>
           <th>光端口</th><th>通道</th><th>光功率</th><th>本级增益</th><th>输入额定</th>
@@ -49,9 +49,9 @@ function PointDetails({ point }: { point: LinkBudgetPoint }) {
         </tr>)}</tbody></table></div> : null}
       </details>)}
       {point.rfStages.length > 0 && <details>
-        <summary>段外 RF 级</summary>
+        <summary>标定段外的射频级</summary>
         <div className="v1-budget-table"><table><thead><tr>
-          <th>端口</th><th>本级增益</th><th>本级 NF</th><th>输出功率</th><th>输入额定</th>
+          <th>端口</th><th>本级增益</th><th>本级噪声系数</th><th>输出功率</th><th>输入额定</th>
         </tr></thead><tbody>{point.rfStages.map(stage => <tr key={stage.edgeIndex}>
           <th scope="row">{showEndpoint(stage.input)} → {stage.output.portId}</th>
           <td><Metric metric={stage.gainDb} /></td><td><Metric metric={stage.nfDb} /></td>
@@ -83,7 +83,7 @@ export function LinkBudgetPanel({ link, budget, conditions, setInputPower }: {
     <div className="v1-link-fields">
       <label>单点频率 (GHz)<input name="budgetFrequency" type="number" min={0} max={67} step="any"
         value={Number.isFinite(frequency) ? frequency : ''} onChange={event => setFrequency(event.currentTarget.valueAsNumber)} /></label>
-      <label>RF 输入功率 (dBm，可选)<input name="budgetInputPower" type="number" step="any"
+      <label>射频输入功率 (dBm，可选)<input name="budgetInputPower" type="number" step="any"
         value={conditions.inputPowerDbm ?? ''} placeholder="未知" onChange={event => {
           const value = event.currentTarget.valueAsNumber;
           setInputPower(Number.isFinite(value) ? value : undefined);
@@ -91,7 +91,7 @@ export function LinkBudgetPanel({ link, budget, conditions, setInputPower }: {
     </div>
     <div className="v1-single-point"><PointDetails point={single} /></div>
     <details>
-      <summary>RF 扫描 · 1 GHz 步长</summary>
+      <summary>射频扫描 · 1 GHz 步长</summary>
       <form onSubmit={event => {
         event.preventDefault();
         const data = new FormData(event.currentTarget);

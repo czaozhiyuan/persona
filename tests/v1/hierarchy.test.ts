@@ -55,7 +55,7 @@ test('an unmapped public port is distinct from an invalid endpoint or saved mapp
     moduleDefinitions: project.moduleDefinitions.map(module => module.id === 'slot' ? {
       ...module, portMappings: [{ portId: 'OPT_OUT', target: { instanceId: 'absent', portId: 'OPT_OUT' } }],
     } : module),
-  }), /must target a direct child/);
+  }), /直接子实例/);
 });
 
 test('explicit mapped values, local overrides, defaults and missing values stay scoped to an occurrence', () => {
@@ -123,5 +123,5 @@ test('deep paths resolve iteratively and definition cycles are rejected before l
   assert.throws(() => resolveHierarchy({
     ...project,
     moduleDefinitions: [{ ...modules[0], instances: [{ id: 'self', name: 'Self', definitionId: '0' }] }],
-  }), /Module definition cycle: 0 -> 0/);
+  }), /模块定义存在循环引用： 0 -> 0/);
 });

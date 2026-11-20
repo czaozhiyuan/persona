@@ -12,7 +12,7 @@ const loadExample = () => parseProjectJson(exampleJson);
 const newProject = (): Project => ({
   id: 'untitled', name: '未命名工程', rootModuleDefinitionId: 'system',
   componentDefinitions: [],
-  moduleDefinitions: [{ id: 'system', name: 'System', kind: 'module', ports: [], instances: [] }],
+  moduleDefinitions: [{ id: 'system', name: '系统', kind: 'module', ports: [], instances: [] }],
 });
 
 createRoot(document.getElementById('root')!).render(

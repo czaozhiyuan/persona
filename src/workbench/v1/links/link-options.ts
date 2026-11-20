@@ -1,3 +1,4 @@
+import { portDisplayName } from '../labels';
 import { createPathResolver } from '../../../engine/v1/path-resolver';
 import { signalPortKey } from '../../../engine/v1/signal-graph';
 import type { CableCoreRef, ConversionBoundary } from '../../../model/v1/topology';
@@ -11,8 +12,8 @@ export const requiredEdgeKey = (ref: RequiredEdge): string => JSON.stringify('bu
   : [ref.scopePath, ref.connectionId]);
 export const conversionKey = ({ instancePath, fromPortId, toPortId }: ConversionBoundary): string =>
   JSON.stringify([instancePath, fromPortId, toPortId]);
-export const showPath = (path: InstancePath) => path.length ? path.join(' / ') : 'System';
-export const showEndpoint = (ref: EndpointRef) => `${showPath(ref.instancePath)} · ${ref.portId}`;
+export const showPath = (path: InstancePath) => path.length ? path.join(' / ') : '系统根层级';
+export const showEndpoint = (ref: EndpointRef) => `${showPath(ref.instancePath)} · ${portDisplayName(ref.portId, true)}`;
 
 export function createLinkOptions(project: Project) {
   const { graph, resolveNamedLink } = createPathResolver(project);
@@ -53,7 +54,7 @@ export function createLinkOptions(project: Project) {
         const key = conversionKey(value);
         const options = transfer.kind === 'eo' ? eo : oe;
         if (!options.some(item => item.key === key)) options.push({ key, value,
-          label: `${instance?.name ?? definition.name} · ${showPath(instancePath)} · ${value.fromPortId} → ${value.toPortId}` });
+          label: `${instance?.name ?? definition.name} · ${showPath(instancePath)} · ${portDisplayName(value.fromPortId, true)} → ${portDisplayName(value.toPortId, true)}` });
       }
     }
   }

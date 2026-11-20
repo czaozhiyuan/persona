@@ -1,3 +1,4 @@
+import { mediaLabels, portDisplayName } from '../../../workbench/v1/labels';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import type { CableBundle, Connection, LocalEndpointRef } from '../../../model/v1/topology';
@@ -53,7 +54,7 @@ export function ConnectionForm({ module, ports, update }: { module: ModuleDefini
       <EndpointSelect name="from" label="连接起点" ports={ports.filter(item => item.port.direction === 'out')} value={connection?.from} />
       <EndpointSelect name="to" label="连接终点" ports={ports.filter(item => item.port.direction === 'in')} value={connection?.to} />
       <label>介质<select name="media" defaultValue={connection?.mediaKind ?? ''}>
-        <option value="">未指定</option><option>OPTICAL_FIBER</option><option>RF_COAX</option><option>RJ45_CABLE</option>
+        <option value="">未指定</option>{Object.entries(mediaLabels).map(([type, label]) => <option key={type} value={type}>{label}</option>)}
       </select></label>
       <button type="submit">{connection ? '保存连接' : '添加连接'}</button>
       {connection && <button type="button" onClick={() => {
@@ -71,7 +72,7 @@ export function MappingForm({ module, ports, update }: { module: ModuleDefinitio
   return <TopologyTool title="公开端口映射">
     <label>公开端口<select value={publicPort?.id ?? ''} onChange={event => setSelected(event.target.value)}>
       <option value="">请选择</option>
-      {module.ports.map(port => <option key={port.id} value={port.id}>{port.id}{module.portMappings?.some(item => item.portId === port.id) ? '' : '（开放）'}</option>)}
+      {module.ports.map(port => <option key={port.id} value={port.id}>{portDisplayName(port.id, true)}{module.portMappings?.some(item => item.portId === port.id) ? '' : '（开放）'}</option>)}
     </select></label>
     {publicPort && <form key={JSON.stringify([selected, mapping])} onSubmit={event => {
       event.preventDefault();

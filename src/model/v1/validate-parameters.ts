@@ -3,31 +3,31 @@ import type { EmpiricalValue, NumericRange, ParameterDefinition, ParameterValue 
 import { requireValid } from './validation';
 
 export function validateChannelIds(ids: readonly string[], context: string): void {
-  requireValid(ids.length > 0 && new Set(ids).size === ids.length, `${context}: expected distinct optical channel IDs`);
-  for (const id of ids) requireValid(resolveOpticalChannel(id), `${context}: invalid optical channel "${id}"`);
+  requireValid(ids.length > 0 && new Set(ids).size === ids.length, `${context}: 光通道 ID 列表不能为空或包含重复项`);
+  for (const id of ids) requireValid(resolveOpticalChannel(id), `${context}: 无效的光通道「${id}」`);
 }
 
 export function validateRange({ min, max }: NumericRange, context: string): void {
-  requireValid(min !== undefined || max !== undefined, `${context}: at least one limit is required`);
+  requireValid(min !== undefined || max !== undefined, `${context}: 至少需要设置一个限值`);
   requireValid((min === undefined || Number.isFinite(min)) && (max === undefined || Number.isFinite(max))
-    && (min === undefined || max === undefined || min <= max), `${context}: invalid numeric range`);
+    && (min === undefined || max === undefined || min <= max), `${context}: 数值范围无效`);
 }
 
 export function validateEmpirical(
   value: EmpiricalValue, kinds: readonly EmpiricalValue['kind'][], context: string, range?: NumericRange,
 ): void {
-  requireValid(kinds.includes(value.kind), `${context}: invalid empirical value kind "${value.kind}"`);
+  requireValid(kinds.includes(value.kind), `${context}: 无效的经验值类型「${value.kind}」`);
   const validateNumber = (n: number | undefined) => requireValid(n !== undefined && Number.isFinite(n)
     && (range?.min === undefined || n >= range.min) && (range?.max === undefined || n <= range.max),
-    `${context}: expected a finite value within the declared range`);
+    `${context}: 应为指定范围内的有限数值`);
   if (value.kind === 'fixed') {
     validateNumber(value.value);
   } else if (value.kind === 'rfCurve') {
-    requireValid(value.points.length > 0, `${context}: RF curve must contain at least one point`);
+    requireValid(value.points.length > 0, `${context}: 射频曲线至少需要一个频点`);
     let previous = -Infinity;
     for (const [frequencyGHz, y] of value.points) {
       requireValid(Number.isFinite(frequencyGHz) && frequencyGHz >= 0 && frequencyGHz > previous,
-        `${context}: RF frequencies must be finite, non-negative and strictly increasing`);
+        `${context}: 射频频率须为非负有限数值，并严格递增`);
       validateNumber(y);
       previous = frequencyGHz;
     }
@@ -40,9 +40,9 @@ export function validateEmpirical(
 
 export function validateParameterValue(definition: ParameterDefinition, value: ParameterValue, context: string): void {
   if (definition.kind === 'enum') {
-    requireValid(typeof value === 'string' && definition.options.includes(value), `${context}: invalid enum value`);
+    requireValid(typeof value === 'string' && definition.options.includes(value), `${context}: 枚举值无效`);
   } else {
-    requireValid(typeof value !== 'string', `${context}: expected an empirical value`);
+    requireValid(typeof value !== 'string', `${context}: 应为经验值`);
     validateEmpirical(value, [definition.valueKind], context, definition.range);
   }
 }
@@ -50,7 +50,7 @@ export function validateParameterValue(definition: ParameterDefinition, value: P
 export function validateParameterDefinition(definition: ParameterDefinition, context: string): void {
   if (definition.kind === 'enum') {
     requireValid(definition.options.length > 0 && definition.options.every(option => option.trim())
-      && new Set(definition.options).size === definition.options.length, `${context}: expected distinct non-blank enum options`);
+      && new Set(definition.options).size === definition.options.length, `${context}: 枚举选项不能为空或重复`);
   } else if (definition.range) {
     validateRange(definition.range, context);
   }

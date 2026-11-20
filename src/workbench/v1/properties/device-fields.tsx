@@ -1,3 +1,4 @@
+import { portDisplayName, portTypeLabels } from '../labels';
 import { useState } from 'react';
 import type { ComponentDefinition, PortDefinition, PortDirection, PortType } from '../../../model/v1/types';
 import type { InputRating, Transfer } from '../../../model/v1/device';
@@ -23,7 +24,7 @@ export function PortFields({ port, save, remove }: {
     });
   }}>
     <label>端口类型<select value={type} onChange={event => setType(event.target.value as PortType)}>
-      <option>RF</option><option>OPTICAL</option><option>DC_POWER</option><option>CONTROL</option>
+      {Object.entries(portTypeLabels).map(([type, label]) => <option key={type} value={type}>{label}</option>)}
     </select></label>
     <label>方向<select value={direction} onChange={event => setDirection(event.target.value as PortDirection)}>
       <option value="in">输入</option><option value="out">输出</option>
@@ -83,16 +84,16 @@ export function TransferFields({ transfer, definition, save }: {
     save(() => readTransfer(data, transfer));
   }}>
     <label>输入端口<select name="from" defaultValue={transfer.fromPortId} required>
-      {inputPorts.map(port => <option key={port.id} value={port.id}>{port.id} · {port.type}</option>)}
+      {inputPorts.map(port => <option key={port.id} value={port.id}>{portDisplayName(port.id, true)} · {portTypeLabels[port.type]}</option>)}
     </select></label>
     <label>输出端口<select name="to" defaultValue={transfer.toPortId} required>
-      {outputPorts.map(port => <option key={port.id} value={port.id}>{port.id} · {port.type}</option>)}
+      {outputPorts.map(port => <option key={port.id} value={port.id}>{portDisplayName(port.id, true)} · {portTypeLabels[port.type]}</option>)}
     </select></label>
     {(transfer.kind === 'optical' || transfer.kind === 'eo' || transfer.kind === 'oe') &&
       <ChannelField name="channels" label="适用通道（未选择表示不限）" value={transfer.channelIds} multiple />}
     {transfer.kind === 'eo' && <label>供光输入<select name="supply" defaultValue={transfer.supplyPortId ?? ''}>
       <option value="">未设置</option>
-      {inputPorts.filter(port => port.type === 'OPTICAL').map(port => <option key={port.id} value={port.id}>{port.id}</option>)}
+      {inputPorts.filter(port => port.type === 'OPTICAL').map(port => <option key={port.id} value={port.id}>{portDisplayName(port.id, true)}</option>)}
     </select></label>}
     {transfer.kind === 'wavelengthConversion' && <div className="v1-property-pair">
       <ChannelField name="fromChannel" label="输入通道" value={transfer.fromChannelId} required />

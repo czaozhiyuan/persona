@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { LinkBudgetPoint } from '../../../engine/v1/link-budget';
 
-export const scanMetrics = { gainDb: 'RF 增益', powerDbm: 'RF 输出功率', nfDb: '噪声系数' } as const;
+export const scanMetrics = { gainDb: '射频增益', powerDbm: '射频输出功率', nfDb: '噪声系数' } as const;
 export type ScanMetric = keyof typeof scanMetrics;
 
 const width = 820;

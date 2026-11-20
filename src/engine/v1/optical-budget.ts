@@ -84,13 +84,13 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
 
   function pathFailure(result: Exclude<SearchResult, { status: 'resolved' }>, target: SignalPort,
     stages: OpticalStage[] = [], supply = false) {
-    const subject = supply ? 'optical supply' : 'optical path';
+    const subject = supply ? '供光路径' : '光路';
     const reason = result.status === 'unreachable' ? (supply
-      ? 'No declared optical supply reaches the EO input on a compatible channel.'
-      : 'No optical path reaches the target on a compatible channel.')
-      : result.status === 'ambiguous' ? `More than one ${subject} route reaches the target.`
-      : result.status === 'feedback_loop' ? `Feedback on the ${subject} is unsupported.`
-      : `The ${subject} search exceeded its resource limit.`;
+      ? '已声明的光源无法经兼容通道到达调制器供光输入。'
+      : '没有光路经兼容通道到达目标端口。')
+      : result.status === 'ambiguous' ? `有多条${subject}到达目标端口。`
+      : result.status === 'feedback_loop' ? `不支持${subject}中的反馈回路。`
+      : `${subject}搜索超出资源上限。`;
     return fail(supply && result.status === 'unreachable' ? 'missing_supply' : result.status,
       result.status === 'feedback_loop' ? result.endpoint.ref : target.ref, reason, stages);
   }
@@ -108,8 +108,8 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
       };
       const intrinsic = opticalLoss.intrinsicLossDb;
       const operating = opticalLoss.operatingPointLossDb;
-      const gain = intrinsic.availability === 'unavailable' ? unavailable('dB', `Intrinsic loss: ${intrinsic.reason}`)
-        : operating.availability === 'unavailable' ? unavailable('dB', `Operating-point loss: ${operating.reason}`)
+      const gain = intrinsic.availability === 'unavailable' ? unavailable('dB', `固有插损：${intrinsic.reason}`)
+        : operating.availability === 'unavailable' ? unavailable('dB', `控制点附加损耗：${operating.reason}`)
         : budgetValue('dB', 0 - (intrinsic.value + operating.value));
       stages.push(stage(edge.to, previous.channelId, addGain(previous.powerDbm, gain), { edge, gainDb: gain, opticalLoss }));
       return addGain(gainDb, gain);
@@ -131,17 +131,17 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
   }
 
   function sourceIssue(source: OpticalSource, port: SignalPort | undefined): string | undefined {
-    if (!resolveOpticalChannel(source.channelId)) return `Unknown optical channel "${source.channelId}".`;
+    if (!resolveOpticalChannel(source.channelId)) return `未知光通道「${source.channelId}」。`;
     const kind = instanceAt(source.endpoint)?.definition.kind;
     if (port?.definition.type !== 'OPTICAL'
       || port.definition.direction !== (kind === 'module' ? 'in' : 'out')) {
-      return 'An optical source must be a component output or module input.';
+      return '光源必须位于器件的光输出端口或模块的光输入端口。';
     }
   }
 
   function start(port: SignalPort, source: OpticalSource) {
     return [stage(port, source.channelId, source.powerDbm === undefined
-      ? unavailable('dBm', 'The optical source power is not provided.') : budgetValue('dBm', source.powerDbm))];
+      ? unavailable('dBm', '未提供光源功率。') : budgetValue('dBm', source.powerDbm))];
   }
 
   function calculateEoSupply(supply: SignalPath, source: OpticalSource, eo: SignalEdge) {
@@ -158,12 +158,12 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
 
   function calculateLocal(request: LocalOpticalRequest): OpticalBudget {
     const target = portAt(request.to);
-    if (target?.definition.type !== 'OPTICAL') return fail('invalid_reference', request.to, 'An optical target port is required.');
+    if (target?.definition.type !== 'OPTICAL') return fail('invalid_reference', request.to, '需要指定目标光端口。');
     if ('source' in request) {
       const { source } = request;
       const port = portAt(source.endpoint);
       const problem = sourceIssue(source, port);
-      if (!port || problem) return fail('invalid_reference', source.endpoint, problem ?? 'The optical source port does not exist.');
+      if (!port || problem) return fail('invalid_reference', source.endpoint, problem ?? '光源端口不存在。');
       const path = search([port], target, source.channelId);
       if (path.status !== 'resolved') return pathFailure(path, target);
       const stages = start(port, source);
@@ -176,21 +176,21 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
     const rfInput = portAt(input);
     const matches = rfInput && outgoing.get(rfInput)?.filter(item => item.source.kind === 'transfer'
       && item.source.transfer.kind === 'eo' && item.to.ref.portId === eo.toPortId);
-    if (matches && matches.length > 1) return fail('ambiguous', output, 'More than one EO transfer uses the requested boundary.');
+    if (matches && matches.length > 1) return fail('ambiguous', output, '所选边界对应多项电光转换。');
     const edge = matches?.[0];
-    if (!edge) return fail('invalid_reference', output, 'The requested EO transfer does not exist.');
+    if (!edge) return fail('invalid_reference', output, '所选电光转换不存在。');
     const supply = edge.supply;
-    if (!supply) return fail('missing_supply', output, 'The EO transfer has no declared optical supply port.');
+    if (!supply) return fail('missing_supply', output, '该电光转换未声明供光端口。');
     if (!resolveOpticalChannel(channelId) || (edge.channels.kind === 'enter' && edge.channels.channelIds
       && !edge.channels.channelIds.includes(channelId))) {
-      return fail('missing_supply', supply.ref, `The EO transfer does not support optical channel "${channelId}".`);
+      return fail('missing_supply', supply.ref, `该电光转换不支持光通道「${channelId}」。`);
     }
 
     const groups = new Map<OpticalChannelId, { ports: SignalPort[]; sources: OpticalSource[] }>();
     for (const source of sources) {
       const port = portAt(source.endpoint);
       const problem = sourceIssue(source, port);
-      if (!port || problem) return fail('invalid_reference', source.endpoint, problem ?? 'The optical source port does not exist.');
+      if (!port || problem) return fail('invalid_reference', source.endpoint, problem ?? '光源端口不存在。');
       const group = groups.get(source.channelId) ?? { ports: [], sources: [] };
       group.ports.push(port);
       group.sources.push(source);
@@ -208,7 +208,7 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
       supplied = { path: candidate.path, source: matching[0] };
     }
     if (!supplied) {
-      return fail('missing_supply', supply.ref, 'No declared optical supply reaches the EO input on a compatible channel.');
+      return fail('missing_supply', supply.ref, '已声明的光源无法经兼容通道到达调制器供光输入。');
     }
 
     const path = search([edge.to], target, channelId);

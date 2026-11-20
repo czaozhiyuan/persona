@@ -13,7 +13,7 @@ export function unavailable<Unit extends NumericUnit>(unit: Unit, reason: string
 
 export function budgetValue<Unit extends NumericUnit>(unit: Unit, value: number): BudgetMetric<Unit> {
   return Number.isFinite(value) ? { unit, availability: 'available', value }
-    : unavailable(unit, 'The budget value is not finite.');
+    : unavailable(unit, '预算结果不是有限数值。');
 }
 
 export function addGain<Unit extends 'dB' | 'dBm'>(input: BudgetMetric<Unit>, gain: BudgetMetric<'dB'>): BudgetMetric<Unit> {
@@ -34,7 +34,7 @@ export function checkInputRating(endpoint: EndpointRef, limits: InputRating | un
   if (!limits) return;
   if (input?.unit !== limits.unit || input.availability !== 'available') {
     return { endpoint, limits, status: 'unknown', reason: input?.availability === 'unavailable' && input.unit === limits.unit
-      ? input.reason : `No input value in ${limits.unit} is available.` };
+      ? input.reason : `缺少以 ${limits.unit} 为单位的输入值。` };
   }
   const { value } = input;
   if (limits.min !== undefined && value < limits.min) {

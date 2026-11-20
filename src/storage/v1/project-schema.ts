@@ -14,13 +14,13 @@ function fail(path: string, message: string): never {
 }
 
 function record(value: unknown, path: string): Record<string, unknown> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) fail(path, 'expected an object');
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) fail(path, '应为对象');
   const prototype = Object.getPrototypeOf(value);
-  if (prototype !== Object.prototype && prototype !== null) fail(path, 'expected plain project data');
+  if (prototype !== Object.prototype && prototype !== null) fail(path, '应为普通工程数据');
   for (const key of Reflect.ownKeys(value)) {
     const property = Object.getOwnPropertyDescriptor(value, key);
     if (typeof key !== 'string' || !property?.enumerable || !('value' in property)) {
-      fail(path, 'expected enumerable string data fields');
+      fail(path, '字段应为可枚举的字符串键');
     }
   }
   return value as Record<string, unknown>;
@@ -30,13 +30,13 @@ function fieldPath(path: string, key: string): string {
   return /^[a-zA-Z_$][\w$]*$/.test(key) ? `${path}.${key}` : `${path}[${JSON.stringify(key)}]`;
 }
 
-const text: Check = (value, path) => { if (typeof value !== 'string') fail(path, 'expected a string'); };
-const number: Check = (value, path) => { if (!Number.isFinite(value)) fail(path, 'expected a finite number'); };
-const boolean: Check = (value, path) => { if (typeof value !== 'boolean') fail(path, 'expected a boolean'); };
+const text: Check = (value, path) => { if (typeof value !== 'string') fail(path, '应为字符串'); };
+const number: Check = (value, path) => { if (!Number.isFinite(value)) fail(path, '应为有限数值'); };
+const boolean: Check = (value, path) => { if (typeof value !== 'boolean') fail(path, '应为布尔值'); };
 
 function oneOf(...values: string[]): Check {
   return (value, path) => {
-    if (typeof value !== 'string' || !values.includes(value)) fail(path, `expected one of ${values.join(', ')}`);
+    if (typeof value !== 'string' || !values.includes(value)) fail(path, `应为以下值之一：${values.join('、')}`);
   };
 }
 
@@ -44,11 +44,11 @@ function shape(required: Record<string, Check>, optional: Record<string, Check> 
   return (value, path) => {
     const data = record(value, path);
     for (const key of Object.keys(data)) {
-      if (!Object.hasOwn(required, key) && !Object.hasOwn(optional, key)) fail(fieldPath(path, key), 'unknown field');
+      if (!Object.hasOwn(required, key) && !Object.hasOwn(optional, key)) fail(fieldPath(path, key), '未知字段');
     }
     for (const [key, check] of Object.entries(required)) {
       const location = fieldPath(path, key);
-      if (!Object.hasOwn(data, key)) fail(location, 'required field is missing');
+      if (!Object.hasOwn(data, key)) fail(location, '缺少必填字段');
       check(data[key], location);
     }
     for (const [key, check] of Object.entries(optional)) {
@@ -60,15 +60,15 @@ function shape(required: Record<string, Check>, optional: Record<string, Check> 
 function list(check: Check, length?: number): Check {
   return (value, path) => {
     if (!Array.isArray(value) || (length !== undefined && value.length !== length)) {
-      fail(path, length === undefined ? 'expected an array' : `expected a ${length}-element tuple`);
+      fail(path, length === undefined ? '应为数组' : `应为包含 ${length} 个元素的数组`);
     }
     if (Object.getPrototypeOf(value) !== Array.prototype || Reflect.ownKeys(value).length !== value.length + 1) {
-      fail(path, 'expected a dense array without extra properties');
+      fail(path, '应为连续且无额外属性的数组');
     }
     for (let i = 0; i < value.length; i++) {
       const location = `${path}[${i}]`;
       const entry = Object.getOwnPropertyDescriptor(value, String(i));
-      if (!entry || !('value' in entry)) fail(location, 'expected an array data entry');
+      if (!entry || !('value' in entry)) fail(location, '该位置缺少数组元素');
       check(entry.value, location);
     }
   };
@@ -83,7 +83,7 @@ function dictionary(check: Check): Check {
 function byKind(variants: Record<string, Check>): Check {
   return (value, path) => {
     const kind = record(value, path).kind;
-    if (typeof kind !== 'string' || !Object.hasOwn(variants, kind)) fail(`${path}.kind`, 'unsupported kind');
+    if (typeof kind !== 'string' || !Object.hasOwn(variants, kind)) fail(`${path}.kind`, '不支持此类型');
     variants[kind](value, path);
   };
 }

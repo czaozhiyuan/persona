@@ -1,3 +1,4 @@
+import { mediaLabels, portDisplayName } from '../../../workbench/v1/labels';
 import { Background, ReactFlow, useNodesState, useUpdateNodeInternals } from '@xyflow/react';
 import type { Connection as FlowConnection, Edge, Node, NodeChange, NodeProps, ReactFlowInstance, Rect, Viewport, XYPosition } from '@xyflow/react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -11,7 +12,7 @@ import { frameInsets, ModuleFrame } from './module-frame';
 import { fitModuleFrame, keepNodeInside, minimumFrame, moduleExtent } from './frame-geometry';
 import { FrameResizeHandles } from './frame-resize-handles';
 import { keepGraphVisible } from './viewport';
-import { CanvasControls, canvasFitOptions } from './canvas-controls';
+import { CanvasControls, canvasFitOptions, flowAriaLabels } from './canvas-controls';
 import '@xyflow/react/dist/style.css';
 
 type NodeData = { name: string; ports: readonly PortDefinition[]; pathPorts: ReadonlySet<string>; foldedPath?: boolean };
@@ -47,7 +48,7 @@ const nodeTypes = { device: Device, moduleFrame: Frame };
 
 function moduleFrame(data: FrameNode['data']): FrameNode {
   const { x, y, width, height } = data.frame;
-  return { id: boundary, type: 'moduleFrame', position: { x, y }, style: { width, height, pointerEvents: 'none' },
+  return { id: boundary, ariaLabel: data.name, type: 'moduleFrame', position: { x, y }, style: { width, height, pointerEvents: 'none' },
     draggable: false, selectable: false, focusable: false, zIndex: -1, data };
 }
 
@@ -103,7 +104,7 @@ export function TopologyCanvas({ project, module, moduleName, modulePath, treeHi
       const position = saved ? { x: saved.x, y: saved.y }
         : { x: 260 * (index % 3) + (module.ports.length ? 260 : 25), y: 240 * Math.floor(index / 3) + 25 };
       const ports = definitions.get(instance.definitionId)!.ports;
-      return { id, type: 'device', position, selected: selected === JSON.stringify(path),
+      return { id, ariaLabel: instance.name, type: 'device', position, selected: selected === JSON.stringify(path),
         data: { name: instance.name, ports, foldedPath: highlight.folded.has(instance.id), pathPorts: pathPorts(path, ports) } };
     });
     return projected;
@@ -157,7 +158,9 @@ export function TopologyCanvas({ project, module, moduleName, modulePath, treeHi
 
   const edges: Edge[] = (module.connections ?? []).map(item => ({
     id: canvasEdgeKey('connection', item.id), source: nodeId(item.from.instanceId), target: nodeId(item.to.instanceId),
-    sourceHandle: handleId(item.from.portId), targetHandle: handleId(item.to.portId), label: item.mediaKind,
+    sourceHandle: handleId(item.from.portId), targetHandle: handleId(item.to.portId),
+    label: item.mediaKind && mediaLabels[item.mediaKind],
+    ariaLabel: `连线：${portDisplayName(item.from.portId)} → ${portDisplayName(item.to.portId)}`,
   }));
   for (const mapping of module.portMappings ?? []) {
     const outward = module.ports.find(port => port.id === mapping.portId)?.direction === 'out';
@@ -165,7 +168,7 @@ export function TopologyCanvas({ project, module, moduleName, modulePath, treeHi
     const outer = { id: boundary, handle: handleId(mapping.portId) };
     const [from, to] = outward ? [inner, outer] : [outer, inner];
     edges.push({ id: canvasEdgeKey('mapping', mapping.portId), source: from.id, target: to.id,
-      sourceHandle: from.handle, targetHandle: to.handle, style: { strokeDasharray: '6 4' } });
+      sourceHandle: from.handle, targetHandle: to.handle, ariaLabel: `公开端口映射：${portDisplayName(mapping.portId)}`, style: { strokeDasharray: '6 4' } });
   }
   for (const bundle of module.cableBundles ?? []) {
     for (const core of bundle.cores) {
@@ -176,6 +179,7 @@ export function TopologyCanvas({ project, module, moduleName, modulePath, treeHi
       const [from, to] = aOutput ? [a, core.b.endpoint] : [core.b.endpoint, a];
       edges.push({ id: canvasEdgeKey('core', bundle.id, core.id), source: nodeId(from.instanceId), target: nodeId(to.instanceId),
         sourceHandle: handleId(from.portId), targetHandle: handleId(to.portId),
+        ariaLabel: `纤芯：${bundle.id} · ${core.id}`,
         label: `${bundle.id} · A:${core.a.pin} / B:${core.b.pin}`, style: { stroke: '#7856b7', strokeWidth: 2 } });
     }
   }
@@ -203,7 +207,7 @@ export function TopologyCanvas({ project, module, moduleName, modulePath, treeHi
     <div ref={canvas} className="v1-topology-canvas" aria-label="逻辑拓扑画布">
       <ReactFlow<CanvasNode, Edge> nodes={nodes} edges={edges.map(edge => highlight.edges.has(edge.id)
         ? { ...edge, className: 'v1-path-edge', style: { ...edge.style, stroke: '#a85618', strokeWidth: 3 }, zIndex: 2 } : edge)}
-        nodeTypes={nodeTypes} fitView fitViewOptions={canvasFitOptions(treeHidden)}
+        nodeTypes={nodeTypes} ariaLabelConfig={flowAriaLabels} fitView fitViewOptions={canvasFitOptions(treeHidden)}
         viewport={viewport} onViewportChange={changeViewport} onInit={instance => { flow.current = instance; }}
         minZoom={0.2} maxZoom={2} deleteKeyCode={null} onConnect={onConnect} onPaneClick={() => selectInstance()}
         onNodeClick={(_, node) => {

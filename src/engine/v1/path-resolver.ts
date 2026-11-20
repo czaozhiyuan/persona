@@ -119,10 +119,10 @@ export function createPathResolver(project: Project) {
     const failure = supplies.find(supply => supply.status !== 'resolved');
     if (failure) {
       const status = failure.status === 'missing' ? 'unreachable' : failure.status;
-      const reason = failure.status === 'missing' ? 'No supplied optical path reaches the EO input on a compatible channel.'
-        : failure.status === 'ambiguous' ? 'More than one optical supply path reaches the EO input.'
-        : failure.status === 'feedback_loop' ? 'Feedback in the optical supply path is unsupported.'
-        : 'The optical supply search exceeded its resource limit.';
+      const reason = failure.status === 'missing' ? '没有供光路径经兼容通道到达调制器的输入端口。'
+        : failure.status === 'ambiguous' ? '有多条供光路径到达调制器的输入端口。'
+        : failure.status === 'feedback_loop' ? '不支持供光路径中的反馈回路。'
+        : '供光路径搜索超出资源上限。';
       return { status, reason, endpoint: failure.endpoint, trace };
     }
     return { status: 'resolved', trace };
@@ -134,10 +134,10 @@ export function createPathResolver(project: Project) {
     let from = getPort(request.from);
     let to = getPort(request.to);
     if (!from || !to) {
-      return { status: 'invalid_reference', reason: 'The path endpoint does not exist.', endpoint: from ? request.to : request.from };
+      return { status: 'invalid_reference', reason: '路径端点不存在。', endpoint: from ? request.to : request.from };
     }
     if (request.channelId !== undefined && !resolveOpticalChannel(request.channelId)) {
-      return { status: 'invalid_reference', reason: `Unknown optical channel "${request.channelId}".` };
+      return { status: 'invalid_reference', reason: `未知光通道「${request.channelId}」。` };
     }
     const sources = new Map<SignalPort, Carrier>();
     for (const ref of options.opticalSources ?? []) {
@@ -145,10 +145,10 @@ export function createPathResolver(project: Project) {
       const scope = scopes.get(JSON.stringify(ref.instancePath));
       if (port?.definition.type !== 'OPTICAL' || !scope
         || (scope.kind === 'module' ? port.definition.direction !== 'in' : port.definition.direction !== 'out')) {
-        return { status: 'invalid_reference', endpoint: ref, reason: 'Supply sources must be optical device outputs or module inputs.' };
+        return { status: 'invalid_reference', endpoint: ref, reason: '供光源必须位于器件的光输出端口或模块的光输入端口。' };
       }
       if (ref.channelId !== undefined && !resolveOpticalChannel(ref.channelId)) {
-        return { status: 'invalid_reference', endpoint: ref, reason: `Unknown optical source channel "${ref.channelId}".` };
+        return { status: 'invalid_reference', endpoint: ref, reason: `未知光源通道「${ref.channelId}」。` };
       }
       if (ref.channelId === undefined || (sources.has(port) && sources.get(port) === undefined)) sources.set(port, undefined);
       else sources.set(port, [...new Set([...(sources.get(port) ?? []), ref.channelId])]);
@@ -158,12 +158,12 @@ export function createPathResolver(project: Project) {
       if (from.definition.direction === 'out') from = followBoundary(from, requiredEdges);
       if (to.definition.direction === 'in') to = followBoundary(to, requiredEdges);
       const open = from.unmapped ? from : to.unmapped ? to : undefined;
-      if (open) return { status: 'incomplete', endpoint: open.ref, reason: 'A required module port has no internal mapping.' };
+      if (open) return { status: 'incomplete', endpoint: open.ref, reason: '路径所需的模块端口缺少内部映射。' };
     }
     for (const ref of link?.via ?? []) {
       const edge = edgeRefs.get(requiredKey(ref));
       // An existing, partially attached fibre is valid project data but cannot carry the path.
-      if (!edge) return { status: 'unreachable', reason: `Required fibre is open: ${requiredKey(ref)}.` };
+      if (!edge) return { status: 'unreachable', reason: `必经纤芯未接通：${requiredKey(ref)}。` };
       requiredEdges.push(edge);
     }
     const required = new Map([...new Set(requiredEdges)].map((edge, index) => [edge, 1n << BigInt(index)]));
@@ -173,13 +173,13 @@ export function createPathResolver(project: Project) {
     });
     switch (result.status) {
       case 'resolved': return traceSupplies(result.path, sources, link?.conversionBindings ?? []);
-      case 'ambiguous': return { status: 'ambiguous', reason: 'Multiple paths satisfy the endpoints and routing constraints.' };
-      case 'feedback_loop': return { status: 'feedback_loop', endpoint: result.endpoint.ref, reason: 'Feedback on the requested path is unsupported.' };
-      case 'search_limit': return { status: 'search_limit', reason: 'The path search exceeded its resource limit.' };
+      case 'ambiguous': return { status: 'ambiguous', reason: '有多条路径满足端点与路由约束。' };
+      case 'feedback_loop': return { status: 'feedback_loop', endpoint: result.endpoint.ref, reason: '不支持所选路径中的反馈回路。' };
+      case 'search_limit': return { status: 'search_limit', reason: '路径搜索超出资源上限。' };
       case 'unreachable': {
         if (!result.reached.has(to)) {
           const reverse = searchSignalPath({ starts: [to], adjacent: incoming, carrier: undefined, reverse: true });
-          if (reverse.status === 'search_limit') return { status: 'search_limit', reason: 'The mapping diagnostic exceeded its resource limit.' };
+          if (reverse.status === 'search_limit') return { status: 'search_limit', reason: '端口映射诊断超出资源上限。' };
           if (reverse.status === 'unreachable') {
             const forwardPorts = [...result.reached];
             const reversePorts = [...reverse.reached];
@@ -188,10 +188,10 @@ export function createPathResolver(project: Project) {
             const open = inputs.find(port => reversePorts.some(other => inside(port.ref.instancePath, other.ref.instancePath))
                 || outputs.some(other => JSON.stringify(port.ref.instancePath) === JSON.stringify(other.ref.instancePath)))
               ?? outputs.find(port => forwardPorts.some(other => inside(port.ref.instancePath, other.ref.instancePath)));
-            if (open) return { status: 'incomplete', endpoint: open.ref, reason: 'A required module port has no internal mapping.' };
+            if (open) return { status: 'incomplete', endpoint: open.ref, reason: '路径所需的模块端口缺少内部映射。' };
           }
         }
-        return { status: 'unreachable', reason: 'No path satisfies the endpoints and routing constraints.' };
+        return { status: 'unreachable', reason: '没有路径满足端点与路由约束。' };
       }
     }
   }
@@ -202,7 +202,7 @@ export function createPathResolver(project: Project) {
     } catch (error) {
       return { status: 'invalid_reference', reason: (error as Error).message };
     }
-    if (!link.from || !link.to) return { status: 'incomplete', reason: 'A named link requires both endpoints.' };
+    if (!link.from || !link.to) return { status: 'incomplete', reason: '命名链路需要设置起点和终点。' };
     return resolve({ from: link.from, to: link.to, channelId: link.channelId }, options, link);
   }
 

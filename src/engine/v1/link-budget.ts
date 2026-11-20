@@ -63,14 +63,14 @@ export function createLinkBudget(project: Project) {
     const nonRf = path.trace?.steps.find(step => step.port.definition.type !== 'RF');
     if (nonRf) {
       return frequencyGHz => unresolved(frequencyGHz, { status: 'not_rf', endpoint: nonRf.port.ref,
-        reason: 'An RF budget requires a pure RF path or a path with an EO→OE conversion span.' });
+        reason: '射频预算需要纯射频路径，或含电光—光电转换段的路径。' });
     }
     return frequencyGHz => ({ kind: 'rf', ...evaluateRf(path, { ...conditions, frequencyGHz }) });
   }
 
   function calculateNamedLink(link: NamedLink, { frequencyGHz, ...conditions }: LinkBudgetInput): LinkBudgetPoint {
     if (!isRfFrequency(frequencyGHz)) {
-      return unresolved(frequencyGHz, { status: 'invalid_frequency', reason: 'RF frequency must be between 0 and 67 GHz.' });
+      return unresolved(frequencyGHz, { status: 'invalid_frequency', reason: '射频频率须在 0 至 67 GHz 范围内。' });
     }
     return prepare(link, conditions)(frequencyGHz);
   }
@@ -80,7 +80,7 @@ export function createLinkBudget(project: Project) {
     if (!Number.isInteger(startGHz) || !Number.isInteger(stopGHz)
       || !isRfFrequency(startGHz) || !isRfFrequency(stopGHz) || startGHz > stopGHz) {
       return { status: 'invalid_range', points: [],
-        reason: 'Scan endpoints must be ascending integers from 0 to 67 GHz, inclusive.' };
+        reason: '起止频率须为 0 至 67 GHz 范围内的整数，且起始频率不得大于终止频率。' };
     }
     const evaluate = prepare(link, conditions);
     const points: LinkBudgetPoint[] = [];

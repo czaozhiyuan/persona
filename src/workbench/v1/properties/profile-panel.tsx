@@ -12,7 +12,7 @@ function ProfileForm({ profile, save }: { profile?: ConversionProfile; save: (re
     save(() => {
       const name = textField(data, 'name');
       const rfGainRefDb = readEmpirical(data, 'gain', kind);
-      if (!name || !rfGainRefDb) throw new Error('请填写标定名称和基准 RF 增益。');
+      if (!name || !rfGainRefDb) throw new Error('请填写标定名称和基准射频增益。');
       return {
         ...profile, id: profile?.id ?? crypto.randomUUID(), name, rfGainRefDb,
         pdPowerRefDbm: numberField(data, 'pdReference', true)!, k: numberField(data, 'k'),
@@ -20,16 +20,16 @@ function ProfileForm({ profile, save }: { profile?: ConversionProfile; save: (re
     });
   }}>
     <label>标定名称<input name="name" defaultValue={profile?.name} required /></label>
-    <label>基准 RF 增益类型<select value={kind} onChange={event => setKind(event.target.value as typeof kind)}>
-      <option value="fixed">固定值</option><option value="rfCurve">RF 折点</option>
+    <label>基准射频增益类型<select value={kind} onChange={event => setKind(event.target.value as typeof kind)}>
+      <option value="fixed">固定值</option><option value="rfCurve">射频曲线折点</option>
     </select></label>
-    <EmpiricalField key={kind} name="gain" kind={kind} label="整段基准 RF 增益 (dB)" value={profile?.rfGainRefDb} required />
+    <EmpiricalField key={kind} name="gain" kind={kind} label="整段基准射频增益 (dB)" value={profile?.rfGainRefDb} required />
     <div className="v1-property-pair">
-      <label>PD 参考光功率 (dBm)<input name="pdReference" type="number" step="any" defaultValue={profile?.pdPowerRefDbm} required /></label>
+      <label>探测器参考光功率 (dBm)<input name="pdReference" type="number" step="any" defaultValue={profile?.pdPowerRefDbm} required /></label>
       <label>经验系数 K<input name="k" type="number" step="any" defaultValue={profile?.k} placeholder={String(DEFAULT_CONVERSION_K)} /></label>
     </div>
     <p className="v1-property-effective">留空时使用默认 K = {DEFAULT_CONVERSION_K}</p>
-    <button type="submit">{profile ? '保存标定 Profile' : '新建标定 Profile'}</button>
+    <button type="submit">{profile ? '保存标定方案' : '新建标定方案'}</button>
   </form>;
 }
 
@@ -38,9 +38,9 @@ export function ProfilePanel({ store, profiles }: { store: ProjectStore; profile
   const [error, setError] = useState('');
   const profile = profiles.find(item => item.id === id);
   return <section className="panel v1-properties" aria-labelledby="v1-profile-heading">
-    <h2 id="v1-profile-heading">工程标定 Profile</h2>
-    <label>工程内 Profile<select value={profile?.id ?? ''} onChange={event => { setId(event.target.value); setError(''); }}>
-      <option value="">新建 Profile</option>
+    <h2 id="v1-profile-heading">工程标定方案</h2>
+    <label>工程内标定方案<select value={profile?.id ?? ''} onChange={event => { setId(event.target.value); setError(''); }}>
+      <option value="">新建标定方案</option>
       {profiles.map(item => <option key={item.id} value={item.id}>{item.name} ({item.id})</option>)}
     </select></label>
     <ProfileForm profile={profile} key={JSON.stringify(profile ?? null)} save={read => {

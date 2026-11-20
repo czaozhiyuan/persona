@@ -26,7 +26,7 @@ export function PortDeletionDialog({ store, definitionId, portId, close }: {
     {plan ? <ul>{plan.impacts.map((impact, index) => <li key={index}>
       <strong>{impact.kind}</strong> · {impact.name} · 定义 {impact.definitionId}
       {impact.paths.length > 0 && <ul>{impact.paths.map(path =>
-        <li key={JSON.stringify(path)}><code>{path.length ? JSON.stringify(path) : 'System []'}</code></li>)}</ul>}
+        <li key={JSON.stringify(path)}><code>{path.length ? JSON.stringify(path) : '系统根层级 []'}</code></li>)}</ul>}
     </li>)}</ul> : <p>端口已不存在。</p>}
     {error && <p className="error" role="alert">{error}</p>}
     <div className="actions">

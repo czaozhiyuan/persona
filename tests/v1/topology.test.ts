@@ -25,11 +25,11 @@ test('top-level connections can join public ports before their module internals 
   assert.equal(rj45.mediaKind, 'RJ45_CABLE');
 
   const validateConnection = (change: Partial<Connection>) => validateProject(editSystem({ connections: [{ ...ordinary, ...change }] }));
-  assert.throws(() => validateConnection({ from: { instanceId: 'mzm', portId: 'OUT' } }), /ports of direct children/);
-  assert.throws(() => validateConnection({ from: ordinary.to, to: ordinary.from }), /output to input/);
-  assert.throws(() => validateConnection({ to: rj45.to }), /endpoint types do not match/);
-  assert.throws(() => validateConnection({ to: { instanceId: 'RX_B', portId: 'MM_IN' } }), /no shared optical channel/);
-  assert.throws(() => validateConnection({ mediaKind: 'RJ45_CABLE' }), /media is incompatible/);
+  assert.throws(() => validateConnection({ from: { instanceId: 'mzm', portId: 'OUT' } }), /直接子实例的端口/);
+  assert.throws(() => validateConnection({ from: ordinary.to, to: ordinary.from }), /从输出到输入/);
+  assert.throws(() => validateConnection({ to: rj45.to }), /端口类型不匹配/);
+  assert.throws(() => validateConnection({ to: { instanceId: 'RX_B', portId: 'MM_IN' } }), /没有共同的光通道/);
+  assert.throws(() => validateConnection({ mediaKind: 'RJ45_CABLE' }), /连接介质与端口类型不兼容/);
 });
 
 test('a 12-core bundle owns crossed mappings and open attachments independently of WDM', () => {
@@ -45,14 +45,14 @@ test('a 12-core bundle owns crossed mappings and open attachments independently 
   validateProject(topologyExample);
 
   const validateCores = (...cores: CableCore[]) => validateProject(editSystem({ cableBundles: [{ ...bundle, cores }] }));
-  assert.throws(() => validateCores({ ...wdm, a: { ...wdm.a, pin: 13 } }), /pin must be in 1–12/);
-  assert.throws(() => validateCores(wdm, { ...reverse, a: { ...reverse.a, pin: 1 } }), /duplicate pin 1/);
-  assert.throws(() => validateCores(wdm, { ...reverse, b: { ...reverse.b, pin: 12 } }), /duplicate pin 12/);
+  assert.throws(() => validateCores({ ...wdm, a: { ...wdm.a, pin: 13 } }), /芯号必须在 1–12 范围内/);
+  assert.throws(() => validateCores(wdm, { ...reverse, a: { ...reverse.a, pin: 1 } }), /芯号 1 重复/);
+  assert.throws(() => validateCores(wdm, { ...reverse, b: { ...reverse.b, pin: 12 } }), /芯号 12 重复/);
   assert.throws(() => validateCores({ ...wdm, b: { ...wdm.b, endpoint: { instanceId: 'RX_A', portId: 'CONTROL_IN' } } }),
-    /attachments must be optical ports/);
+    /纤芯必须接到直接子实例的光端口/);
   assert.throws(() => validateProject(editSystem({ connections: [
     ...system.connections!, { id: 'duplicate', from: wdm.a.endpoint!, to: wdm.b.endpoint! },
-  ] })), /duplicate connection between the same endpoints/);
+  ] })), /同一对端点之间存在重复连接/);
 });
 
 test('draft, one-sided and disconnected named links survive validation and names can change', () => {
@@ -63,8 +63,8 @@ test('draft, one-sided and disconnected named links survive validation and names
   assert.equal(renamed.id, fullLink.id);
   assert.throws(() => validateProject(withLink({
     ...fullLink, to: { instancePath: ['RX_A', 'pd'], portId: 'missing' },
-  })), /invalid end endpoint reference/);
-  assert.throws(() => validateProject(withLink({ ...fullLink, channelId: 'CWDM_1370' })), /invalid optical channel/);
+  })), /终点端点引用无效/);
+  assert.throws(() => validateProject(withLink({ ...fullLink, channelId: 'CWDM_1370' })), /无效的光通道/);
 });
 
 test('required connections are scoped to a concrete module occurrence and fibres use their bundle and core IDs', () => {
@@ -75,11 +75,11 @@ test('required connections are scoped to a concrete module occurrence and fibres
     ],
   }));
   assert.throws(() => validateProject(withLink({ ...fullLink, via: [{ scopePath: [], connectionId: 'rf-feed' }] })),
-    /unknown required connection "rf-feed" in scope/);
+    /当前模块中不存在必经连接「rf-feed」/);
   assert.throws(() => validateProject(withLink({ ...fullLink, via: [{ scopePath: ['TX_A', 'mzm'], connectionId: 'rf-feed' }] })),
-    /invalid connection scope/);
+    /连接所在模块无效/);
   assert.throws(() => validateProject(withLink({ ...fullLink, via: [{ scopePath: [], bundleId: 'mpo-12', coreId: 'missing' }] })),
-    /unknown required fibre core/);
+    /必经纤芯不存在/);
 });
 
 test('multiple conversion spans can share a profile with independent overrides and valid EO/OE boundaries', () => {
@@ -93,11 +93,11 @@ test('multiple conversion spans can share a profile with independent overrides a
   validateProject(withLink({ ...fullLink, conversionBindings: [binding, second] }));
   assert.equal(topologyExample.conversionProfiles[0].pdPowerRefDbm, -2);
   assert.throws(() => validateProject(withLink({ ...fullLink, conversionBindings: [{ ...binding, profileId: 'missing' }] })),
-    /unknown conversion profile/);
+    /标定方案「missing」不存在/);
   assert.throws(() => validateProject(withLink({ ...fullLink, conversionBindings: [{ ...binding, eo: binding.oe }] })),
-    /invalid EO transfer boundary/);
+    /电光转换边界无效/);
   assert.throws(() => validateProject(withLink({ ...fullLink, conversionBindings: [binding, { ...second, oe: binding.oe }] })),
-    /conversion boundary is already bound/);
+    /此转换边界已绑定/);
   assert.throws(() => validateProject(withLink({ ...fullLink, conversionBindings: [{ ...binding, overrides: { k: Infinity } }] })),
-    /overrides must be finite/);
+    /覆盖值须为有限数值/);
 });
