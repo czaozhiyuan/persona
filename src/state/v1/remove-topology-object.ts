@@ -39,6 +39,7 @@ export function removeTopologyInstance(project: Project, parentId: string, insta
   const { layout } = updated;
   return {
     ...updated,
+    instanceSettings: updated.instanceSettings?.filter(item => !removed(item.instancePath)),
     layout: layout && {
       ...layout,
       physical: layout.physical?.filter(item => !removed(item.instancePath) && !removed(item.enclosurePath)),

@@ -1489,6 +1489,10 @@
         }
       }
     ],
+    "instanceSettings": [
+      { "instancePath": ["TX_A", "optical-switch"], "switchStateId": "pass" },
+      { "instancePath": ["TX_B", "optical-switch"], "switchStateId": "pass" }
+    ],
     "namedLinks": [
       {
         "id": "draft",

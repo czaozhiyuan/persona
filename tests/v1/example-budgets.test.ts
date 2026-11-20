@@ -5,6 +5,7 @@ import { calculateDcBudget } from '../../src/engine/v1/dc-budget';
 import { createLinkBudget } from '../../src/engine/v1/link-budget';
 import { createOpticalBudget } from '../../src/engine/v1/optical-budget';
 import type { OpticalSource } from '../../src/engine/v1/optical-budget';
+import { editInstanceSettings } from '../../src/state/v1/instance-settings';
 import { parseProjectJson, serializeProjectJson } from '../../src/storage/v1/project-json';
 
 const laser: OpticalSource = {
@@ -30,9 +31,8 @@ test('the complete workbench example produces the documented EO/OE, scan, RF and
   assert.equal(scan.points[0].gainDb.availability, 'unavailable');
   assert.deepEqual(scan.points[67].gainDb, available(-16, 'dB'));
 
-  const blocked = createLinkBudget({ ...project, moduleDefinitions: project.moduleDefinitions.map(definition =>
-    definition.id !== 'tx' ? definition : { ...definition, instances: definition.instances.map(instance =>
-      instance.id !== 'optical-switch' ? instance : { ...instance, switchStateId: 'block' }) }) });
+  const blocked = createLinkBudget(editInstanceSettings(project, ['TX_A', 'optical-switch'],
+    settings => ({ ...settings, switchStateId: 'block' })));
   assert.equal(blocked.resolveNamedLink(link, conditions).status, 'unreachable');
 
   const rf = budget.calculateNamedLink(project.namedLinks!.find(item => item.id === 'pure-rf')!,

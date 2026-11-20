@@ -79,6 +79,14 @@ export function validateProject(project: Project): void {
     validateConversionProfile(profile);
   }
 
+  function validateOverrides(definition: Definition, overrides: Instance['parameterOverrides'], context: string) {
+    for (const [id, value] of Object.entries(overrides ?? {})) {
+      const parameter = paramsByDefinition.get(definition.id)?.get(id);
+      requireValid(parameter?.overridable, `${context}: 参数「${id}」未开放覆盖`);
+      validateParameterValue(parameter, value, `${context}的参数「${id}」`);
+    }
+  }
+
   for (const module of project.moduleDefinitions) {
     const children = indexById(module.instances, `模块「${module.id}」的实例`);
     childrenByModule.set(module.id, children);
@@ -93,11 +101,7 @@ export function validateProject(project: Project): void {
       } else {
         requireValid(instance.switchStateId === undefined, `${context}: 仅光开关实例可以设置开关状态`);
       }
-      for (const [id, value] of Object.entries(instance.parameterOverrides ?? {})) {
-        const parameter = paramsByDefinition.get(definition.id)?.get(id);
-        requireValid(parameter?.overridable, `${context}: 参数「${id}」未开放覆盖`);
-        validateParameterValue(parameter, value, `${context}, parameter "${id}"`);
-      }
+      validateOverrides(definition, instance.parameterOverrides, context);
     }
     validateModuleTopology(module, endpoint => {
       const child = children.get(endpoint.instanceId);
@@ -149,6 +153,21 @@ export function validateProject(project: Project): void {
     }
     return current;
   };
+  const occurrenceSettings = new Set<string>();
+  for (const settings of project.instanceSettings ?? []) {
+    const key = JSON.stringify(settings.instancePath);
+    const context = `实例设置 ${key}`;
+    const definition = definitionAtPath(settings.instancePath);
+    requireValid(settings.instancePath.length && definition, `${context}：必须引用现有实例`);
+    requireValid(!occurrenceSettings.has(key), `${context}：路径重复`);
+    requireValid(settings.name === undefined || settings.name.trim(), `${context}：名称不能为空`);
+    if (settings.switchStateId !== undefined) {
+      requireValid(definition.kind === 'component' && definition.switchStates?.some(state => state.id === settings.switchStateId),
+        `${context}：光开关状态无效「${settings.switchStateId}」`);
+    }
+    validateOverrides(definition, settings.parameterOverrides, context);
+    occurrenceSettings.add(key);
+  }
   validateNamedLinks(project.namedLinks ?? [], profiles, definitionAtPath);
 
   const parentByPlacement = new Map<string, string>();

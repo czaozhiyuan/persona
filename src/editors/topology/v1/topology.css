@@ -96,6 +96,7 @@
 .v1-topology-port .DC_POWER { background: #ad5420; }
 .v1-topology-tools {
   position: relative; z-index: 3; flex: none; padding: .25rem .65rem;
+  display: flex; align-items: center; gap: .45rem;
   border-top: 1px solid #cbdad5; background: #f9fbfa;
 }
 .v1-topology-tools summary {
