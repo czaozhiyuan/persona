@@ -1,9 +1,9 @@
 .v1-topology { height: 100%; display: flex; flex-direction: column; }
 .v1-hierarchy-workspace { position: relative; flex: 1; min-height: 0; overflow: hidden; }
-.v1-hierarchy-tree, .v1-topology-path, .v1-hierarchy-depth, .v1-canvas-zoom {
+.v1-topology-path, .v1-hierarchy-depth, .v1-canvas-zoom {
   border: 1px solid #ccdad5; border-radius: .45rem; background: #fbfdfc; box-shadow: 0 2px 10px #203d3910;
 }
-.v1-topology-path, .v1-hierarchy-tree, .v1-hierarchy-depth { position: absolute; z-index: 2; }
+.v1-topology-path, .v1-hierarchy-depth { position: absolute; z-index: 2; }
 .v1-topology-path {
   top: 14px; left: 14px; max-width: calc(100% - 112px); height: 32px;
   display: flex; align-items: center; gap: .45rem; padding: 0 .55rem; overflow-x: auto;
@@ -11,14 +11,7 @@
 }
 .v1-topology-path > span { display: flex; align-items: center; gap: .25rem; }
 .v1-topology-path button { border: 0; min-height: 1.5rem; background: transparent; padding: 0 .2rem; color: #4a6861; }
-.v1-hierarchy-tree { top: 60px; left: 14px; width: min(13rem, 48vw); }
-.v1-hierarchy-tree:has(ul[hidden]) { width: auto; }
-.v1-hierarchy-tree header { display: flex; justify-content: space-between; align-items: center; gap: .35rem; padding: .25rem .5rem; }
-.v1-hierarchy-tree h3 { margin: 0; padding-left: .25rem; font-size: .85rem; }
-.v1-hierarchy-tree ul {
-  margin: 0; padding: .3rem; max-height: min(48vh, 26rem); overflow: auto;
-  list-style: none; border-top: 1px solid #dbe5e0;
-}
+.v1-hierarchy-tree ul { margin: 0; padding: .3rem; list-style: none; }
 .v1-hierarchy-tree li { display: flex; align-items: center; width: max-content; min-width: 100%; }
 .v1-hierarchy-tree button { min-height: 1.75rem; border: 0; padding: .15rem .3rem; background: transparent; font-size: .8rem; }
 .v1-hierarchy-disclosure { width: 1.4rem; flex-shrink: 0; color: #315d56; }
@@ -99,33 +92,21 @@
 .v1-topology-port .RF { background: #2076ad; }
 .v1-topology-port .DC_POWER { background: #ad5420; }
 .v1-topology-tools {
-  position: relative; z-index: 3; flex: none; min-height: 52px;
-  display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: .5rem;
-  padding: .45rem .75rem; border-top: 1px solid #cbdad5; background: #f9fbfa;
+  position: relative; z-index: 3; flex: none; padding: .25rem .65rem;
+  border-top: 1px solid #cbdad5; background: #f9fbfa;
 }
-.v1-topology-tools details { position: relative; }
 .v1-topology-tools summary {
-  display: flex; justify-content: space-between; align-items: center; gap: .55rem;
-  min-width: 8.25rem; min-height: 2rem; padding: .25rem .65rem; border: 1px solid #c9d9d3; border-radius: .35rem;
-  list-style: none; background: #fff; font-size: .82rem; cursor: pointer;
+  width: fit-content; min-height: 1.9rem; padding: .25rem .65rem;
+  border: 1px solid #c9d9d3; border-radius: .35rem; background: #fff; font-size: .82rem; cursor: pointer;
 }
-.v1-topology-tools summary::-webkit-details-marker { display: none; }
-.v1-topology-tools summary::after { content: '▴'; color: #5e7b72; }
 .v1-topology-tools details[open] > summary { background: #deefe9; border-color: #70a99e; }
-.v1-topology-popup {
-  position: absolute; bottom: calc(100% + .75rem); left: 50%; translate: -50% 0;
-  width: min(25rem, calc(100vw - 1.5rem)); max-height: min(36rem, calc(100dvh - 10rem)); overflow: auto;
-  padding: .85rem; border: 1px solid #c9d9d3; border-radius: .5rem; background: #fbfdfc; box-shadow: 0 .3rem 1rem #203d3929;
+.v1-topology-tool-list {
+  position: absolute; bottom: calc(100% + .4rem); left: .65rem;
+  width: min(25rem, calc(100% - 1.3rem)); max-height: min(36rem, calc(100dvh - 8rem)); overflow: auto;
+  display: grid; gap: .35rem; padding: .65rem;
+  border: 1px solid #c9d9d3; border-radius: .5rem; background: #fbfdfc; box-shadow: 0 .3rem 1rem #203d3929;
 }
-@media (max-width: 58rem) {
-  .v1-topology-tools details { position: static; }
-  .v1-topology-popup { bottom: calc(100% + .25rem); }
-}
-@media (max-width: 46rem) {
-  .v1-topology-tools { gap: .3rem; }
-  .v1-topology-tools summary { min-width: 0; padding-inline: .55rem; }
-  .v1-hierarchy-tree ul { max-height: min(42vh, 15rem); }
-}
+.v1-topology-popup { padding: .1rem .2rem .35rem; }
 .v1-topology-tools form { margin-top: .65rem; }
 .v1-topology-tools label { display: block; margin-top: .5rem; font-size: .85rem; }
 .v1-topology-tools input, .v1-topology-tools select { display: block; min-width: 0; width: 100%; margin-top: .22rem; min-height: 2rem; border: 1px solid #becfce; border-radius: .3rem; padding-inline: .35rem; }

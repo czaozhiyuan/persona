@@ -60,7 +60,6 @@ type Props = {
   project: Project;
   module: ModuleDefinition;
   moduleName: string;
-  treeHidden: boolean;
   modulePath: InstancePath;
   selectedInstance?: InstancePath;
   highlight: ReturnType<typeof projectPathHighlight>;
@@ -72,7 +71,7 @@ type Props = {
   mapPort: (mapping: PortMapping) => void;
 };
 
-export function TopologyCanvas({ project, module, moduleName, modulePath, treeHidden, selectedInstance, highlight, selectInstance, enterModule, move, resize, connect, mapPort }: Props) {
+export function TopologyCanvas({ project, module, moduleName, modulePath, selectedInstance, highlight, selectInstance, enterModule, move, resize, connect, mapPort }: Props) {
   const [viewport, setViewport] = useState<Viewport>();
   const [resizePreview, setResizePreview] = useState<Rect>();
   const canvas = useRef<HTMLDivElement>(null);
@@ -207,7 +206,7 @@ export function TopologyCanvas({ project, module, moduleName, modulePath, treeHi
     <div ref={canvas} className="v1-topology-canvas" aria-label="逻辑拓扑画布">
       <ReactFlow<CanvasNode, Edge> nodes={nodes} edges={edges.map(edge => highlight.edges.has(edge.id)
         ? { ...edge, className: 'v1-path-edge', style: { ...edge.style, stroke: '#a85618', strokeWidth: 3 }, zIndex: 2 } : edge)}
-        nodeTypes={nodeTypes} ariaLabelConfig={flowAriaLabels} fitView fitViewOptions={canvasFitOptions(treeHidden)}
+        nodeTypes={nodeTypes} ariaLabelConfig={flowAriaLabels} fitView fitViewOptions={canvasFitOptions}
         viewport={viewport} onViewportChange={changeViewport} onInit={instance => { flow.current = instance; }}
         minZoom={0.2} maxZoom={2} deleteKeyCode={null} onConnect={onConnect} onPaneClick={() => selectInstance()}
         onNodeClick={(_, node) => {
@@ -236,7 +235,7 @@ export function TopologyCanvas({ project, module, moduleName, modulePath, treeHi
           }
         }}>
         <Background />
-        <CanvasControls treeHidden={treeHidden} />
+        <CanvasControls />
       </ReactFlow>
       {!nodes.length && <span className="v1-topology-empty">添加实例或声明公开端口以开始。</span>}
     </div>

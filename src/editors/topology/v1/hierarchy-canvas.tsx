@@ -44,11 +44,10 @@ function visualKey(edge: SignalEdge): string | undefined {
   if (source.kind === 'cableCore') return JSON.stringify(['core', source.ref.scopePath, source.ref.bundleId, source.ref.coreId]);
 }
 
-export function HierarchyCanvas({ graph, scope, depth, treeHidden, result, selected, select, navigate }: {
+export function HierarchyCanvas({ graph, scope, depth, result, selected, select, navigate }: {
   graph: SignalGraph;
   scope: InstancePath;
   depth: number;
-  treeHidden: boolean;
   result?: PathResult;
   selected?: InstancePath;
   select: (path?: InstancePath) => void;
@@ -95,13 +94,13 @@ export function HierarchyCanvas({ graph, scope, depth, treeHidden, result, selec
 
   return <div className="v1-topology-canvas" aria-label="多层逻辑拓扑">
     <ReactFlow<OverviewNode, Edge> nodes={nodes} edges={edges} nodeTypes={nodeTypes} ariaLabelConfig={flowAriaLabels}
-      fitView fitViewOptions={canvasFitOptions(treeHidden)}
+      fitView fitViewOptions={canvasFitOptions}
       minZoom={0.001} maxZoom={2} nodesDraggable={false} nodesConnectable={false} deleteKeyCode={null}
       onPaneClick={() => select()}
       onNodeClick={(_, node) => { if (!node.data.boundary) select(node.data.path); }}
       onNodeDoubleClick={(_, node) => { if (!node.data.boundary && node.data.module) navigate(node.data.path); }}>
       <Background />
-      <CanvasControls treeHidden={treeHidden} />
+      <CanvasControls />
     </ReactFlow>
   </div>;
 }

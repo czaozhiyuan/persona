@@ -37,7 +37,7 @@ function placementAt(data: FormData, instancePath: InstancePath, enclosurePath: 
 
 export function LayoutEditor({ store, state }: { store: ProjectStore; state: ProjectStoreSnapshot }) {
   const { project, selection } = state;
-  const [requestedEnclosure, setRequestedEnclosure] = useState<string>();
+  const [requestedEnclosure, setRequestedEnclosure] = useState<{ key: string; scope: string }>();
   const [error, setError] = useState('');
   const { enclosures, placeable } = useMemo(() => {
     const enclosures: (LayoutOccurrence & { enclosure: PhysicalEnclosure })[] = [];
@@ -63,13 +63,14 @@ export function LayoutEditor({ store, state }: { store: ProjectStore; state: Pro
       const isAncestor = item.instancePath.every((id, index) => id === logicalPath[index]);
       return isAncestor && (!nearest || item.instancePath.length > nearest.instancePath.length) ? item : nearest;
     }, undefined);
-  const active = enclosures.find(item => item.key === requestedEnclosure)
+  const scope = pathKey(selection.modulePath);
+  const active = enclosures.find(item => requestedEnclosure?.scope === scope && item.key === requestedEnclosure.key)
     ?? enclosures.find(item => selectedPlacement && item.key === pathKey(selectedPlacement.enclosurePath))
     ?? logicalEnclosure ?? enclosures[0];
 
   if (!active) return <section className="panel v1-layout" aria-labelledby="layout-title">
     <h2 id="layout-title">机箱俯视布局</h2>
-    <p className="empty">请先在逻辑拓扑中创建带物理包络的机箱。</p>
+    <p className="empty">请先在框图中创建带物理包络的机箱。</p>
   </section>;
 
   const objects = placements.filter(item => pathKey(item.enclosurePath) === active.key).map(placement => {
@@ -98,8 +99,8 @@ export function LayoutEditor({ store, state }: { store: ProjectStore; state: Pro
   return <section className="panel v1-layout" aria-labelledby="layout-title">
     <div className="v1-layout-header">
       <h2 id="layout-title">机箱俯视布局</h2>
-      <label>机箱实例
-        <select value={active.key} onChange={event => { setRequestedEnclosure(event.target.value); setError(''); }}>
+      <label>机箱
+        <select value={active.key} onChange={event => { setRequestedEnclosure({ key: event.target.value, scope }); setError(''); }}>
           {enclosures.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}
         </select>
       </label>

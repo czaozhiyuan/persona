@@ -33,7 +33,7 @@ export function ConnectionForm({ module, ports, update }: { module: ModuleDefini
   const [selected, setSelected] = useState('');
   const connection = module.connections?.find(item => item.id === selected);
   const label = (ref: LocalEndpointRef) => ports.find(item => endpointKey(item.ref) === endpointKey(ref))?.label;
-  return <TopologyTool title="连接">
+  return <TopologyTool title="连线">
     <label>已有连接<select value={connection?.id ?? ''} onChange={event => setSelected(event.target.value)}>
       <option value="">新增连接</option>
       {module.connections?.map(item => <option key={item.id} value={item.id}>{label(item.from)} → {label(item.to)}</option>)}
@@ -69,7 +69,7 @@ export function MappingForm({ module, ports, update }: { module: ModuleDefinitio
   const publicPort = module.ports.find(item => item.id === selected);
   const mapping = module.portMappings?.find(item => item.portId === selected);
   const candidates = ports.filter(item => item.port.type === publicPort?.type && item.port.direction === publicPort.direction);
-  return <TopologyTool title="公开端口映射">
+  return <TopologyTool title="对外端口接线">
     <label>公开端口<select value={publicPort?.id ?? ''} onChange={event => setSelected(event.target.value)}>
       <option value="">请选择</option>
       {module.ports.map(port => <option key={port.id} value={port.id}>{portDisplayName(port.id, true)}{module.portMappings?.some(item => item.portId === port.id) ? '' : '（开放）'}</option>)}
