@@ -9,7 +9,7 @@ import type { ProjectStore } from '../../../state/v1/project-store';
 import { ChannelField } from '../properties/channel-field';
 import { LinkBudgetPanel } from './link-budget-panel';
 import { LinkSupplyFields } from './link-supply-fields';
-import { conversionKey, requiredEdgeKey, showEndpoint } from './link-options';
+import { conversionKey, requiredEdgeKey } from './link-options';
 import type { LinkOptions, Option } from './link-options';
 import './link-editor.css';
 
@@ -39,11 +39,11 @@ const statusLabels = {
 };
 const supplyLabels = { resolved: '供光路径已解析', missing: '供光缺失', ambiguous: '供光歧义', feedback_loop: '供光反馈环', search_limit: '供光搜索达到上限' };
 
-function Diagnostics({ result }: { result: PathResult }) {
+function Diagnostics({ result, showEndpoint }: { result: PathResult; showEndpoint: LinkOptions['showEndpoint'] }) {
   return <div className="v1-link-diagnostics" role="status" data-path-status={result.status}>
     <strong>{statusLabels[result.status]}</strong>
     {result.status !== 'resolved' && <p>
-      {result.status === 'incomplete' ? (result.endpoint ? '缺少内部端口映射' : '缺少起点或终点') : result.reason}
+      {result.status === 'incomplete' ? (result.endpoint ? '对外端口尚未连接到内部' : '缺少起点或终点') : result.reason}
       {result.endpoint && ` · ${showEndpoint(result.endpoint)}`}
     </p>}
     {result.trace && <details>
@@ -89,7 +89,7 @@ export function LinkEditor({ store, project, options, selected, result, budget, 
       </select>
     </div>
     {error && <p className="error" role="alert">{error}</p>}
-    {result && <Diagnostics result={result} />}
+    {result && <Diagnostics result={result} showEndpoint={options.showEndpoint} />}
     <details open={!selected || undefined}>
       <summary>链路设置</summary>
       <form key={JSON.stringify(selected ?? null)} onSubmit={event => {
@@ -125,14 +125,14 @@ export function LinkEditor({ store, project, options, selected, result, budget, 
     {selected && <>
       <LinkSupplyFields options={options.opticalSources} sources={conditions.opticalSources ?? []}
         onChange={opticalSources => setConditions({ ...conditions, opticalSources })} />
-      <LinkBudgetPanel link={selected} budget={budget} conditions={conditions}
+      <LinkBudgetPanel link={selected} budget={budget} conditions={conditions} labels={options}
         setInputPower={inputPowerDbm => setConditions({ ...conditions, inputPowerDbm })} />
       <details>
         <summary>电光—光电标定绑定</summary>
         <label>工程内绑定<select value={binding?.id ?? ''} onChange={event => { setBindingId(event.target.value); setError(''); }}>
           <option value="">新建绑定</option>
           {bindings.map(item => <option key={item.id} value={item.id}>
-            {profiles.find(profile => profile.id === item.profileId)?.name} · {showEndpoint({ instancePath: item.eo.instancePath, portId: item.eo.fromPortId })}
+            {profiles.find(profile => profile.id === item.profileId)?.name} · {options.showEndpoint({ instancePath: item.eo.instancePath, portId: item.eo.fromPortId })}
           </option>)}
         </select></label>
         {bindings.length > 0 && <ul className="v1-binding-matches">{bindings.map(item => {

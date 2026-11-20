@@ -2,8 +2,7 @@ import { useMemo } from 'react';
 import { calculateDcBudget } from '../../../engine/v1/dc-budget';
 import type { DcBudget } from '../../../engine/v1/dc-budget';
 import type { Project } from '../../../model/v1/types';
-import { showEndpoint } from '../links/link-options';
-import { portDisplayName } from '../labels';
+import type { LinkOptions } from '../links/link-options';
 import { Metric, Rating } from './budget-values';
 
 type Output = DcBudget['supplies'][number];
@@ -31,7 +30,9 @@ function OutputHead() {
   return <><th>输出电压</th><th>输出需求</th><th>已知需求小计</th><th>额定容量</th><th>容量余量</th></>;
 }
 
-export function DcBudgetPanel({ project }: { project: Project }) {
+export function DcBudgetPanel({ project, labels: { showEndpoint, showPort } }: {
+  project: Project; labels: Pick<LinkOptions, 'showEndpoint' | 'showPort'>;
+}) {
   const budget = useMemo(() => calculateDcBudget(project), [project]);
   const ratings = budget.ports.flatMap(port => port.rating ? [port.rating] : []);
   return <section className="panel v1-budget-report" aria-labelledby="v1-dc-heading">
@@ -48,7 +49,7 @@ export function DcBudgetPanel({ project }: { project: Project }) {
     {budget.converters.length > 0 && <div className="v1-budget-table"><table>
       <caption>直流变换器（DC/DC）</caption><thead><tr><th>实例输入 → 输出</th><th>效率</th><th>输入需求</th><OutputHead /></tr></thead>
       <tbody>{budget.converters.map(item => <tr key={JSON.stringify([item.input, item.output.endpoint])}>
-        <th scope="row">{showEndpoint(item.input)} → {portDisplayName(item.output.endpoint.portId, true)}</th>
+        <th scope="row">{showEndpoint(item.input)} → {showPort(item.output.endpoint)}</th>
         <td><Metric metric={item.efficiency} /></td><td data-metric="dc-input-demand"><Metric metric={item.inputDemandW} /></td>
         <OutputColumns output={item.output} />
       </tr>)}</tbody>

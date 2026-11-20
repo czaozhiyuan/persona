@@ -1,5 +1,6 @@
 import type { Edge } from '@xyflow/react';
 import { mediaLabels, portDisplayName } from '../../../workbench/v1/labels';
+import type { LocalEndpointRef } from '../../../model/v1/topology';
 import type { InstancePath, ModuleDefinition } from '../../../model/v1/types';
 import type { WiringSelection } from '../../../state/v1/remove-topology-object';
 import type { projectTopology, TopologyItem } from './topology-projection';
@@ -34,6 +35,7 @@ export function projectWiring(projection: ReturnType<typeof projectTopology>,
     const boundary = nodeId(key);
     const children = new Map(members.map(member => [member.item.instance!.id, member]));
     const child = (id: string) => nodeId(children.get(id)!.key);
+    const childPort = ({ instanceId, portId }: LocalEndpointRef) => children.get(instanceId)!.item.definition.ports.find(port => port.id === portId)!;
     for (const [id, member] of children) {
       for (const port of member.item.definition.ports) {
         ports.set(portKey(nodeId(member.key), handleId(port.id)), {
@@ -60,18 +62,19 @@ export function projectWiring(projection: ReturnType<typeof projectTopology>,
       edge(canvasEdgeKey('connection', item.id), { kind: 'connection', id: item.id }, {
         source: child(item.from.instanceId), target: child(item.to.instanceId),
         sourceHandle: handleId(item.from.portId), targetHandle: handleId(item.to.portId),
-        ariaLabel: `连线：${portDisplayName(item.from.portId)} → ${portDisplayName(item.to.portId)}`,
+        ariaLabel: `连线：${portDisplayName(childPort(item.from))} → ${portDisplayName(childPort(item.to))}`,
         label: item.mediaKind && mediaLabels[item.mediaKind],
       });
     }
     for (const mapping of module.portMappings ?? []) {
-      const outward = module.ports.find(port => port.id === mapping.portId)?.direction === 'out';
+      const port = module.ports.find(port => port.id === mapping.portId)!;
+      const outward = port.direction === 'out';
       const inner = { id: child(mapping.target.instanceId), handle: handleId(mapping.target.portId) };
       const outer = { id: boundary, handle: handleId(mapping.portId, true) };
       const [from, to] = outward ? [inner, outer] : [outer, inner];
       edge(canvasEdgeKey('mapping', mapping.portId), { kind: 'mapping', id: mapping.portId }, {
         source: from.id, target: to.id, sourceHandle: from.handle, targetHandle: to.handle,
-        ariaLabel: `公开端口映射：${portDisplayName(mapping.portId)}`, style: { strokeDasharray: '6 4' },
+        ariaLabel: `连接到内部端口：${portDisplayName(port)} · ${portDisplayName(childPort(mapping.target))}`, style: { strokeDasharray: '6 4' },
       });
     }
     for (const bundle of module.cableBundles ?? []) {

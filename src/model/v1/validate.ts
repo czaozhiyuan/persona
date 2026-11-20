@@ -110,7 +110,7 @@ export function validateProject(project: Project): void {
     const mapped = new Set<string>();
     for (const mapping of module.portMappings ?? []) {
       const port = portsByDefinition.get(module.id)?.get(mapping.portId);
-      requireValid(port, `模块「${module.id}」没有公开端口「${mapping.portId}」`);
+      requireValid(port, `模块「${module.id}」没有对外端口「${mapping.portId}」`);
       requireValid(!mapped.has(port.id), `模块「${module.id}」的端口「${port.id}」存在重复映射`);
       const child = children.get(mapping.target.instanceId);
       requireValid(child, `模块「${module.id}」的端口「${port.id}」须映射到直接子实例`);

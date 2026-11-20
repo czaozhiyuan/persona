@@ -158,9 +158,9 @@ export function PropertiesPanel({ store, occurrence, occurrences, jumpToParamete
         <button type="button" onClick={() => addModule('copy')}>复制为独立模块</button>
       </section>}
       {!!definition.ports.length && <section>
-        <h3>端口</h3>
-        {definition.ports.map(port => <details key={port.id}>
-          <summary>{portDisplayName(port.id)}<span className="v1-parameter-value">
+        <h3>{definition.kind === 'module' ? '对外端口' : '端口'}</h3>
+        {definition.ports.map(port => <details key={port.id} data-port-id={port.id}>
+          <summary>{portDisplayName(port)}<span className="v1-parameter-value">
             {portTypeLabels[port.type]} · {port.direction === 'in' ? '输入' : '输出'}
           </span></summary>
           <p className="v1-property-effective">端口属于共享结构。{sharedLocations.length > 0 && ` 影响 ${sharedLocations.join('、')}。`} 端口 ID：{port.id}</p>
@@ -201,7 +201,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, jumpToParamete
           </form>
         </details>)}
         {definition.kind === 'component' && definition.transfers?.map((transfer, index) => <details key={index}>
-          <summary>传输 · {transferLabels[transfer.kind]} · {portDisplayName(transfer.fromPortId, true)} → {portDisplayName(transfer.toPortId, true)}</summary>
+          <summary>传输 · {transferLabels[transfer.kind]} · {portDisplayName(definition.ports.find(port => port.id === transfer.fromPortId)!, true)} → {portDisplayName(definition.ports.find(port => port.id === transfer.toPortId)!, true)}</summary>
           <TransferFields key={JSON.stringify(transfer)} transfer={transfer} definition={definition}
             save={read => changeDefinition(() => ({ ...definition,
               transfers: definition.transfers?.map((item, i) => i === index ? read() : item),

@@ -7,10 +7,15 @@ import { builtInDefinitions } from '../../../library/v1/built-in';
 import { insertLibraryItem } from '../../../library/v1/insert-library-item';
 import type { LibraryItem } from '../../../library/v1/insert-library-item';
 import { removeTopologyInstance, removeWiring } from '../../../state/v1/remove-topology-object';
+import type { LocalEndpointRef } from '../../../model/v1/topology';
+import { connectBoundaryPort, exposeModulePort, renamePort } from '../../../state/v1/module-ports';
 import type { WiringSelection } from '../../../state/v1/remove-topology-object';
 import type { InstancePath, ModuleDefinition, PortDirection, PortType, Project } from '../../../model/v1/types';
 import type { ProjectStore, ProjectStoreSnapshot } from '../../../state/v1/project-store';
 import { editModule, editModuleWiring, moveTopologyNode, resizeTopologyFrame } from '../../../state/v1/topology-edits';
+import { PortActionsDialog } from './port-actions-dialog';
+import { PortBindingDialog } from './port-binding-dialog';
+import type { BindingPreview } from './port-binding-dialog';
 import { PortDeletionDialog } from './port-deletion-dialog';
 import { TopologyCanvas } from './topology-canvas';
 import { displayDepth, hierarchyKey, inHierarchy } from './hierarchy-view';
@@ -29,6 +34,8 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
   const maxDepth = displayDepth(graph.instances, scope);
   const visibleDepth = displayDepth(graph.instances, scope, expanded);
   const [preview, setPreview] = useState<{ definitionId: string; portId: string }>();
+  const [portAction, setPortAction] = useState<{ path: InstancePath; portId: string }>();
+  const [bindingPreview, setBindingPreview] = useState<BindingPreview>();
   const definitions = new Map([...project.moduleDefinitions, ...project.componentDefinitions].map(definition => [definition.id, definition]));
   const projectDefinitions = [...definitions.values()].filter(definition =>
     definition.id !== module.id && definition.id !== project.rootModuleDefinitionId);
@@ -38,7 +45,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
   const ports: LocalPort[] = module.instances.flatMap(instance => {
     const name = store.resolveInstance([...scope, instance.id])?.instance?.name ?? instance.name;
     return definitions.get(instance.definitionId)!.ports.map(port => ({
-      ref: { instanceId: instance.id, portId: port.id }, port, label: `${name} / ${portDisplayName(port.id, true)} · ${portTypeLabels[port.type]}`,
+      ref: { instanceId: instance.id, portId: port.id }, port, label: `${name} / ${portDisplayName(port, true)} · ${portTypeLabels[port.type]}`,
     }));
   });
 
@@ -55,10 +62,22 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
     return true;
   }
 
+  function requestBinding(path: InstancePath, portId: string, target?: LocalEndpointRef) {
+    const definition = store.resolveInstance(path)?.definition;
+    if (definition?.kind !== 'module') return false;
+    const existing = definition.portMappings?.find(mapping => mapping.portId === portId);
+    if (!existing) return !!target && commit(draft => connectBoundaryPort(draft, definition.id, portId, target));
+    if (target?.instanceId === existing.target.instanceId && target.portId === existing.target.portId) return false;
+    setMessage('');
+    setBindingPreview({ scope: path, module: definition, portId, target });
+    return true;
+  }
+
   function deleteSelection(path: InstancePath, instanceId?: string, wire?: WiringSelection) {
     const definition = store.resolveInstance(path)?.definition;
     if (definition?.kind !== 'module') return false;
     if (instanceId) return commit(draft => removeTopologyInstance(draft, definition.id, instanceId));
+    if (wire?.kind === 'mapping') return requestBinding(path, wire.id);
     return !!wire && commit(draft => removeWiring(draft, definition.id, wire));
   }
 
@@ -111,10 +130,36 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
       setPreview({ definitionId, portId: String(new FormData(event.currentTarget).get('port')) });
     }}>
       <label>{heading}
-        <select name="port" required>{available.map(port => <option key={port.id} value={port.id}>{portDisplayName(port.id, true)}</option>)}</select>
+        <select name="port" required>{available.map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true)}</option>)}</select>
       </label>
       <button type="submit" aria-label={`预览删除 · ${heading}`}>预览删除</button>
     </form>;
+  }
+
+  function renderPortActions({ path, portId }: NonNullable<typeof portAction>) {
+    const item = store.resolveInstance(path);
+    const port = item?.definition.ports.find(port => port.id === portId);
+    if (!item || !port) return null;
+    const { definition, instance } = item;
+    const parentPath = path.slice(0, -1);
+    const parent = path.length > scope.length ? store.resolveInstance(parentPath) : undefined;
+    const exposure = parent?.definition.kind === 'module' && instance ? {
+      moduleName: parent.instance?.name ?? parent.definition.name,
+      locations: structureScope(graph.instances, parent.definition.id),
+      create: (name: string) => {
+        if (commit(draft => exposeModulePort(draft, parentPath, { instanceId: instance.id, portId }, name))) setPortAction(undefined);
+      },
+    } : undefined;
+    return <PortActionsDialog port={port} name={instance?.name ?? definition.name} exposure={exposure}
+      locations={structureScope(graph.instances, definition.id)} error={message}
+      rename={name => {
+        if (name === (port.name ?? '') || commit(draft => renamePort(draft, definition.id, portId, name))) setPortAction(undefined);
+      }}
+      disconnect={definition.kind === 'module' && definition.portMappings?.some(mapping => mapping.portId === portId) ? () => {
+        setPortAction(undefined);
+        requestBinding(path, portId);
+      } : undefined}
+      close={() => { setMessage(''); setPortAction(undefined); }} />;
   }
 
   return <section className="v1-topology" aria-label={`框图 · ${moduleName}`}>
@@ -122,6 +167,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
       <TopologyCanvas project={project} instances={graph.instances} modulePath={scope} selectedInstance={selection.instancePath}
         pathResult={pathResult} expanded={expanded} toggleModule={toggleModule}
         selectInstance={store.selectInstance} enterModule={store.selectModule}
+        openPort={(path, portId) => { setMessage(''); setPortAction({ path, portId }); }}
         add={add} deleteSelection={deleteSelection} rename={rename} report={setMessage} undo={store.undo} redo={store.redo}
         move={(path, position, frame) => commit(draft => {
           const placed = moveTopologyNode(draft, path, position);
@@ -134,9 +180,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
         connect={(path, connection) => editScope(path, current => ({
           ...current, connections: [...(current.connections ?? []), { ...connection, id: crypto.randomUUID() }],
         }))}
-        mapPort={(path, mapping) => editScope(path, current => ({
-          ...current, portMappings: [...(current.portMappings ?? []).filter(item => item.portId !== mapping.portId), mapping],
-        }))} />
+        mapPort={(path, mapping) => requestBinding(path, mapping.portId, mapping.target)} />
       <nav className="v1-topology-path" aria-label="模块路径">
         {Array.from({ length: scope.length + 1 }, (_, index) => {
           const path = scope.slice(0, index);
@@ -156,7 +200,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
         <button type="button" onClick={() => expandTo(maxDepth + 1)}>展开全部</button>
         <output htmlFor="topology-depth">{visibleDepth} / {maxDepth}</output>
       </div>
-      {message && !preview && <p className="v1-topology-message error" role="alert">{message}</p>}
+      {message && !preview && !portAction && !bindingPreview && <p className="v1-topology-message error" role="alert">{message}</p>}
     </div>
     <div className="v1-topology-tools">
       {sharedLocations.length > 0 && <details data-workbench-popup>
@@ -228,27 +272,30 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
           event.preventDefault();
           const form = event.currentTarget;
           const data = new FormData(form);
-          const id = field(data, 'id');
+          const name = field(data, 'name');
           if (updateModule(current => ({ ...current, ports: [...current.ports, {
-            id, type: field(data, 'type') as PortType, direction: field(data, 'direction') as PortDirection,
+            id: crypto.randomUUID(), name, type: field(data, 'type') as PortType, direction: field(data, 'direction') as PortDirection,
           }] }))) form.reset();
         }}>
-          <label>端口 ID<input name="id" required /></label>
+          <label>显示名称<input name="name" required /></label>
           <label>端口类型<select name="type" defaultValue="OPTICAL">
             {Object.entries(portTypeLabels).map(([type, label]) => <option key={type} value={type}>{label}</option>)}
           </select></label>
           <label>端口方向<select name="direction"><option value="in">输入</option><option value="out">输出</option></select></label>
           <button type="submit">添加对外端口</button>
         </form>
-        {portRemoval(module.id, '删除公开端口')}
+        {portRemoval(module.id, '删除对外端口')}
         {selected && selected.id !== module.id && portRemoval(selected.id, `删除所选实例的定义端口 · ${selected.name}`)}
       </TopologyTool>
       <ConnectionForm module={module} ports={ports} update={updateWiring} />
-      <MappingForm module={module} ports={ports} update={updateModule} />
+      <MappingForm module={module} ports={ports} connect={(portId, target) => requestBinding(scope, portId, target)} />
       <CableForm module={module} ports={ports} update={updateWiring} />
         </div>
       </details>
     </div>
+    {portAction && renderPortActions(portAction)}
+    {bindingPreview && <PortBindingDialog store={store} preview={bindingPreview}
+      locations={structureScope(graph.instances, bindingPreview.module.id)} close={() => setBindingPreview(undefined)} />}
     {preview && <PortDeletionDialog store={store} {...preview} close={() => setPreview(undefined)} />}
   </section>;
 }

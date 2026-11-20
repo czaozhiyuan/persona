@@ -31,6 +31,7 @@ type NodeData = {
   pathPorts: ReadonlySet<string>;
   foldedPath?: boolean;
   toggle?: () => void;
+  openPort: (id: string) => void;
   wireState?: (id: string, inner?: boolean) => 'origin' | 'target' | undefined;
 };
 type DeviceNode = Node<NodeData, 'device'>;
@@ -54,14 +55,14 @@ function Device({ id, data, selected }: NodeProps<DeviceNode>) {
   return <div className={`v1-topology-device${selected ? ' is-selected' : ''}${data.foldedPath ? ' has-folded-path' : ''}`}>
     <div className="v1-block-title"><strong>{data.name}</strong><ExpandButton data={data} expanded={false} /></div>
     {data.foldedPath && <span className="v1-topology-path-label">路径经过内部</span>}
-    <BlockPorts ports={data.ports} highlighted={data.pathPorts} handleId={handleId} editable wireState={data.wireState} />
+    <BlockPorts ports={data.ports} highlighted={data.pathPorts} handleId={handleId} editable wireState={data.wireState} openPort={data.openPort} />
   </div>;
 }
 
 function Frame({ id, data, selected }: NodeProps<FrameNode>) {
   return <>
     <ModuleFrame id={id} name={data.name} ports={data.ports} highlighted={data.pathPorts} handleId={handleId}
-      editable outerHandles={data.outerHandles} selected={selected} wireState={data.wireState}
+      editable outerHandles={data.outerHandles} selected={selected} wireState={data.wireState} openPort={data.openPort}
       controls={<>
         {data.locations.length > 0 && <span className="v1-inline-shared" title={data.locations.join('、')}
           aria-label={`共享结构会应用到 ${data.locations.join('、')}`}>共享 · {data.locations.length} 处</span>}
@@ -81,6 +82,7 @@ type Props = {
   pathResult?: PathResult;
   expanded: ReadonlySet<string>;
   toggleModule: (path: InstancePath) => void;
+  openPort: (path: InstancePath, portId: string) => void;
   selectInstance: (path?: InstancePath) => void;
   enterModule: (path: InstancePath) => void;
   move: (path: InstancePath, position: XYPosition, frame?: Rect) => void;
@@ -100,7 +102,7 @@ export function TopologyCanvas(props: Props) {
 }
 
 function EditableTopologyCanvas({ project, instances, modulePath, selectedInstance, pathResult, expanded, toggleModule, selectInstance,
-  enterModule, move, resize, connect, mapPort, add, deleteSelection, rename, report, undo, redo }: Props) {
+  enterModule, move, resize, connect, mapPort, add, deleteSelection, rename, report, undo, redo, openPort }: Props) {
   const flowStore = useStoreApi();
   const [wireStart, setWireStart] = useState<string>();
   const cancelled = useRef(false);
@@ -201,6 +203,7 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
         highlight?.ports.has(signalPortKey({ instancePath: path, portId: port.id }))).map(port => port.id)),
       foldedPath: !frame && !!item.instance && parentHighlight?.folded.has(item.instance.id),
       wireState: wireStart ? (port, inner) => wireState(id, port, inner) : undefined,
+      openPort: portId => { cancelWiring(); openPort(path, portId); },
       toggle: !boundary && definition.kind === 'module' ? () => {
         cancelWiring();
         setSelectedEdgeKey(undefined);

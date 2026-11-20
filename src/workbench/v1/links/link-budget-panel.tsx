@@ -3,12 +3,14 @@ import type { createLinkBudget, LinkBudgetConditions, LinkBudgetPoint, RfScanRan
 import type { NamedLink } from '../../../model/v1/topology';
 import { RfScanPlot, scanMetrics } from './rf-scan-plot';
 import type { ScanMetric } from './rf-scan-plot';
-import { showEndpoint } from './link-options';
+import type { LinkOptions } from './link-options';
 import { Metric, Rating } from '../budgets/budget-values';
 
 const statusLabels = { valid: '可计算', partial: '部分可计算', error: '不可计算' };
 
-function PointDetails({ point }: { point: LinkBudgetPoint }) {
+type PortLabels = Pick<LinkOptions, 'showEndpoint' | 'showPort'>;
+
+function PointDetails({ point, labels: { showEndpoint, showPort } }: { point: LinkBudgetPoint; labels: PortLabels }) {
   const issue = point.kind !== 'conversion' ? point.pathIssue : undefined;
   return <div className="v1-point-details" data-budget-status={point.status}>
     <h4>{Number.isFinite(point.frequencyGHz) ? `${point.frequencyGHz} GHz` : '频率未设'} · {statusLabels[point.status]}</h4>
@@ -53,7 +55,7 @@ function PointDetails({ point }: { point: LinkBudgetPoint }) {
         <div className="v1-budget-table"><table><thead><tr>
           <th>端口</th><th>本级增益</th><th>本级噪声系数</th><th>输出功率</th><th>输入额定</th>
         </tr></thead><tbody>{point.rfStages.map(stage => <tr key={stage.edgeIndex}>
-          <th scope="row">{showEndpoint(stage.input)} → {stage.output.portId}</th>
+          <th scope="row">{showEndpoint(stage.input)} → {showPort(stage.output)}</th>
           <td><Metric metric={stage.gainDb} /></td><td><Metric metric={stage.nfDb} /></td>
           <td><Metric metric={stage.powerDbm} /></td><td><Rating check={stage.rating} /></td>
         </tr>)}</tbody></table></div>
@@ -62,8 +64,9 @@ function PointDetails({ point }: { point: LinkBudgetPoint }) {
   </div>;
 }
 
-export function LinkBudgetPanel({ link, budget, conditions, setInputPower }: {
+export function LinkBudgetPanel({ link, budget, conditions, setInputPower, labels }: {
   link: NamedLink;
+  labels: PortLabels;
   budget: ReturnType<typeof createLinkBudget>;
   conditions: LinkBudgetConditions;
   setInputPower: (power: number | undefined) => void;
@@ -89,7 +92,7 @@ export function LinkBudgetPanel({ link, budget, conditions, setInputPower }: {
           setInputPower(Number.isFinite(value) ? value : undefined);
         }} /></label>
     </div>
-    <div className="v1-single-point"><PointDetails point={single} /></div>
+    <div className="v1-single-point"><PointDetails point={single} labels={labels} /></div>
     <details>
       <summary>射频扫描 · 1 GHz 步长</summary>
       <form onSubmit={event => {
@@ -119,7 +122,7 @@ export function LinkBudgetPanel({ link, budget, conditions, setInputPower }: {
           </select></label>
         </div>
         <RfScanPlot points={scan.points} metric={metric} selected={selectedPoint.frequencyGHz} />
-        <div className="v1-scan-point"><PointDetails point={selectedPoint} /></div>
+        <div className="v1-scan-point"><PointDetails point={selectedPoint} labels={labels} /></div>
       </>}
     </details>
   </section>;

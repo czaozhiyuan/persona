@@ -59,14 +59,21 @@ export function planPortDeletion(project: Project, definitionId: string, portId:
     if (!pathsByDefinition.has(definition.id)) pathsByDefinition.set(definition.id, paths);
     paths.push(instancePath);
   }
-  const selected = [...project.moduleDefinitions, ...project.componentDefinitions].find(definition => definition.id === definitionId);
-  if (!selected?.ports.some(port => port.id === portId)) return undefined;
+  const definitions = new Map([...project.moduleDefinitions, ...project.componentDefinitions].map(definition => [definition.id, definition]));
+  const removedPort = definitions.get(definitionId)?.ports.find(port => port.id === portId);
+  if (!removedPort) return undefined;
 
   const impacts: PortDeletionImpact[] = [];
   function report(kind: ImpactKind, name: string, scope: string, path?: InstancePath) {
     impacts.push({ kind, name, definitionId: scope, paths: path === undefined ? pathsByDefinition.get(scope) ?? [] : [path] });
   }
-  report('端口', portId, definitionId);
+  report('端口', removedPort.name ? `${removedPort.name}（${portId}）` : portId, definitionId);
+
+  function endpointLabel(module: ModuleDefinition, ref: LocalEndpointRef) {
+    const instance = module.instances.find(instance => instance.id === ref.instanceId)!;
+    const port = definitions.get(instance.definitionId)?.ports.find(port => port.id === ref.portId);
+    return `${instance.name} · ${port?.name ?? ref.portId}`;
+  }
 
   const componentDefinitions = project.componentDefinitions.map(component => {
     if (component.id !== definitionId) return component;
@@ -107,12 +114,15 @@ export function planPortDeletion(project: Project, definitionId: string, portId:
       ports: module.id === definitionId ? module.ports.filter(port => port.id !== portId) : module.ports,
       connections: module.connections?.filter(connection => {
         const removed = hits(connection.from) || hits(connection.to);
-        if (removed) report('连接', connection.id, module.id);
+        if (removed) report('连接', `${endpointLabel(module, connection.from)} → ${endpointLabel(module, connection.to)}`, module.id);
         return !removed;
       }),
       portMappings: module.portMappings?.filter(mapping => {
         const removed = (module.id === definitionId && mapping.portId === portId) || hits(mapping.target);
-        if (removed) report('端口映射', mapping.portId, module.id);
+        if (removed) {
+          const port = module.ports.find(port => port.id === mapping.portId)!;
+          report('端口映射', `${port.name ?? port.id} ↔ ${endpointLabel(module, mapping.target)}`, module.id);
+        }
         return !removed;
       }),
       cableBundles: module.cableBundles?.map(bundle => ({
