@@ -8,28 +8,26 @@ import { insertLibraryItem } from '../../../library/v1/insert-library-item';
 import type { LibraryItem } from '../../../library/v1/insert-library-item';
 import { removeTopologyInstance, removeWiring } from '../../../state/v1/remove-topology-object';
 import type { WiringSelection } from '../../../state/v1/remove-topology-object';
-import type { ModuleDefinition, PortDirection, PortType, Project } from '../../../model/v1/types';
+import type { InstancePath, ModuleDefinition, PortDirection, PortType, Project } from '../../../model/v1/types';
 import type { ProjectStore, ProjectStoreSnapshot } from '../../../state/v1/project-store';
 import { editModule, editModuleWiring, moveTopologyNode, resizeTopologyFrame } from '../../../state/v1/topology-edits';
 import { PortDeletionDialog } from './port-deletion-dialog';
-import { projectPathHighlight } from './path-highlight';
 import { TopologyCanvas } from './topology-canvas';
-import { HierarchyCanvas } from './hierarchy-canvas';
-import { displayDepth, hierarchyKey } from './hierarchy-view';
+import { displayDepth, hierarchyKey, inHierarchy } from './hierarchy-view';
 import { CableForm, ConnectionForm, MappingForm, TopologyTool, field } from './wiring-forms';
 import type { LocalPort, UpdateWiring } from './wiring-forms';
 import './topology.css';
 
-export function TopologyEditor({ store, state, module, pathResult, graph, rename }: {
+export function TopologyEditor({ store, state, module, pathResult, graph, rename, expanded, setExpanded }: {
   store: ProjectStore; state: ProjectStoreSnapshot; module: ModuleDefinition; pathResult?: PathResult; graph: SignalGraph; rename: () => void;
+  expanded: ReadonlySet<string>; setExpanded: (value: ReadonlySet<string>) => void;
 }) {
   const { project, selection } = state;
   const scope = selection.modulePath;
   const moduleName = store.resolveInstance(scope)?.instance?.name ?? module.name;
   const [message, setMessage] = useState('');
-  const [requestedDepth, setRequestedDepth] = useState(1);
   const maxDepth = displayDepth(graph.instances, scope);
-  const depth = Math.min(requestedDepth, maxDepth);
+  const visibleDepth = displayDepth(graph.instances, scope, expanded);
   const [preview, setPreview] = useState<{ definitionId: string; portId: string }>();
   const definitions = new Map([...project.moduleDefinitions, ...project.componentDefinitions].map(definition => [definition.id, definition]));
   const projectDefinitions = [...definitions.values()].filter(definition =>
@@ -57,9 +55,48 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
     return true;
   }
 
-  function deleteSelection(instanceId?: string, wire?: WiringSelection) {
-    if (instanceId) return commit(draft => removeTopologyInstance(draft, module.id, instanceId));
-    return !!wire && commit(draft => removeWiring(draft, module.id, wire));
+  function deleteSelection(path: InstancePath, instanceId?: string, wire?: WiringSelection) {
+    const definition = store.resolveInstance(path)?.definition;
+    if (definition?.kind !== 'module') return false;
+    if (instanceId) return commit(draft => removeTopologyInstance(draft, definition.id, instanceId));
+    return !!wire && commit(draft => removeWiring(draft, definition.id, wire));
+  }
+
+  function applyExpansion(next: Set<string>) {
+    setExpanded(next);
+    const selected = selection.instancePath;
+    if (!selected || !inHierarchy(scope, selected)) return;
+    for (let length = scope.length + 1; length < selected.length; length++) {
+      const ancestor = selected.slice(0, length);
+      if (!next.has(hierarchyKey(ancestor))) {
+        store.selectInstance(ancestor);
+        break;
+      }
+    }
+  }
+
+  function toggleModule(path: InstancePath) {
+    const key = hierarchyKey(path);
+    const next = new Set(expanded);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    applyExpansion(next);
+  }
+
+  function expandTo(depth: number) {
+    const next = new Set(expanded);
+    for (const { instancePath, definition } of graph.instances) {
+      if (definition.kind !== 'module' || instancePath.length <= scope.length || !inHierarchy(scope, instancePath)) continue;
+      const key = hierarchyKey(instancePath);
+      if (instancePath.length - scope.length < depth) next.add(key);
+      else next.delete(key);
+    }
+    applyExpansion(next);
+  }
+
+  function editScope(path: InstancePath, change: Parameters<UpdateWiring>[0]) {
+    const definition = store.resolveInstance(path)?.definition;
+    return definition?.kind === 'module' && commit(draft => editModule(draft, definition.id, change));
   }
 
   const updateModule: UpdateWiring = change => commit(draft => editModule(draft, module.id, change));
@@ -82,28 +119,24 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
 
   return <section className="v1-topology" aria-label={`框图 · ${moduleName}`}>
     <div className="v1-hierarchy-workspace">
-    {depth === 1 ? <TopologyCanvas key={hierarchyKey(scope)} project={project} module={module} moduleName={moduleName}
-      modulePath={scope} selectedInstance={selection.instancePath}
-      highlight={projectPathHighlight(pathResult, scope)}
-      selectInstance={store.selectInstance} enterModule={store.selectModule}
-      add={add} deleteSelection={deleteSelection} rename={rename} report={setMessage} undo={store.undo} redo={store.redo}
-      move={(id, position, frame) => commit(draft => {
-        const placed = moveTopologyNode(draft, [...scope, id], position);
-        return frame ? resizeTopologyFrame(placed, { modulePath: scope, ...frame }) : placed;
-      })}
-      resize={(frame, adjustments) => commit(draft => {
-        const placed = adjustments.reduce((current, { instanceId, position }) =>
-          moveTopologyNode(current, [...scope, instanceId], position), draft);
-        return resizeTopologyFrame(placed, { modulePath: scope, ...frame });
-      })}
-      connect={connection => updateModule(current => ({
-        ...current, connections: [...(current.connections ?? []), { ...connection, id: crypto.randomUUID() }],
-      }))}
-      mapPort={mapping => updateModule(current => ({
-        ...current, portMappings: [...(current.portMappings ?? []).filter(item => item.portId !== mapping.portId), mapping],
-      }))} /> : <HierarchyCanvas key={JSON.stringify([scope, depth])} graph={graph} scope={scope} depth={depth}
-        result={pathResult}
-        selected={selection.instancePath} select={store.selectInstance} navigate={store.selectModule} />}
+      <TopologyCanvas project={project} instances={graph.instances} modulePath={scope} selectedInstance={selection.instancePath}
+        pathResult={pathResult} expanded={expanded} toggleModule={toggleModule}
+        selectInstance={store.selectInstance} enterModule={store.selectModule}
+        add={add} deleteSelection={deleteSelection} rename={rename} report={setMessage} undo={store.undo} redo={store.redo}
+        move={(path, position, frame) => commit(draft => {
+          const placed = moveTopologyNode(draft, path, position);
+          return frame ? resizeTopologyFrame(placed, { modulePath: path.slice(0, -1), ...frame }) : placed;
+        })}
+        resize={(frame, adjustments) => commit(draft => {
+          const placed = adjustments.reduce((current, { path, position }) => moveTopologyNode(current, path, position), draft);
+          return resizeTopologyFrame(placed, { modulePath: scope, ...frame });
+        })}
+        connect={(path, connection) => editScope(path, current => ({
+          ...current, connections: [...(current.connections ?? []), { ...connection, id: crypto.randomUUID() }],
+        }))}
+        mapPort={(path, mapping) => editScope(path, current => ({
+          ...current, portMappings: [...(current.portMappings ?? []).filter(item => item.portId !== mapping.portId), mapping],
+        }))} />
       <nav className="v1-topology-path" aria-label="模块路径">
         {Array.from({ length: scope.length + 1 }, (_, index) => {
           const path = scope.slice(0, index);
@@ -115,15 +148,14 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
         })}
       </nav>
       <div className="v1-hierarchy-depth">
-        <label htmlFor="topology-depth">展开深度</label>
-        <span>当前层</span>
-        <input id="topology-depth" type="range" min={1} max={maxDepth} value={depth} disabled={maxDepth === 1}
-          aria-orientation="vertical" aria-valuetext={`第 ${depth} 层，共 ${maxDepth} 层`}
-          onChange={event => setRequestedDepth(Number(event.currentTarget.value))} />
-        <span>全部</span>
-        <output htmlFor="topology-depth">{depth} / {maxDepth}</output>
+        <label htmlFor="topology-depth">批量展开深度</label>
+        <button type="button" onClick={() => expandTo(1)}>收起全部</button>
+        <input id="topology-depth" type="range" min={1} max={maxDepth} value={visibleDepth} disabled={maxDepth === 1}
+          aria-orientation="vertical" aria-valuetext={`第 ${visibleDepth} 层，共 ${maxDepth} 层`}
+          onChange={event => expandTo(Number(event.currentTarget.value))} />
+        <button type="button" onClick={() => expandTo(maxDepth + 1)}>展开全部</button>
+        <output htmlFor="topology-depth">{visibleDepth} / {maxDepth}</output>
       </div>
-      {depth > 1 && <p className="v1-hierarchy-caption">多层总览 · 回到第 1 层可调整边框、拖动节点和接线。</p>}
       {message && !preview && <p className="v1-topology-message error" role="alert">{message}</p>}
     </div>
     <div className="v1-topology-tools">
