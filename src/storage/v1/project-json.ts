@@ -23,13 +23,30 @@ export function validateProjectSnapshot(value: unknown): asserts value is Projec
   }
 }
 
+function jsonSyntaxMessage(source: string, error: unknown): string {
+  const message = '工程 JSON 语法无效。';
+  if (!(error instanceof SyntaxError)) return message;
+
+  const location = /\bline (\d+) column (\d+)(?:\)| of the JSON data)?$/.exec(error.message);
+  if (location) return `${message} 第 ${location[1]} 行，第 ${location[2]} 列。`;
+
+  const position = /\bat position (\d+)$/.exec(error.message);
+  if (position) return `${message} 字符偏移 ${position[1]}（从 0 开始）。`;
+
+  if (/^(?:Unexpected end of JSON input|JSON Parse error: Unexpected EOF)$/.test(error.message)) {
+    const lines = source.split(/\r\n|\r|\n/);
+    return `${message} 文件在第 ${lines.length} 行，第 ${lines.at(-1)!.length + 1} 列意外结束。`;
+  }
+  return message;
+}
+
 /** Returns a new snapshot only after the whole file passes validation. */
 export function parseProjectJson(source: string): Project {
   let value: unknown;
   try {
     value = JSON.parse(source);
   } catch (error) {
-    throw new ProjectFileError('syntax', '工程 JSON 语法无效。', { cause: error });
+    throw new ProjectFileError('syntax', jsonSyntaxMessage(source, error), { cause: error });
   }
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     throw new ProjectFileError('format', '$：工程文件根节点必须为 Persona 工程对象');

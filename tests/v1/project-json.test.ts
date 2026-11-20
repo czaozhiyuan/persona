@@ -102,6 +102,15 @@ test('an atomically unbound snapshot can be saved and rebound with the same link
   }).namedLinks?.at(-1), rebound);
 });
 
+test('JSON syntax errors report the parser location in Chinese', () => {
+  assert.throws(() => parseProjectJson('{\r\n  "name": "激光器",\r\n}'), {
+    name: 'ProjectFileError', stage: 'syntax', message: '工程 JSON 语法无效。 第 3 行，第 1 列。',
+  });
+  assert.throws(() => parseProjectJson('{\n  "project": '), {
+    name: 'ProjectFileError', stage: 'syntax', message: '工程 JSON 语法无效。 文件在第 2 行，第 14 列意外结束。',
+  });
+});
+
 test('invalid imports give a location or domain issue and leave the current snapshot intact', () => {
   const current = parseProjectJson(source);
   assert.throws(() => parseProjectJson('{'), error => error instanceof ProjectFileError && error.stage === 'syntax');
