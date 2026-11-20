@@ -9,17 +9,18 @@ export const blockPortRows = (ports: readonly PortDefinition[]) => {
   return Math.max(left, ports.length - left);
 };
 
-export function BlockPorts({ ports, highlighted, handleId, editable = false }: {
+export function BlockPorts({ ports, highlighted, handleId, editable = false, wireState }: {
   ports: readonly PortDefinition[];
   highlighted: ReadonlySet<string>;
   handleId: (id: string) => string;
   editable?: boolean;
+  wireState?: (id: string) => 'origin' | 'target' | undefined;
 }) {
   return <div className="v1-block-columns">
     {portSides.map(side => <div className={`v1-block-column ${side}`} key={side}>
       {ports.filter(port => boundaryPortSide(port.direction) === side).map(port =>
         <div className={`v1-topology-port${highlighted.has(port.id) ? ' is-on-path' : ''}`} key={port.id}
-          title={`${port.id} · ${portTypeLabels[port.type]}`} data-port-direction={port.direction}>
+          title={`${port.id} · ${portTypeLabels[port.type]}`} data-port-direction={port.direction} data-wire={wireState?.(port.id)}>
           <Handle id={handleId(port.id)} type={port.direction === 'in' ? 'target' : 'source'}
             position={side === 'left' ? Position.Left : Position.Right} className={port.type} isConnectable={editable} />
           <span>{portDisplayName(port.id)}</span>

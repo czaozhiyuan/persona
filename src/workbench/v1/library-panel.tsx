@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import { PortDeletionDialog } from '../../editors/topology/v1/port-deletion-dialog';
 import { resolveHierarchy } from '../../engine/v1/hierarchy';
-import { builtInDefinitions } from '../../library/v1/built-in';
-import { addTemplateInstance, previewTemplateUpdate } from '../../library/v1/project-snapshots';
+import { blankEnclosureId, blankModuleId, builtInDefinitions } from '../../library/v1/built-in';
+import { insertLibraryItem, libraryDragType } from '../../library/v1/insert-library-item';
+import type { LibraryItem } from '../../library/v1/insert-library-item';
+import { previewTemplateUpdate } from '../../library/v1/project-snapshots';
+import type { DragEvent, FormEvent } from 'react';
 import type { TemplateChanges } from '../../library/v1/project-snapshots';
 import type { ModuleDefinition, Project } from '../../model/v1/types';
 import type { ProjectStore, ProjectStoreSnapshot } from '../../state/v1/project-store';
@@ -30,12 +33,14 @@ function matchingTemplates(query: string) {
 export function LibraryPanel({ store, state, module }: Props) {
   const { project, selection } = state;
   const [query, setQuery] = useState('');
-  const [templateId, setTemplateId] = useState<string>(builtInDefinitions[0].id);
+  const [projectId, setProjectId] = useState('');
+  const [templateId, setTemplateId] = useState<string>(blankModuleId);
   const [preview, setPreview] = useState<Preview>();
   const [unlink, setUnlink] = useState<string>();
   const [feedback, setFeedback] = useState<{ text: string; error?: boolean; snapshot?: Project }>();
   const template = builtInDefinitions.find(item => item.id === templateId)!;
-  const existing = [...project.componentDefinitions, ...project.moduleDefinitions].find(item => item.id === templateId);
+  const newContainer = templateId === blankModuleId || templateId === blankEnclosureId;
+  const existing = !newContainer ? [...project.componentDefinitions, ...project.moduleDefinitions].find(item => item.id === templateId) : undefined;
   const activePreview = preview?.base === project ? preview : undefined;
   const compatible = activePreview?.result.ok ? activePreview.result : undefined;
   const hasChanges = !!(compatible?.definitionChanges.length || compatible?.changes.added.length);
@@ -66,7 +71,41 @@ export function LibraryPanel({ store, state, module }: Props) {
     setFeedback(undefined);
   }
 
+  const unavailable = new Set([module.id]);
+  for (const id of unavailable) {
+    for (const candidate of project.moduleDefinitions) {
+      if (candidate.instances.some(instance => instance.definitionId === id)) unavailable.add(candidate.id);
+    }
+  }
   const matches = matchingTemplates(query);
+  const search = query.trim().toLowerCase();
+  const reusable = project.moduleDefinitions.filter(candidate => !unavailable.has(candidate.id)
+    && candidate.id !== project.rootModuleDefinitionId && candidate.name.toLowerCase().includes(search));
+  const reusableModule = reusable.find(item => item.id === projectId) ?? reusable[0];
+
+  function selectedItem(form: HTMLFormElement, source: LibraryItem['source'], id: string): LibraryItem {
+    return { source, id, name: String(new FormData(form).get('instanceName') ?? '').trim() };
+  }
+
+  function add(event: FormEvent<HTMLFormElement>, source: LibraryItem['source'], definitionId: string) {
+    event.preventDefault();
+    const item = selectedItem(event.currentTarget, source, definitionId);
+    if (!item.name) { setFeedback({ error: true, text: '名称不能为空。' }); return; }
+    const id = crypto.randomUUID();
+    const result = store.commit(draft => insertLibraryItem(draft, item, module.id, selection.modulePath, id));
+    if (result.ok) store.selectInstance([...selection.modulePath, id]);
+    setPreview(undefined);
+    setFeedback(result.ok ? { text: `已添加「${item.name}」。`, snapshot: store.getSnapshot().project }
+      : { error: true, text: result.message });
+  }
+
+  function drag(event: DragEvent<HTMLButtonElement>, source: LibraryItem['source'], id: string) {
+    const form = event.currentTarget.form;
+    const item = form && selectedItem(form, source, id);
+    if (!item?.name) { event.preventDefault(); return; }
+    event.dataTransfer.effectAllowed = 'copy';
+    event.dataTransfer.setData(libraryDragType, JSON.stringify(item));
+  }
   return <section className="panel v1-properties" aria-label="离线器件与模块库">
     <label>搜索器件库<input type="search" value={query} onChange={event => {
       const next = event.target.value;
@@ -83,28 +122,13 @@ export function LibraryPanel({ store, state, module }: Props) {
         : '该模板与工程内已有的类型冲突。')
         : `添加位置 · ${store.resolveInstance(selection.modulePath)?.instance?.name ?? module.name}`}
     </p>
-    <form key={templateId} onSubmit={event => {
-      event.preventDefault();
-      const name = String(new FormData(event.currentTarget).get('instanceName') ?? '').trim();
-      if (!name) { setFeedback({ error: true, text: '名称不能为空。' }); return; }
-      const id = crypto.randomUUID();
-      let changes: TemplateChanges | undefined;
-      const result = store.commit(draft => {
-        const plan = addTemplateInstance(draft, builtInDefinitions, templateId, module.id, id, name);
-        changes = plan.changes;
-        return plan.project;
-      });
-      if (result.ok) store.selectInstance([...selection.modulePath, id]);
-      setPreview(undefined);
-      setFeedback(result.ok ? { text: `已添加「${name}」。${changes ? describe(changes) : ''}`, snapshot: store.getSnapshot().project }
-        : { error: true, text: result.message });
-    }}>
+    <form key={templateId} onSubmit={event => add(event, 'template', templateId)}>
       <label>名称<input name="instanceName" defaultValue={template.name} required /></label>
-      <button type="submit" disabled={!!existing && existing.kind !== template.kind}>添加到当前模块</button>
+      <button type="submit" draggable title="点击添加，或拖入框图" onDragStart={event => drag(event, 'template', templateId)}
+        disabled={!!existing && existing.kind !== template.kind}>{templateId === blankModuleId ? '新建空模块'
+          : templateId === blankEnclosureId ? '新建空机箱' : '添加到当前模块'}</button>
     </form>
     {existing && <details><summary>高级库设置</summary><button type="button" onClick={prepareUpdate}>预检从库更新</button></details>}
-    {feedback && (!feedback.snapshot || feedback.snapshot === project) &&
-      <p role={feedback.error ? 'alert' : 'status'} className={feedback.error ? 'error' : 'v1-property-effective'}>{feedback.text}</p>}
     {preview && !activePreview && <p role="status">工程已变化，请重新预检。</p>}
     {activePreview && <div className="v1-property-effective" aria-label="模板更新预检">
       <h3>{activePreview.result.ok ? '预检通过' : '无法更新工程定义'}</h3>
@@ -144,6 +168,17 @@ export function LibraryPanel({ store, state, module }: Props) {
         setUnlink(undefined);
         if (store.getSnapshot().project !== preview?.base) setPreview(undefined);
       }} />}
-    </> : <p className="empty" role="status">没有匹配的器件或模块。</p>}
+    </> : !reusable.length && <p className="empty" role="status">没有匹配的器件或模块。</p>}
+    {reusableModule && <details><summary>放入已有模块</summary>
+      <label>工程模块<select value={reusableModule.id} onChange={event => setProjectId(event.target.value)}>
+        {reusable.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+      </select></label>
+      <form key={reusableModule.id} onSubmit={event => add(event, 'project', reusableModule.id)}>
+        <label>名称<input name="instanceName" defaultValue={reusableModule.name} required /></label>
+        <button type="submit" draggable title="点击放入，或拖入框图" onDragStart={event => drag(event, 'project', reusableModule.id)}>放入已有模块</button>
+      </form>
+    </details>}
+    {feedback && (!feedback.snapshot || feedback.snapshot === project) &&
+      <p role={feedback.error ? 'alert' : 'status'} className={feedback.error ? 'error' : 'v1-property-effective'}>{feedback.text}</p>}
   </section>;
 }

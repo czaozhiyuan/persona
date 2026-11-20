@@ -179,6 +179,15 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     setPage(next);
   }
 
+  function renameSelection() {
+    setPropertiesOpen(true);
+    requestAnimationFrame(() => {
+      const name = document.querySelector<HTMLInputElement>('#workbench-properties [data-object-name]');
+      name?.focus();
+      name?.select();
+    });
+  }
+
   function showTopology() {
     returnToTopology(store, topologyLocation.current);
     openPage('canvas');
@@ -257,7 +266,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
             aria-hidden={page !== 'canvas' || selection.view !== 'topology'}>
             {active?.kind === 'module' &&
               <TopologyEditor key={JSON.stringify(['topology', projectSession, selection.modulePath])}
-                store={store} state={state} module={active} pathResult={pathResult} graph={linkOptions.graph} />}
+                store={store} state={state} module={active} pathResult={pathResult} graph={linkOptions.graph} rename={renameSelection} />}
           </div>
           <div className="v1-canvas-page v1-layout-scroll" inert={page !== 'canvas' || selection.view !== 'physical'}
             aria-hidden={page !== 'canvas' || selection.view !== 'physical'}>

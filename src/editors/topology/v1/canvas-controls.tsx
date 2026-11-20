@@ -13,13 +13,14 @@ export const flowAriaLabels = {
   'handle.ariaLabel': '端口',
 } satisfies Partial<AriaLabelConfig>;
 
-export function CanvasControls() {
+export function CanvasControls({ locate, canLocate = false }: { locate?: () => void; canLocate?: boolean }) {
   const { zoomIn, zoomOut, fitView } = useReactFlow();
   const { zoom } = useViewport();
   return <Panel position="bottom-right" className="v1-canvas-zoom" aria-label="画布缩放">
     <button type="button" aria-label="缩小" title="缩小" onClick={() => void zoomOut()}>−</button>
     <output aria-label="缩放比例">{Math.round(zoom * 100)}%</output>
     <button type="button" aria-label="放大" title="放大" onClick={() => void zoomIn()}>+</button>
+    {locate && <button type="button" aria-label="定位选中" title="定位选中" disabled={!canLocate} onClick={locate}>◎</button>}
     <button type="button" aria-label="适应画布" title="适应画布" onClick={() => void fitView(canvasFitOptions)}>⛶</button>
   </Panel>;
 }
