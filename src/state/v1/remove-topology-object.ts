@@ -49,6 +49,7 @@ export function removeTopologyInstance(project: Project, parentId: string, insta
       ...link,
       from: link.from && !removed(link.from.instancePath) ? link.from : undefined,
       to: link.to && !removed(link.to.instancePath) ? link.to : undefined,
+      // editModuleWiring already clears removed wire references in every parent occurrence.
       via: link.via?.filter(item => !removed(item.scopePath)),
       conversionBindings: link.conversionBindings?.filter(item =>
         !removed(item.eo.instancePath) && !removed(item.oe.instancePath)),
