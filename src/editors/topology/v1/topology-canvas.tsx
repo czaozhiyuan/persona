@@ -1,85 +1,94 @@
-import { mediaLabels, portDisplayName } from '../../../workbench/v1/labels';
-import { Background, ConnectionMode, ReactFlow, ReactFlowProvider, useNodesState, useStoreApi, useUpdateNodeInternals } from '@xyflow/react';
-import type { Connection as FlowConnection, Edge, Node, NodeChange, NodeProps, OnConnectStartParams, ReactFlowInstance, Rect, Viewport, XYPosition } from '@xyflow/react';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Background, ConnectionMode, ReactFlow, ReactFlowProvider, useStoreApi, useUpdateNodeInternals } from '@xyflow/react';
+import type { Connection as FlowConnection, Node, NodeProps, OnConnectStartParams, ReactFlowInstance, Rect, Viewport, XYPosition } from '@xyflow/react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
+import type { PathResult } from '../../../engine/v1/path-resolver';
 import { signalPortKey } from '../../../engine/v1/signal-graph';
 import { libraryDragType, readLibraryItem } from '../../../library/v1/insert-library-item';
 import type { LibraryItem } from '../../../library/v1/insert-library-item';
 import type { WiringSelection } from '../../../state/v1/remove-topology-object';
 import type { Connection } from '../../../model/v1/topology';
-import type { InstancePath, ModuleDefinition, PortDefinition, PortMapping, Project } from '../../../model/v1/types';
-import { canvasEdgeKey } from './path-highlight';
-import type { projectPathHighlight } from './path-highlight';
-import { BlockPorts, blockPortRows } from './block-ports';
-import { frameInsets, ModuleFrame } from './module-frame';
-import { fitModuleFrame, keepNodeInside, minimumFrame, moduleExtent } from './frame-geometry';
+import type { InstancePath, PortDefinition, PortMapping, Project } from '../../../model/v1/types';
+import { structureScope } from '../../../workbench/v1/structure-scope';
+import { BlockPorts } from './block-ports';
+import { frameHeader, frameInsets, ModuleFrame } from './module-frame';
+import { keepNodeInside, moduleExtent } from './frame-geometry';
 import { FrameResizeHandles } from './frame-resize-handles';
-import { wiringProblem } from './wiring-validation';
-import type { CanvasPort } from './wiring-validation';
 import { keepGraphVisible } from './viewport';
 import { CanvasControls, canvasFitOptions, flowAriaLabels } from './canvas-controls';
+import { hierarchyKey } from './hierarchy-view';
+import { projectPathHighlight } from './path-highlight';
+import { projectTopology, toLocalPosition } from './topology-projection';
+import { handleId, nodeId, portKey, projectWiring, scopedWiringProblem } from './topology-wiring';
+import type { WiringEdge } from './topology-wiring';
 import '@xyflow/react/dist/style.css';
 
-type NodeData = { name: string; ports: readonly PortDefinition[]; pathPorts: ReadonlySet<string>; foldedPath?: boolean;
-  wireState?: (id: string) => 'origin' | 'target' | undefined;
+type NodeData = {
+  key: string;
+  path: InstancePath;
+  name: string;
+  ports: readonly PortDefinition[];
+  pathPorts: ReadonlySet<string>;
+  foldedPath?: boolean;
+  toggle?: () => void;
+  wireState?: (id: string, inner?: boolean) => 'origin' | 'target' | undefined;
 };
 type DeviceNode = Node<NodeData, 'device'>;
-type FrameNode = Node<NodeData & Parameters<typeof FrameResizeHandles>[0], 'moduleFrame'>;
+type FrameNode = Node<NodeData & {
+  outerHandles: boolean;
+  locations: readonly string[];
+  resize?: Parameters<typeof FrameResizeHandles>[0];
+}, 'moduleFrame'>;
 type CanvasNode = DeviceNode | FrameNode;
-type WiringEdge = Edge<WiringSelection>;
 
-const boundary = 'boundary';
-const nodeId = (id: string) => encodeURIComponent(JSON.stringify(['instance', id]));
-const handleId = (id: string) => encodeURIComponent(JSON.stringify(['port', id]));
-const portKey = (node: string, handle: string | null | undefined) => JSON.stringify([node, handle]);
+function ExpandButton({ data, expanded }: { data: NodeData; expanded: boolean }) {
+  const label = `${expanded ? '收起' : '展开'}模块 ${data.name}`;
+  return data.toggle && <button type="button" className="v1-module-toggle nodrag nopan" aria-expanded={expanded}
+    aria-label={label} title={label} onDoubleClick={event => event.stopPropagation()}
+    onClick={event => { event.stopPropagation(); data.toggle?.(); }}>{expanded ? '−' : '+'}</button>;
+}
 
 function Device({ id, data, selected }: NodeProps<DeviceNode>) {
   const updateInternals = useUpdateNodeInternals();
   useEffect(() => updateInternals(id), [id, data.ports, data.foldedPath, updateInternals]);
-  return (
-    <div className={`v1-topology-device${selected ? ' is-selected' : ''}${data.foldedPath ? ' has-folded-path' : ''}`}>
-      <strong>{data.name}</strong>
-      {data.foldedPath && <span className="v1-topology-path-label">路径经过内部</span>}
-      <BlockPorts ports={data.ports} highlighted={data.pathPorts} handleId={handleId} editable wireState={data.wireState} />
-    </div>
-  );
+  return <div className={`v1-topology-device${selected ? ' is-selected' : ''}${data.foldedPath ? ' has-folded-path' : ''}`}>
+    <div className="v1-block-title"><strong>{data.name}</strong><ExpandButton data={data} expanded={false} /></div>
+    {data.foldedPath && <span className="v1-topology-path-label">路径经过内部</span>}
+    <BlockPorts ports={data.ports} highlighted={data.pathPorts} handleId={handleId} editable wireState={data.wireState} />
+  </div>;
 }
 
-function Frame({ id, data }: NodeProps<FrameNode>) {
+function Frame({ id, data, selected }: NodeProps<FrameNode>) {
   return <>
-    <ModuleFrame id={id} name={data.name} ports={data.ports} highlighted={data.pathPorts} handleId={handleId} editable wireState={data.wireState} />
-    <FrameResizeHandles frame={data.frame} childrenBounds={data.childrenBounds} insets={data.insets}
-      preview={data.preview} finish={data.finish} />
+    <ModuleFrame id={id} name={data.name} ports={data.ports} highlighted={data.pathPorts} handleId={handleId}
+      editable outerHandles={data.outerHandles} selected={selected} wireState={data.wireState}
+      controls={<>
+        {data.locations.length > 0 && <span className="v1-inline-shared" title={data.locations.join('、')}
+          aria-label={`共享结构会应用到 ${data.locations.join('、')}`}>共享 · {data.locations.length} 处</span>}
+        <ExpandButton data={data} expanded />
+      </>} />
+    {data.resize && <FrameResizeHandles {...data.resize} />}
   </>;
 }
 
 const nodeTypes = { device: Device, moduleFrame: Frame };
 
-function moduleFrame(data: FrameNode['data']): FrameNode {
-  const { x, y, width, height } = data.frame;
-  return { id: boundary, ariaLabel: data.name, type: 'moduleFrame', position: { x, y }, style: { width, height, pointerEvents: 'none' },
-    draggable: false, selectable: false, focusable: false, zIndex: -1, data };
-}
-
-function nodeBounds(node: DeviceNode, position = node.position): Rect {
-  return { ...position, width: node.measured?.width ?? 202, height: node.measured?.height ?? (48 + blockPortRows(node.data.ports) * 24) };
-}
-
 type Props = {
   project: Project;
-  module: ModuleDefinition;
-  moduleName: string;
+  instances: readonly ResolvedInstance[];
   modulePath: InstancePath;
   selectedInstance?: InstancePath;
-  highlight: ReturnType<typeof projectPathHighlight>;
+  pathResult?: PathResult;
+  expanded: ReadonlySet<string>;
+  toggleModule: (path: InstancePath) => void;
   selectInstance: (path?: InstancePath) => void;
   enterModule: (path: InstancePath) => void;
-  move: (instanceId: string, position: XYPosition, frame?: Rect) => void;
-  resize: (frame: Rect, placementAdjustments: readonly { instanceId: string; position: XYPosition }[]) => void;
-  connect: (connection: Omit<Connection, 'id'>) => void;
-  mapPort: (mapping: PortMapping) => void;
+  move: (path: InstancePath, position: XYPosition, frame?: Rect) => void;
+  resize: (frame: Rect, placementAdjustments: readonly { path: InstancePath; position: XYPosition }[]) => void;
+  connect: (scope: InstancePath, connection: Omit<Connection, 'id'>) => void;
+  mapPort: (scope: InstancePath, mapping: PortMapping) => void;
   add: (item: LibraryItem, position: XYPosition) => boolean;
-  deleteSelection: (instanceId?: string, wire?: WiringSelection) => boolean;
+  deleteSelection: (path: InstancePath, instanceId?: string, wire?: WiringSelection) => boolean;
   rename: () => void;
   report: (message: string) => void;
   undo: () => void;
@@ -90,7 +99,7 @@ export function TopologyCanvas(props: Props) {
   return <ReactFlowProvider><EditableTopologyCanvas {...props} /></ReactFlowProvider>;
 }
 
-function EditableTopologyCanvas({ project, module, moduleName, modulePath, selectedInstance, highlight, selectInstance,
+function EditableTopologyCanvas({ project, instances, modulePath, selectedInstance, pathResult, expanded, toggleModule, selectInstance,
   enterModule, move, resize, connect, mapPort, add, deleteSelection, rename, report, undo, redo }: Props) {
   const flowStore = useStoreApi();
   const [wireStart, setWireStart] = useState<string>();
@@ -98,97 +107,47 @@ function EditableTopologyCanvas({ project, module, moduleName, modulePath, selec
   const connected = useRef(false);
   const [viewport, setViewport] = useState<Viewport>();
   const [resizePreview, setResizePreview] = useState<Rect>();
+  const [measured, setMeasured] = useState<ReadonlyMap<string, { width: number; height: number }>>(new Map());
+  const [drag, setDrag] = useState<{ key: string; position: XYPosition }>();
+  const [selectedEdgeKey, setSelectedEdgeKey] = useState<string>();
   const canvas = useRef<HTMLDivElement>(null);
   const flow = useRef<ReactFlowInstance<CanvasNode, WiringEdge>>(null);
 
+  const projection = useMemo(() => projectTopology(project, instances, modulePath, expanded, measured, resizePreview),
+    [project, instances, modulePath, expanded, measured, resizePreview]);
+  const { nodes: items, rootKey, nodeByKey, scopes } = projection;
+  const highlights = useMemo(() => new Map([...scopes].map(([key, { path }]) =>
+    [key, projectPathHighlight(pathResult, path)])), [scopes, pathResult]);
+  const { ports, edges } = useMemo(() => projectWiring(projection, highlights), [projection, highlights]);
+
   const changeViewport = useCallback((requested: Viewport) => {
     const displayed = flow.current?.getNodes() ?? [];
-    // Keep an internal instance visible when possible, or the frame itself in an empty module.
-    const bounds = displayed.filter(node => node.id !== boundary || displayed.length === 1).flatMap(({ id }) => {
+    const bounds = displayed.filter(node => node.data.key !== rootKey || displayed.length === 1).flatMap(({ id, type }) => {
       const node = flow.current?.getInternalNode(id);
       const width = node?.measured.width ?? 0;
       const height = node?.measured.height ?? 0;
-      return node && width > 0 && height > 0 ? [{ ...node.internals.positionAbsolute, width, height }] : [];
+      if (!node || width <= 0 || height <= 0) return [];
+      // A blank area inside a large frame should not count as a visible node.
+      return [{ ...node.internals.positionAbsolute,
+        width: type === 'moduleFrame' ? Math.min(width, 320) : width,
+        height: type === 'moduleFrame' ? Math.min(height, frameHeader) : height }];
     });
     const next = keepGraphVisible(requested, canvas.current?.clientWidth ?? 0, canvas.current?.clientHeight ?? 0, bounds);
     setViewport(next);
-  }, []);
-  const definitions = useMemo(() => new Map([...project.moduleDefinitions, ...project.componentDefinitions].map(def => [def.id, def])), [project]);
-  const instances = new Map(module.instances.map(instance => [nodeId(instance.id), instance]));
-  const selected = selectedInstance && JSON.stringify(selectedInstance);
-  const projectedNodes = useMemo(() => {
-    const positions = new Map(project.layout?.topology?.map(item => [JSON.stringify(item.instancePath), item]));
-    const names = new Map(project.instanceSettings?.map(item => [JSON.stringify(item.instancePath), item.name]));
-    const pathPorts = (path: InstancePath, ports: readonly PortDefinition[]) =>
-      new Set(ports.filter(port => highlight.ports.has(signalPortKey({ instancePath: path, portId: port.id }))).map(port => port.id));
-    const projected: DeviceNode[] = module.instances.map((instance, index) => {
-      const id = nodeId(instance.id);
-      const path = [...modulePath, instance.id];
-      const saved = positions.get(JSON.stringify(path));
-      const position = saved ? { x: saved.x, y: saved.y }
-        : { x: 260 * (index % 3) + (module.ports.length ? 260 : 25), y: 240 * Math.floor(index / 3) + 25 };
-      const ports = definitions.get(instance.definitionId)!.ports;
-      const name = names.get(JSON.stringify(path)) ?? instance.name;
-      return { id, ariaLabel: name, type: 'device', position, selected: selected === JSON.stringify(path),
-        data: { name, ports, foldedPath: highlight.folded.has(instance.id), pathPorts: pathPorts(path, ports) } };
-    });
-    return projected;
-  }, [project.layout?.topology, project.instanceSettings, module, modulePath, definitions, selected, highlight]);
-  const [devices, setNodes, applyCanvasChanges] = useNodesState(projectedNodes);
+  }, [rootKey]);
 
-  useLayoutEffect(() => {
-    setNodes(current => {
-      if (current === projectedNodes) return current;
-      const measurements = new Map(current.map(node => [node.id, node.measured]));
-      // Keep React Flow's measurements across project edits and selection changes.
-      return projectedNodes.map(node => ({ ...node, measured: measurements.get(node.id) }));
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      if (flow.current) changeViewport(flow.current.getViewport());
     });
-  }, [projectedNodes, setNodes]);
+    return () => cancelAnimationFrame(frame);
+  }, [expanded, changeViewport]);
 
-  const insets = frameInsets(module.ports);
-  const originalPositions = new Map(projectedNodes.map(node => [node.id, node.position]));
-  const originalBounds = new Map(devices.map(node => [node.id, nodeBounds(node, originalPositions.get(node.id))]));
-  const childBounds = [...originalBounds.values()];
-  const savedFrame = project.layout?.topologyFrames?.find(item => JSON.stringify(item.modulePath) === JSON.stringify(modulePath));
-  const { width: minWidth, height: minHeight } = minimumFrame(childBounds, insets);
-  const baseFrame = savedFrame
-    ? { x: savedFrame.x, y: savedFrame.y, width: Math.max(savedFrame.width, minWidth), height: Math.max(savedFrame.height, minHeight) }
-    : fitModuleFrame(childBounds, insets);
-  const hasFrame = !!(modulePath.length || module.ports.length || savedFrame);
-  const frame = resizePreview ?? baseFrame;
-  const baseExtent = moduleExtent(baseFrame, insets);
-  const extent = resizePreview ? moduleExtent(frame, insets) : baseExtent;
-  const boundedDevices = hasFrame ? devices.map(node => ({
-    ...node, extent, position: keepNodeInside(nodeBounds(node), baseExtent),
-  })) : devices;
-
-  function saveFrame(next: Rect) {
-    // Persist any positions that were visually clamped after an import or an instance was added.
-    const adjustments = boundedDevices.flatMap(({ id, position }) => {
-      const original = originalBounds.get(id);
-      const instance = instances.get(id);
-      return instance && original && (original.x !== position.x || original.y !== position.y)
-        ? [{ instanceId: instance.id, position }] : [];
-    });
-    resize(next, adjustments);
-  }
-  const ports = new Map<string, CanvasPort>();
-  for (const [node, instance] of instances) {
-    for (const port of definitions.get(instance.definitionId)!.ports) {
-      ports.set(portKey(node, handleId(port.id)), { port, direction: port.direction,
-        endpoint: { instanceId: instance.id, portId: port.id } });
-    }
-  }
-  for (const port of module.ports) {
-    ports.set(portKey(boundary, handleId(port.id)), { port, direction: port.direction === 'in' ? 'out' : 'in' });
-  }
   const fromPort = wireStart ? ports.get(wireStart) : undefined;
-  const problem = (a?: CanvasPort, b?: CanvasPort) => wiringProblem(module, a, b);
-
-  function wireState(node: string, portId: string) {
-    const key = portKey(node, handleId(portId));
+  function wireState(node: string, portId: string, inner = false) {
+    const key = portKey(node, handleId(portId, inner));
     if (wireStart === key) return 'origin';
-    if (fromPort && !problem(fromPort, ports.get(key))) return 'target';
+    if (fromPort && !scopedWiringProblem(fromPort, ports.get(key))) return 'target';
   }
 
   function connectionPorts(edge: { source: string; target: string; sourceHandle?: string | null; targetHandle?: string | null }) {
@@ -198,12 +157,12 @@ function EditableTopologyCanvas({ project, module, moduleName, modulePath, selec
   function onConnect(edge: FlowConnection) {
     if (cancelled.current) return;
     const [a, b] = connectionPorts(edge);
-    if (!a || !b || problem(a, b)) return;
+    if (!a || !b || scopedWiringProblem(a, b)) return;
     connected.current = true;
     const [source, target] = a.direction === 'out' ? [a, b] : [b, a];
-    if (source.endpoint && target.endpoint) connect({ from: source.endpoint, to: target.endpoint });
-    else if (a.endpoint) mapPort({ portId: b.port.id, target: a.endpoint });
-    else if (b.endpoint) mapPort({ portId: a.port.id, target: b.endpoint });
+    if (source.endpoint && target.endpoint) connect(a.scope, { from: source.endpoint, to: target.endpoint });
+    else if (a.endpoint) mapPort(a.scope, { portId: b.port.id, target: a.endpoint });
+    else if (b.endpoint) mapPort(a.scope, { portId: a.port.id, target: b.endpoint });
   }
 
   function cancelWiring() {
@@ -221,56 +180,63 @@ function EditableTopologyCanvas({ project, module, moduleName, modulePath, selec
     setWireStart(portKey(nodeId, handleId));
   }
 
-  const selectedNode = projectedNodes.find(node => node.selected);
-  const selectedInstanceId = selectedNode && instances.get(selectedNode.id)?.id;
-  const [selectedEdgeKey, setSelectedEdgeKey] = useState<string>();
-  useEffect(() => {
-    if (selectedInstance) setSelectedEdgeKey(undefined);
-  }, [selectedInstance]);
-
-  const nodes: CanvasNode[] = hasFrame ? [
-    moduleFrame({ name: moduleName, ports: module.ports, frame, insets,
-      childrenBounds: boundedDevices.map(node => nodeBounds(node)), preview: setResizePreview, finish: saveFrame,
-      wireState: wireStart ? id => wireState(boundary, id) : undefined,
-      pathPorts: new Set(module.ports.filter(port => highlight.ports.has(signalPortKey({
-        instancePath: modulePath, portId: port.id,
-      }))).map(port => port.id)) }),
-    ...boundedDevices,
-  ] : devices;
-  const renderedNodes = wireStart ? nodes.map(node => node.type === 'device'
-    ? { ...node, data: { ...node.data, wireState: (id: string) => wireState(node.id, id) } } : node) : nodes;
-
-  const edges: WiringEdge[] = (module.connections ?? []).map(item => ({
-    id: canvasEdgeKey('connection', item.id), data: { kind: 'connection', id: item.id }, source: nodeId(item.from.instanceId), target: nodeId(item.to.instanceId),
-    sourceHandle: handleId(item.from.portId), targetHandle: handleId(item.to.portId),
-    label: item.mediaKind && mediaLabels[item.mediaKind],
-    ariaLabel: `连线：${portDisplayName(item.from.portId)} → ${portDisplayName(item.to.portId)}`,
-  }));
-  for (const mapping of module.portMappings ?? []) {
-    const outward = module.ports.find(port => port.id === mapping.portId)?.direction === 'out';
-    const inner = { id: nodeId(mapping.target.instanceId), handle: handleId(mapping.target.portId) };
-    const outer = { id: boundary, handle: handleId(mapping.portId) };
-    const [from, to] = outward ? [inner, outer] : [outer, inner];
-    edges.push({ id: canvasEdgeKey('mapping', mapping.portId), data: { kind: 'mapping', id: mapping.portId }, source: from.id, target: to.id,
-      sourceHandle: from.handle, targetHandle: to.handle, ariaLabel: `公开端口映射：${portDisplayName(mapping.portId)}`, style: { strokeDasharray: '6 4' } });
-  }
-  for (const bundle of module.cableBundles ?? []) {
-    for (const core of bundle.cores) {
-      if (!core.a.endpoint || !core.b.endpoint) continue;
-      const a = core.a.endpoint;
-      const instance = instances.get(nodeId(a.instanceId))!;
-      const aOutput = definitions.get(instance.definitionId)?.ports.find(port => port.id === a.portId)?.direction === 'out';
-      const [from, to] = aOutput ? [a, core.b.endpoint] : [core.b.endpoint, a];
-      edges.push({ id: canvasEdgeKey('core', bundle.id, core.id), data: { kind: 'core', id: core.id, bundleId: bundle.id }, source: nodeId(from.instanceId), target: nodeId(to.instanceId),
-        sourceHandle: handleId(from.portId), targetHandle: handleId(to.portId),
-        ariaLabel: `纤芯：${bundle.id} · ${core.id}`,
-        label: `${bundle.id} · A:${core.a.pin} / B:${core.b.pin}`, style: { stroke: '#7856b7', strokeWidth: 2 } });
-    }
-  }
-
-
-
+  const active = selectedInstance && hierarchyKey(selectedInstance);
+  const selectedNode = active && nodeByKey.get(active);
   const selectedWiring = !selectedNode && edges.find(edge => edge.id === selectedEdgeKey);
+  useEffect(() => { if (selectedInstance) setSelectedEdgeKey(undefined); }, [selectedInstance]);
+
+  const deepest = items.reduce((max, node) => Math.max(max, node.item.instancePath.length), modulePath.length);
+  const selectedBranch = selectedInstance?.[modulePath.length];
+  const nodes: CanvasNode[] = items.map(node => {
+    const { item, key, parentKey, frame } = node;
+    const path = item.instancePath;
+    const boundary = key === rootKey;
+    const parentHighlight = highlights.get(hierarchyKey(path.slice(0, -1)));
+    const highlight = boundary ? highlights.get(rootKey) : parentHighlight;
+    const { definition } = item;
+    const name = item.instance?.name ?? definition.name;
+    const id = nodeId(key);
+    const data: NodeData = { key, path, name, ports: definition.ports,
+      pathPorts: new Set(definition.ports.filter(port =>
+        highlight?.ports.has(signalPortKey({ instancePath: path, portId: port.id }))).map(port => port.id)),
+      foldedPath: !frame && !!item.instance && parentHighlight?.folded.has(item.instance.id),
+      wireState: wireStart ? (port, inner) => wireState(id, port, inner) : undefined,
+      toggle: !boundary && definition.kind === 'module' ? () => {
+        cancelWiring();
+        setSelectedEdgeKey(undefined);
+        toggleModule(path);
+      } : undefined,
+    };
+    const placement = { id, ariaLabel: name, position: drag?.key === key ? drag.position : node.position,
+      parentId: parentKey === undefined ? undefined : nodeId(parentKey), selected: active === key && !boundary };
+    // Keep sibling blocks accessible where an expanded branch overlaps their stored positions.
+    if (!frame) return { ...placement, type: 'device',
+      zIndex: 2 + (deepest - path.length) * 2 + Number(path[modulePath.length] === selectedBranch), data };
+    const direct = scopes.get(key)?.members ?? [];
+    return { ...placement, type: 'moduleFrame', draggable: !boundary, dragHandle: '.v1-frame-title',
+      selectable: !boundary, focusable: !boundary, zIndex: path.length - deepest - 2,
+      style: { width: frame.display.width, height: frame.display.height, pointerEvents: 'none' },
+      data: { ...data, outerHandles: !boundary, locations: boundary ? [] : structureScope(instances, definition.id),
+        resize: boundary ? {
+          frame: frame.display, insets: frameInsets(definition.ports), preview: setResizePreview,
+          childrenBounds: direct.map(child => child.frame ? { ...child.bounds,
+            width: child.frame.display.width, height: child.frame.display.height } : child.bounds),
+          finish: next => resize(next, direct.filter(child =>
+            child.preferred.x !== child.bounds.x || child.preferred.y !== child.bounds.y)
+            .map(child => ({ path: child.item.instancePath, position: child.bounds }))),
+        } : undefined,
+      },
+    };
+  });
+
+  function clampPosition(key: string, position: XYPosition) {
+    const node = nodeByKey.get(key)!;
+    const parentKey = hierarchyKey(node.item.instancePath.slice(0, -1));
+    const parent = nodeByKey.get(parentKey);
+    const local = toLocalPosition(position, node.offset);
+    return parent?.frame ? keepNodeInside({ ...node.bounds, ...local },
+      moduleExtent(parent.frame.base, frameInsets(parent.item.definition.ports))) : local;
+  }
 
   useEffect(() => {
     function keyboard(event: KeyboardEvent) {
@@ -280,12 +246,18 @@ function EditableTopologyCanvas({ project, module, moduleName, modulePath, selec
         event.preventDefault();
         cancelWiring();
         report('');
-      } else if (event.key === 'F2' && selectedInstanceId) {
+      } else if (event.key === 'F2' && selectedNode && selectedNode.key !== rootKey) {
         event.preventDefault();
         rename();
-      } else if (event.key === 'Delete' && (selectedInstanceId || selectedWiring)) {
-        event.preventDefault();
-        if (deleteSelection(selectedInstanceId, selectedWiring ? selectedWiring.data : undefined)) setSelectedEdgeKey(undefined);
+      } else if (event.key === 'Delete') {
+        if (selectedNode && selectedNode.key !== rootKey) {
+          event.preventDefault();
+          const path = selectedNode.item.instancePath;
+          deleteSelection(path.slice(0, -1), path.at(-1));
+        } else if (selectedWiring && selectedWiring.data) {
+          event.preventDefault();
+          if (deleteSelection(selectedWiring.data.scope, undefined, selectedWiring.data)) setSelectedEdgeKey(undefined);
+        }
       } else if (event.ctrlKey || event.metaKey) {
         const key = event.key.toLowerCase();
         if (key === 'z' || key === 'y') {
@@ -299,79 +271,94 @@ function EditableTopologyCanvas({ project, module, moduleName, modulePath, selec
     return () => window.removeEventListener('keydown', keyboard);
   });
 
-  return (
-    <div ref={canvas} className="v1-topology-canvas" aria-label="逻辑拓扑画布"
-      onDragOver={event => {
-        if (!event.dataTransfer.types.includes(libraryDragType)) return;
-        event.preventDefault();
-        event.dataTransfer.dropEffect = 'copy';
+  return <div ref={canvas} className="v1-topology-canvas" aria-label="逻辑拓扑画布"
+    onDragOver={event => {
+      if (!event.dataTransfer.types.includes(libraryDragType)) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'copy';
+    }}
+    onDrop={event => {
+      if (!event.dataTransfer.types.includes(libraryDragType)) return;
+      event.preventDefault();
+      const item = readLibraryItem(event.dataTransfer);
+      if (item && flow.current) add(item, flow.current.screenToFlowPosition({ x: event.clientX, y: event.clientY }));
+    }}>
+    <ReactFlow<CanvasNode, WiringEdge> nodes={nodes} edges={edges.map(edge => ({ ...edge, selected: selectedWiring === edge }))}
+      nodeTypes={nodeTypes} ariaLabelConfig={flowAriaLabels} fitView fitViewOptions={canvasFitOptions}
+      viewport={viewport} onViewportChange={changeViewport} onInit={instance => { flow.current = instance; }}
+      minZoom={0.001} maxZoom={2} deleteKeyCode={null} connectionMode={ConnectionMode.Loose}
+      zIndexMode="manual"
+      connectionLineStyle={cancelled.current ? { opacity: 0 } : undefined}
+      isValidConnection={edge => !cancelled.current && !scopedWiringProblem(...connectionPorts(edge))}
+      onConnect={onConnect} onConnectStart={startWiring} onClickConnectStart={startWiring}
+      onConnectEnd={(_, result) => {
+        if (!cancelled.current && result.toHandle && !result.isValid) {
+          const end = ports.get(portKey(result.toHandle.nodeId, result.toHandle.id));
+          report(scopedWiringProblem(fromPort, end) ?? '');
+        }
+        setWireStart(undefined);
       }}
-      onDrop={event => {
-        if (!event.dataTransfer.types.includes(libraryDragType)) return;
-        event.preventDefault();
-        const item = readLibraryItem(event.dataTransfer);
-        if (item && flow.current) add(item, flow.current.screenToFlowPosition({ x: event.clientX, y: event.clientY }));
+      onClickConnectEnd={event => {
+        const target = !connected.current && event.target instanceof Element && event.target.closest('.react-flow__handle');
+        if (target) {
+          const end = ports.get(portKey(target.getAttribute('data-nodeid') ?? '', target.getAttribute('data-handleid')));
+          report(scopedWiringProblem(fromPort, end) ?? '');
+        }
+        setWireStart(undefined);
+      }}
+      onPaneClick={() => { cancelWiring(); setSelectedEdgeKey(undefined); selectInstance(); report(''); }}
+      onEdgeClick={(_, edge) => { cancelWiring(); selectInstance(); setSelectedEdgeKey(edge.id); report(''); }}
+      onNodeClick={(event, node) => {
+        if (node.data.key === rootKey || (event.target instanceof Element && event.target.closest('.react-flow__handle'))) return;
+        cancelWiring();
+        setSelectedEdgeKey(undefined);
+        selectInstance(node.data.path);
+        report('');
+      }}
+      onNodeDoubleClick={(event, node) => {
+        if (event.target instanceof Element && event.target.closest('.react-flow__handle')) return;
+        if (node.data.toggle) enterModule(node.data.path);
+      }}
+      onNodesChange={changes => {
+        const dimensions = changes.flatMap(change => {
+          if (change.type !== 'dimensions' || !change.dimensions) return [];
+          const key = decodeURIComponent(change.id);
+          const item = nodeByKey.get(key);
+          return item && !item.frame ? [{ key, ...change.dimensions }] : [];
+        });
+        if (dimensions.length) setMeasured(current => {
+          let next: Map<string, { width: number; height: number }> | undefined;
+          for (const { key, width, height } of dimensions) {
+            const before = current.get(key);
+            if (before?.width === width && before.height === height) continue;
+            (next ??= new Map(current)).set(key, { width, height });
+          }
+          return next ?? current;
+        });
+      }}
+      onNodeDrag={(_, node) => {
+        const projected = nodeByKey.get(node.data.key);
+        if (!projected) return;
+        const position = clampPosition(projected.key, node.position);
+        setDrag({ key: projected.key, position: { x: position.x - projected.offset.x, y: position.y - projected.offset.y } });
+      }}
+      onNodeDragStop={(_, node) => {
+        setDrag(undefined);
+        const projected = nodeByKey.get(node.data.key);
+        if (!projected || !node.data.path.length) return;
+        const position = clampPosition(projected.key, node.position);
+        const { bounds } = projected;
+        if (position.x !== bounds.x || position.y !== bounds.y) {
+          const frame = nodeByKey.get(hierarchyKey(node.data.path.slice(0, -1)))?.frame;
+          move(node.data.path, position, frame && !frame.saved ? frame.base : undefined);
+        }
       }}>
-      <ReactFlow<CanvasNode, WiringEdge> nodes={renderedNodes} edges={edges.map(edge => ({
-        ...edge, selected: selectedWiring === edge,
-        ...(highlight.edges.has(edge.id) && { className: 'v1-path-edge', style: { ...edge.style, stroke: '#a85618', strokeWidth: 3 }, zIndex: 2 }),
-      }))}
-        nodeTypes={nodeTypes} ariaLabelConfig={flowAriaLabels} fitView fitViewOptions={canvasFitOptions}
-        viewport={viewport} onViewportChange={changeViewport} onInit={instance => { flow.current = instance; }}
-        minZoom={0.2} maxZoom={2} deleteKeyCode={null} connectionMode={ConnectionMode.Loose}
-        connectionLineStyle={cancelled.current ? { opacity: 0 } : undefined}
-        isValidConnection={edge => !cancelled.current && !problem(...connectionPorts(edge))}
-        onConnect={onConnect} onConnectStart={startWiring} onClickConnectStart={startWiring}
-        onConnectEnd={(_, result) => {
-          if (!cancelled.current && result.toHandle && !result.isValid) {
-            const end = ports.get(portKey(result.toHandle.nodeId, result.toHandle.id));
-            report(problem(fromPort, end) ?? '');
-          }
-          setWireStart(undefined);
-        }}
-        onClickConnectEnd={event => {
-          const target = !connected.current && event.target instanceof Element && event.target.closest('.react-flow__handle');
-          if (target) {
-            const end = ports.get(portKey(target.getAttribute('data-nodeid') ?? '', target.getAttribute('data-handleid')));
-            report(problem(fromPort, end) ?? '');
-          }
-          setWireStart(undefined);
-        }}
-        onPaneClick={() => { cancelWiring(); setSelectedEdgeKey(undefined); selectInstance(); report(''); }}
-        onEdgeClick={(_, edge) => { cancelWiring(); selectInstance(); setSelectedEdgeKey(edge.id); report(''); }}
-        onNodeClick={(event, node) => {
-          if (event.target instanceof Element && event.target.closest('.react-flow__handle')) return;
-          const instance = instances.get(node.id);
-          if (instance) { cancelWiring(); setSelectedEdgeKey(undefined); selectInstance([...modulePath, instance.id]); report(''); }
-        }}
-        onNodeDoubleClick={(_, node) => {
-          const instance = instances.get(node.id);
-          if (instance && definitions.get(instance.definitionId)?.kind === 'module') enterModule([...modulePath, instance.id]);
-        }}
-        onNodesChange={changes => {
-          // Drag and measurement events update the canvas only, until the drop commits a project edit.
-          const canvasChanges = changes.filter((change): change is Extract<NodeChange<DeviceNode>, { type: 'dimensions' | 'position' }> =>
-            (change.type === 'dimensions' && change.id !== boundary)
-            || (change.type === 'position' && (change.dragging || devices.some(node => node.id === change.id && node.dragging))));
-          if (canvasChanges.length) applyCanvasChanges(canvasChanges);
-        }}
-        onNodeDragStop={(_, node) => {
-          const instance = instances.get(node.id);
-          const original = originalBounds.get(node.id);
-          if (!instance || !original) return;
-          const previous = hasFrame ? keepNodeInside(original, extent) : original;
-          const position = hasFrame ? keepNodeInside({ ...original, ...node.position }, extent) : node.position;
-          if (position.x !== previous.x || position.y !== previous.y) {
-            move(instance.id, position, hasFrame && !savedFrame ? baseFrame : undefined);
-          }
-        }}>
-        <Background />
-        <CanvasControls canLocate={!!(selectedNode || selectedWiring)} locate={() => {
-          const ids = selectedNode ? [selectedNode.id] : selectedWiring ? [selectedWiring.source, selectedWiring.target] : [];
-          if (ids.length) void flow.current?.fitView({ ...canvasFitOptions, maxZoom: 1.2, nodes: ids.map(id => ({ id })) });
-        }} />
-      </ReactFlow>
-      {!nodes.length && <span className="v1-topology-empty">从器件库添加器件，或声明对外端口。</span>}
-    </div>
-  );
+      <Background />
+      <CanvasControls canLocate={!!(selectedNode || selectedWiring)} locate={() => {
+        const ids = selectedNode ? [nodeId(selectedNode.key)] : selectedWiring ? [selectedWiring.source, selectedWiring.target] : [];
+        if (ids.length) void flow.current?.fitView({ ...canvasFitOptions, maxZoom: 1.2, nodes: ids.map(id => ({ id })) });
+      }} />
+    </ReactFlow>
+    {!scopes.get(rootKey)?.members.length && <span className="v1-topology-empty">从器件库添加器件，或声明对外端口。</span>}
+  </div>;
 }

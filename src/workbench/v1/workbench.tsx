@@ -47,6 +47,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     window.matchMedia('(max-width: 48rem)').matches ? undefined : 'structure');
   const [propertiesOpen, setPropertiesOpen] = useState(() => !window.matchMedia('(max-width: 48rem)').matches);
   const [expandedHierarchy, setExpandedHierarchy] = useState<ReadonlySet<string>>(new Set(['[]']));
+  const [expandedCanvas, setExpandedCanvas] = useState<ReadonlySet<string>>(new Set());
   const [linkInputs, setLinkInputs] = useState<ReadonlyMap<string, LinkBudgetConditions>>(new Map());
   const [localOptical, setLocalOptical] = useState<LocalOpticalSettings>({ sources: [] });
   const activeOccurrence = store.resolveInstance(selection.modulePath);
@@ -125,6 +126,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
       setLinkInputs(new Map());
       setLocalOptical({ sources: [] });
       setExpandedHierarchy(new Set(['[]']));
+      setExpandedCanvas(new Set());
       setPage('canvas');
     }
   }
@@ -287,7 +289,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
             aria-hidden={page !== 'canvas' || selection.view !== 'topology'}>
             {active?.kind === 'module' &&
               <TopologyEditor key={JSON.stringify(['topology', projectSession, selection.modulePath])}
-                store={store} state={state} module={active} pathResult={pathResult} graph={linkOptions.graph} rename={renameSelection} />}
+                store={store} state={state} module={active} pathResult={pathResult} graph={linkOptions.graph} rename={renameSelection}
+                expanded={expandedCanvas} setExpanded={setExpandedCanvas} />}
           </div>
           <div className="v1-canvas-page v1-layout-scroll" inert={page !== 'canvas' || selection.view !== 'physical'}
             aria-hidden={page !== 'canvas' || selection.view !== 'physical'}>
