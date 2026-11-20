@@ -179,6 +179,27 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     setPage(next);
   }
 
+  function jumpToParameter(path: InstancePath, parameterId: string) {
+    store.selectModule(path.slice(0, -1));
+    store.selectInstance(path.length ? path : undefined);
+    store.setView('topology');
+    setPropertiesOpen(true);
+    openPage('canvas');
+    requestAnimationFrame(() => {
+      const owner = store.resolveInstance(path);
+      const parameter = owner?.definition.parameters?.find(item => item.id === parameterId);
+      const field = owner?.instance && parameter?.overridable ? 'effective' : 'definition';
+      const target = document.querySelector<HTMLDetailsElement>(
+        `#workbench-properties [data-${field}-parameter="${CSS.escape(parameterId)}"]`);
+      if (!target) return;
+      for (let details: HTMLDetailsElement | null = target; details; details = details.parentElement?.closest('details') ?? null) {
+        details.open = true;
+      }
+      target.querySelector('summary')?.focus();
+      target.scrollIntoView({ block: 'nearest' });
+    });
+  }
+
   function renameSelection() {
     setPropertiesOpen(true);
     requestAnimationFrame(() => {
@@ -300,15 +321,17 @@ export function Workbench({ store, loadExample, newProject }: Props) {
             <ul className="instances">
               {active?.kind === 'module' && active.instances.map(instance => {
                 const path = [...selection.modulePath, instance.id];
-                const isModule = store.resolveInstance(path)?.definition.kind === 'module';
+                const occurrence = store.resolveInstance(path);
+                const isModule = occurrence?.definition.kind === 'module';
+                const name = occurrence?.instance?.name ?? instance.name;
                 const isSelected = selected?.instancePath.length === path.length
                   && path.every((id, index) => id === selected.instancePath[index]);
                 return (
                   <li key={instance.id}>
                     <button type="button" aria-pressed={isSelected}
-                      onClick={() => store.selectInstance(path)}>{instance.name}</button>
+                      onClick={() => store.selectInstance(path)}>{name}</button>
                     {isModule && <button type="button" onClick={() => store.selectModule(path)}
-                      aria-label={`进入 ${instance.name}`}>进入</button>}
+                      aria-label={`进入 ${name}`}>进入</button>}
                   </li>
                 );
               })}
@@ -350,7 +373,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
           </div>
           <div id="workbench-properties" className="v1-side-scroll" hidden={!propertiesOpen}>
             {properties && <PropertiesPanel key={JSON.stringify([projectSession, properties.instancePath])}
-              store={store} occurrence={properties} />}
+              store={store} occurrence={properties} occurrences={linkOptions.graph.instances} jumpToParameter={jumpToParameter} />}
           </div>
         </aside>
       </div>

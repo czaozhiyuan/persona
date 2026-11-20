@@ -1,4 +1,5 @@
 import { portDisplayName, portTypeLabels } from '../../../workbench/v1/labels';
+import { structureScope } from '../../../workbench/v1/structure-scope';
 import { useState } from 'react';
 import type { PathResult } from '../../../engine/v1/path-resolver';
 import type { SignalGraph } from '../../../engine/v1/signal-graph';
@@ -35,9 +36,13 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
     definition.id !== module.id && definition.id !== project.rootModuleDefinitionId);
   const availableTemplates = builtInDefinitions.filter(template => !definitions.has(template.id));
   const selected = selection.instancePath && store.resolveInstance(selection.instancePath)?.definition;
-  const ports: LocalPort[] = module.instances.flatMap(instance => definitions.get(instance.definitionId)!.ports.map(port => ({
-    ref: { instanceId: instance.id, portId: port.id }, port, label: `${instance.name} / ${portDisplayName(port.id, true)} · ${portTypeLabels[port.type]}`,
-  })));
+  const sharedLocations = structureScope(graph.instances, module.id);
+  const ports: LocalPort[] = module.instances.flatMap(instance => {
+    const name = store.resolveInstance([...scope, instance.id])?.instance?.name ?? instance.name;
+    return definitions.get(instance.definitionId)!.ports.map(port => ({
+      ref: { instanceId: instance.id, portId: port.id }, port, label: `${name} / ${portDisplayName(port.id, true)} · ${portTypeLabels[port.type]}`,
+    }));
+  });
 
   function commit(change: (draft: Project) => Project) {
     const result = store.commit(change);
@@ -122,6 +127,13 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
       {message && !preview && <p className="v1-topology-message error" role="alert">{message}</p>}
     </div>
     <div className="v1-topology-tools">
+      {sharedLocations.length > 0 && <details data-workbench-popup>
+        <summary>共享结构 · {sharedLocations.length} 处</summary>
+        <div className="v1-topology-tool-list">
+          <strong>结构改动会应用到以下位置</strong>
+          <ul>{sharedLocations.map(location => <li key={location}>{location}</li>)}</ul>
+        </div>
+      </details>}
       <details className="v1-topology-toolgroup" data-workbench-popup>
         <summary>编辑工具</summary>
         <div className="v1-topology-tool-list">

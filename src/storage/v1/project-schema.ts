@@ -175,6 +175,7 @@ const projectShape = shape({
   ...identity, rootModuleDefinitionId: text, componentDefinitions: list(component), moduleDefinitions: list(moduleDefinition),
 }, {
   conversionProfiles: list(profile), namedLinks: list(link),
+  instanceSettings: list(shape({ instancePath }, { name: text, parameterOverrides: dictionary(parameterValue), switchStateId: text })),
   layout: shape({}, {
     physical: list(shape({ instancePath, enclosurePath: instancePath, xMm: number, yMm: number, rotationDeg: number })),
     topology: list(shape({ instancePath, x: number, y: number })),

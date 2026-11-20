@@ -118,6 +118,7 @@ function EditableTopologyCanvas({ project, module, moduleName, modulePath, selec
   const selected = selectedInstance && JSON.stringify(selectedInstance);
   const projectedNodes = useMemo(() => {
     const positions = new Map(project.layout?.topology?.map(item => [JSON.stringify(item.instancePath), item]));
+    const names = new Map(project.instanceSettings?.map(item => [JSON.stringify(item.instancePath), item.name]));
     const pathPorts = (path: InstancePath, ports: readonly PortDefinition[]) =>
       new Set(ports.filter(port => highlight.ports.has(signalPortKey({ instancePath: path, portId: port.id }))).map(port => port.id));
     const projected: DeviceNode[] = module.instances.map((instance, index) => {
@@ -127,11 +128,12 @@ function EditableTopologyCanvas({ project, module, moduleName, modulePath, selec
       const position = saved ? { x: saved.x, y: saved.y }
         : { x: 260 * (index % 3) + (module.ports.length ? 260 : 25), y: 240 * Math.floor(index / 3) + 25 };
       const ports = definitions.get(instance.definitionId)!.ports;
-      return { id, ariaLabel: instance.name, type: 'device', position, selected: selected === JSON.stringify(path),
-        data: { name: instance.name, ports, foldedPath: highlight.folded.has(instance.id), pathPorts: pathPorts(path, ports) } };
+      const name = names.get(JSON.stringify(path)) ?? instance.name;
+      return { id, ariaLabel: name, type: 'device', position, selected: selected === JSON.stringify(path),
+        data: { name, ports, foldedPath: highlight.folded.has(instance.id), pathPorts: pathPorts(path, ports) } };
     });
     return projected;
-  }, [project.layout?.topology, module, modulePath, definitions, selected, highlight]);
+  }, [project.layout?.topology, project.instanceSettings, module, modulePath, definitions, selected, highlight]);
   const [devices, setNodes, applyCanvasChanges] = useNodesState(projectedNodes);
 
   useLayoutEffect(() => {

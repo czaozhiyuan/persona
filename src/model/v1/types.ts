@@ -43,6 +43,7 @@ export type ComponentDefinition = DefinitionIdentity & {
   dcLoad?: DcLoad;
 };
 
+/** Structural child slot. Its name and settings are defaults shared by occurrences of the parent. */
 export type Instance = {
   /** Unique within the containing module definition. */
   id: string;
@@ -50,6 +51,12 @@ export type Instance = {
   definitionId: string;
   parameterOverrides?: Readonly<Record<string, ParameterValue>>;
   switchStateId?: string;
+};
+
+/** Local settings for one concrete occurrence, independent of its shared definition. */
+export type InstanceSettings = Pick<Instance, 'parameterOverrides' | 'switchStateId'> & {
+  instancePath: InstancePath;
+  name?: string;
 };
 
 /**
@@ -119,5 +126,6 @@ export type Project = {
   moduleDefinitions: readonly ModuleDefinition[];
   conversionProfiles?: readonly ConversionProfile[];
   namedLinks?: readonly NamedLink[];
+  instanceSettings?: readonly InstanceSettings[];
   layout?: LayoutState;
 };

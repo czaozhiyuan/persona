@@ -3,14 +3,17 @@ import { useState } from 'react';
 import { PortDeletionDialog } from '../../../editors/topology/v1/port-deletion-dialog';
 import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
 import type { ParameterDefinition } from '../../../model/v1/parameters';
-import type { ComponentDefinition, Instance, ModuleDefinition, Project } from '../../../model/v1/types';
+import type { ComponentDefinition, InstancePath, InstanceSettings, ModuleDefinition, Project } from '../../../model/v1/types';
 import type { ProjectStore } from '../../../state/v1/project-store';
+import { editInstanceSettings } from '../../../state/v1/instance-settings';
+import { instantiateModule } from '../../../state/v1/instantiate-module';
+import { structureScope } from '../structure-scope';
 import { editModule } from '../../../state/v1/topology-edits';
 import { PortFields, TransferFields } from './device-fields';
 import { choice, formatValue, numberField, ParameterField, readEmpirical, readParameter, textField } from './value-fields';
 
 type Definition = ComponentDefinition | ModuleDefinition;
-const sourceLabels = { default: '定义默认值', override: '实例覆盖', mapped: '由上级设置' };
+const sourceLabels = { default: '定义默认值', override: '当前实例单独设置', mapped: '由上级设置' };
 
 function readDefault(data: FormData, parameter: ParameterDefinition): ParameterDefinition {
   const name = textField(data, 'name');
@@ -22,15 +25,22 @@ function readDefault(data: FormData, parameter: ParameterDefinition): ParameterD
     range: min === undefined && max === undefined ? undefined : { min, max } };
 }
 
-export function PropertiesPanel({ store, occurrence }: { store: ProjectStore; occurrence: ResolvedInstance }) {
-  const { definition, instance, instancePath, parameters } = occurrence;
+export function PropertiesPanel({ store, occurrence, occurrences, jumpToParameter }: {
+  store: ProjectStore; occurrence: ResolvedInstance; occurrences: readonly ResolvedInstance[];
+  jumpToParameter: (path: InstancePath, parameterId: string) => void;
+}) {
+  const { definition, instance, instancePath, parameters, settings } = occurrence;
   const [error, setError] = useState('');
   const [deletion, setDeletion] = useState<string>();
-  const parent = instance && store.resolveInstance(instancePath.slice(0, -1))?.definition;
+  const parentPath = instancePath.slice(0, -1);
+  const parent = instance && store.resolveInstance(parentPath)?.definition;
+  const sharedLocations = structureScope(occurrences, definition.id);
+  const parentLocations = parent ? structureScope(occurrences, parent.id) : [];
 
   function commit(change: (draft: Project) => Project) {
     const result = store.commit(change);
     setError(result.ok ? '' : result.message);
+    return result.ok;
   }
 
   function changeDefinition(read: () => Definition) {
@@ -41,11 +51,29 @@ export function PropertiesPanel({ store, occurrence }: { store: ProjectStore; oc
     });
   }
 
-  function changeInstance(change: (current: Instance) => Instance) {
-    if (!instance || parent?.kind !== 'module') return;
-    commit(draft => editModule(draft, parent.id, module => ({
-      ...module, instances: module.instances.map(item => item.id === instance.id ? change(item) : item),
-    })));
+  function changeInstance(change: (current: InstanceSettings) => InstanceSettings) {
+    if (instance) commit(draft => editInstanceSettings(draft, instancePath, change));
+  }
+
+  function addModule(mode: 'reuse' | 'copy') {
+    const id = crypto.randomUUID();
+    if (commit(draft => instantiateModule(draft, instancePath, mode, id, () => crypto.randomUUID()))) {
+      store.selectModule(parentPath);
+      store.selectInstance([...parentPath, id]);
+    }
+  }
+
+  function parameterLocation(path: InstancePath, id: string) {
+    let owner = store.resolveInstance(path);
+    let source = owner?.parameters.get(id)?.source;
+    while (source?.kind === 'mapped') {
+      path = source.instancePath;
+      id = source.parameterId;
+      owner = store.resolveInstance(path);
+      source = owner?.parameters.get(id)?.source;
+    }
+    return { path, id, name: owner?.instance?.name ?? owner?.definition.name,
+      parameterName: owner?.definition.parameters?.find(parameter => parameter.id === id)?.name ?? id };
   }
 
   return <section className="panel v1-properties" aria-labelledby="v1-properties-heading">
@@ -61,13 +89,19 @@ export function PropertiesPanel({ store, occurrence }: { store: ProjectStore; oc
     </form>}
     <div className="v1-inspector-fields">
       {instance && <div className="v1-common-properties">
-        <p className="v1-property-effective">这里的修改保存在上级模块「{parent?.name}」中。复用该模块的其他位置也会受到影响。</p>
+        <p className="v1-property-effective">名称、状态和参数设置只应用于当前实例。</p>
         <form key={JSON.stringify([instance.name, instance.switchStateId])} onSubmit={event => {
           event.preventDefault();
           const data = new FormData(event.currentTarget);
           const name = textField(data, 'name');
           if (!name) { setError('名称不能为空。'); return; }
-          changeInstance(current => ({ ...current, name, switchStateId: choice(data, 'switch') || undefined }));
+          const switchStateId = choice(data, 'switch') || undefined;
+          if (name === instance.name && switchStateId === instance.switchStateId) return;
+          changeInstance(current => ({
+            ...current,
+            ...(name !== instance.name && { name }),
+            ...(switchStateId !== instance.switchStateId && { switchStateId }),
+          }));
         }}>
           <label>名称<input name="name" defaultValue={instance.name} data-object-name required /></label>
           {definition.kind === 'component' && definition.switchStates && <label>开关状态
@@ -81,18 +115,23 @@ export function PropertiesPanel({ store, occurrence }: { store: ProjectStore; oc
         {definition.parameters?.map(parameter => {
           const effective = parameters.get(parameter.id);
           const source = effective?.source;
-          const local = instance.parameterOverrides;
+          const local = settings?.parameterOverrides;
           const current = local && Object.hasOwn(local, parameter.id) ? local[parameter.id] : undefined;
-          return <details key={parameter.id}>
+          const controlling = source?.kind === 'mapped' ? parameterLocation(source.instancePath, source.parameterId) : undefined;
+          const sourceLabel = source?.kind === 'override' && current === undefined ? '模块内默认设置'
+            : source && sourceLabels[source.kind];
+          return <details key={parameter.id} data-effective-parameter={parameter.id}>
             <summary>{parameter.name}<span className="v1-parameter-value">{effective
-              ? `${formatValue(effective.value, '；')}${parameter.kind === 'numeric' ? ' ' + parameter.unit : ''} · ${sourceLabels[effective.source.kind]}`
+              ? `${formatValue(effective.value, '；')}${parameter.kind === 'numeric' ? ' ' + parameter.unit : ''} · ${sourceLabel}`
               : '未设置'}</span></summary>
-            {source?.kind === 'mapped' && <details><summary>参数来源</summary>
-              <p>{JSON.stringify(source.instancePath)} · {source.parameterId}</p>
-            </details>}
-            {parameter.overridable && <form key={JSON.stringify([parameter, current])} onSubmit={event => {
+            {controlling && <div className="v1-property-effective">
+              <p>由上级「{controlling.name}」的「{controlling.parameterName}」设置。</p>
+              <button type="button" onClick={() => jumpToParameter(controlling.path, controlling.id)}>转到来源参数</button>
+            </div>}
+            {parameter.overridable && !controlling && <form key={JSON.stringify([parameter, current])} onSubmit={event => {
               event.preventDefault();
               const data = new FormData(event.currentTarget);
+              if (store.resolveInstance(instancePath)?.parameters.get(parameter.id)?.source.kind === 'mapped') return;
               changeInstance(item => {
                 const value = readParameter(data, 'value', parameter);
                 const overrides = { ...item.parameterOverrides };
@@ -101,7 +140,7 @@ export function PropertiesPanel({ store, occurrence }: { store: ProjectStore; oc
                 return { ...item, parameterOverrides: Object.keys(next).length ? next : undefined };
               });
             }}>
-              <ParameterField parameter={parameter} value={current} label={source?.kind === 'mapped' ? '备用值（上级未设置时使用）' : '当前值（留空继承）'} />
+              <ParameterField parameter={parameter} value={current} label="当前实例值（留空恢复默认）" />
               <button type="submit">保存覆盖</button>
               {current !== undefined && <button type="button" onClick={() => changeInstance(item => {
                 const overrides = { ...item.parameterOverrides };
@@ -112,13 +151,19 @@ export function PropertiesPanel({ store, occurrence }: { store: ProjectStore; oc
           </details>;
         })}
       </div>}
+      {instance && definition.kind === 'module' && <section>
+        <h3>模块操作</h3>
+        {parentLocations.length > 0 && <p className="v1-property-effective">在上级模块添加后，以下位置都会新增此对象：{parentLocations.join('、')}。</p>}
+        <button type="button" onClick={() => addModule('reuse')}>再次使用此模块</button>
+        <button type="button" onClick={() => addModule('copy')}>复制为独立模块</button>
+      </section>}
       {!!definition.ports.length && <section>
         <h3>端口</h3>
         {definition.ports.map(port => <details key={port.id}>
           <summary>{portDisplayName(port.id)}<span className="v1-parameter-value">
             {portTypeLabels[port.type]} · {port.direction === 'in' ? '输入' : '输出'}
           </span></summary>
-          <p className="v1-property-effective">修改端口会影响使用同一定义的所有位置。端口 ID：{port.id}</p>
+          <p className="v1-property-effective">端口属于共享结构。{sharedLocations.length > 0 && ` 影响 ${sharedLocations.join('、')}。`} 端口 ID：{port.id}</p>
           <PortFields key={JSON.stringify(port)} port={port} remove={() => { setError(''); setDeletion(port.id); }}
             save={read => changeDefinition(() => ({ ...definition,
               ports: definition.ports.map(item => item.id === port.id ? read() : item),
@@ -127,7 +172,7 @@ export function PropertiesPanel({ store, occurrence }: { store: ProjectStore; oc
       </section>}
       <details className="v1-advanced-properties">
         <summary>高级设置 · 共享定义</summary>
-        <p className="v1-property-effective">这里的修改会影响使用同一定义的所有位置。</p>
+        <p className="v1-property-effective">这里编辑共享定义。{sharedLocations.length > 0 && ` 改动会应用到 ${sharedLocations.join('、')}。`}</p>
         {instance && <form key={definition.name} onSubmit={event => {
           event.preventDefault();
           const name = textField(new FormData(event.currentTarget), 'name');
@@ -137,7 +182,7 @@ export function PropertiesPanel({ store, occurrence }: { store: ProjectStore; oc
           <label>定义名称<input name="name" defaultValue={definition.name} required /></label>
           <button type="submit">保存定义名称</button>
         </form>}
-        {definition.parameters?.map(parameter => <details key={parameter.id}>
+        {definition.parameters?.map(parameter => <details key={parameter.id} data-definition-parameter={parameter.id}>
           <summary>参数定义 · {parameter.name}</summary>
           <form key={JSON.stringify(parameter)} onSubmit={event => {
             event.preventDefault();

@@ -1,6 +1,6 @@
 import type { SwitchState } from '../../model/v1/device';
 import type { ParameterValue } from '../../model/v1/parameters';
-import type { ComponentDefinition, EndpointRef, Instance, InstancePath, ModuleDefinition, Project } from '../../model/v1/types';
+import type { ComponentDefinition, EndpointRef, Instance, InstancePath, InstanceSettings, ModuleDefinition, Project } from '../../model/v1/types';
 import { validateProject } from '../../model/v1/validate';
 
 type Definition = ComponentDefinition | ModuleDefinition;
@@ -20,6 +20,7 @@ export type ResolvedInstance = {
   readonly definition: Definition;
   /** The root is a definition without a containing instance. */
   readonly instance?: Instance;
+  readonly settings?: InstanceSettings;
   readonly parameters: ReadonlyMap<string, EffectiveParameter>;
   readonly switchState?: SwitchState;
 };
@@ -60,6 +61,17 @@ function readChildParameters(
   return parameters;
 }
 
+function applySettings(slot: Instance, settings?: InstanceSettings): Instance {
+  if (!settings) return slot;
+  return {
+    ...slot,
+    name: settings.name ?? slot.name,
+    switchStateId: settings.switchStateId ?? slot.switchStateId,
+    parameterOverrides: settings.parameterOverrides
+      ? { ...slot.parameterOverrides, ...settings.parameterOverrides } : slot.parameterOverrides,
+  };
+}
+
 function selectedSwitchState(definition: Definition, instance?: Instance): SwitchState | undefined {
   return definition.kind === 'component'
     ? definition.switchStates?.find(state => state.id === instance?.switchStateId)
@@ -76,23 +88,27 @@ export function resolveHierarchy(project: Project) {
   for (const definition of [...project.moduleDefinitions, ...project.componentDefinitions]) {
     definitions.set(definition.id, definition);
   }
+  const settingsByPath = new Map(project.instanceSettings?.map(item => [JSON.stringify(item.instancePath), item]));
   // Validation guarantees the root and all child definitions exist.
   const root = project.moduleDefinitions.find(definition => definition.id === project.rootModuleDefinitionId)!;
 
   function resolveInstance(instancePath: InstancePath): ResolvedInstance | undefined {
     let definition: Definition = root;
     let instance: Instance | undefined;
+    let settings: InstanceSettings | undefined;
     let parameters = readParameters(root);
     for (const [depth, instanceId] of instancePath.entries()) {
       if (definition.kind !== 'module') return undefined;
-      instance = definition.instances.find(child => child.id === instanceId);
-      if (!instance) return undefined;
+      const slot = definition.instances.find(child => child.id === instanceId);
+      if (!slot) return undefined;
+      settings = settingsByPath.size ? settingsByPath.get(JSON.stringify(instancePath.slice(0, depth + 1))) : undefined;
+      instance = applySettings(slot, settings);
 
       const childDefinition: Definition = definitions.get(instance.definitionId)!;
       parameters = readChildParameters(childDefinition, instance, definition, parameters, () => instancePath.slice(0, depth));
       definition = childDefinition;
     }
-    return { instancePath: [...instancePath], instance, definition, parameters, switchState: selectedSwitchState(definition, instance) };
+    return { instancePath: [...instancePath], instance, settings, definition, parameters, switchState: selectedSwitchState(definition, instance) };
   }
 
   /** Walks occurrences from the root, reusing each parent's resolved parameters. */
@@ -104,10 +120,13 @@ export function resolveHierarchy(project: Project) {
       if (parent.definition.kind !== 'module') continue;
       const children = parent.definition.instances;
       for (let i = children.length - 1; i >= 0; i--) {
-        const instance = children[i];
+        const slot = children[i];
+        const instancePath = [...parent.instancePath, slot.id];
+        const settings = settingsByPath.get(JSON.stringify(instancePath));
+        const instance = applySettings(slot, settings);
         const definition = definitions.get(instance.definitionId)!;
         pending.push({
-          instancePath: [...parent.instancePath, instance.id], instance, definition,
+          instancePath, instance, settings, definition,
           parameters: readChildParameters(definition, instance, parent.definition, parent.parameters, () => parent.instancePath),
           switchState: selectedSwitchState(definition, instance),
         });
