@@ -1,4 +1,4 @@
-import type { Instance, InstancePath, ModuleDefinition, PortDefinition, Project } from './types';
+import type { Instance, InstancePath, ModuleDefinition, PhysicalFootprint, PortDefinition, Project } from './types';
 import type { ParameterDefinition } from './parameters';
 import { channelSetsOverlap, validateConversionProfile, validateDevice, validatePortConstraints } from './validate-device';
 import { parameterCanFeed, validateParameterDefinition, validateParameterValue } from './validate-parameters';
@@ -49,6 +49,10 @@ function validatePhysicalContainment(parentByPlacement: ReadonlyMap<string, stri
   }
 }
 
+function validFootprint({ widthMm, depthMm }: PhysicalFootprint): boolean {
+  return [widthMm, depthMm].every(value => Number.isFinite(value) && value > 0);
+}
+
 /** Validates typed V1 domain data. Parsing and schema validation belong to storage. */
 export function validateProject(project: Project): void {
   requireValid(project.id.trim(), '工程 ID 不得为空');
@@ -72,7 +76,11 @@ export function validateProject(project: Project): void {
       validateParameterDefinition(parameter, `定义「${definition.id}」的参数「${parameter.id}」`);
     }
     paramsByDefinition.set(definition.id, parameters);
-    if (definition.kind === 'component') validateDevice(definition, ports, parameters);
+    if (definition.kind === 'component') {
+      if (definition.physicalFootprint) requireValid(validFootprint(definition.physicalFootprint),
+        `器件「${definition.id}」的宽和深须为以 mm 计量的有限正数`);
+      validateDevice(definition, ports, parameters);
+    }
   }
   const profiles = indexById(project.conversionProfiles ?? [], '标定方案');
   for (const profile of profiles.values()) {
@@ -182,6 +190,8 @@ export function validateProject(project: Project): void {
     requireValid(!parentByPlacement.has(key), `物理布局位置重复: ${key}`);
     requireValid(Number.isFinite(placement.xMm) && Number.isFinite(placement.yMm) && placement.rotationDeg % 90 === 0,
       `物理坐标或旋转角度无效: ${key}`);
+    if (placement.footprint) requireValid(placed.kind === 'component' && validFootprint(placement.footprint),
+      `物理位置 ${key} 的实例宽深仅可用于器件，且须为以 mm 计量的有限正数`);
     parentByPlacement.set(key, JSON.stringify(placement.enclosurePath));
   }
   validatePhysicalContainment(parentByPlacement);

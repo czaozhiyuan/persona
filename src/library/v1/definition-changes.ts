@@ -46,6 +46,7 @@ export function describeDefinitionChanges(before: Definition, after: Definition)
     record('物理包络', before.physicalEnclosure, after.physicalEnclosure);
   }
   if (before.kind === 'component' && after.kind === 'component') {
+    record('参考占位宽深', before.physicalFootprint, after.physicalFootprint);
     record('器件传输', before.transfers ?? [], after.transfers ?? []);
     records('开关状态与路由', before.switchStates, after.switchStates, idOf);
   }

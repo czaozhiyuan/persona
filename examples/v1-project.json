@@ -133,6 +133,7 @@
       {
         "kind": "component",
         "id": "deviceDemo-rf-pcb",
+        "physicalFootprint": { "widthMm": 80, "depthMm": 55 },
         "name": "射频电路板",
         "ports": [
           {

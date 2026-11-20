@@ -36,8 +36,11 @@ type DefinitionIdentity = {
   parameters?: readonly ParameterDefinition[];
 };
 
+export type PhysicalFootprint = { widthMm: number; depthMm: number };
+
 export type ComponentDefinition = DefinitionIdentity & {
   kind: 'component';
+  physicalFootprint?: PhysicalFootprint;
   transfers?: readonly Transfer[];
   switchStates?: readonly SwitchState[];
   dcSupply?: DcSupply;
@@ -69,11 +72,7 @@ export type PortMapping = {
   target: LocalEndpointRef;
 };
 
-export type PhysicalEnclosure = {
-  widthMm: number;
-  depthMm: number;
-  heightMm: number;
-};
+export type PhysicalEnclosure = PhysicalFootprint & { heightMm: number };
 
 export type ModuleDefinition = DefinitionIdentity & {
   kind: 'module';
@@ -95,6 +94,8 @@ export type PhysicalPlacement = {
   yMm: number;
   /** Multiples of 90 degrees, clockwise about the placed instance's local origin at (xMm, yMm). */
   rotationDeg: number;
+  /** Optional actual component dimensions, overriding the definition's suggested dimensions. */
+  footprint?: PhysicalFootprint;
 };
 
 export type TopologyPlacement = {
