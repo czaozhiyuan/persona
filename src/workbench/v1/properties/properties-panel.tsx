@@ -26,9 +26,10 @@ function readDefault(data: FormData, parameter: ParameterDefinition): ParameterD
     range: min === undefined && max === undefined ? undefined : { min, max } };
 }
 
-export function PropertiesPanel({ store, occurrence, occurrences, jumpToParameter, onAddPort, onMoveUp, onDissolve }: {
+export function PropertiesPanel({ store, occurrence, occurrences, jumpToParameter, onAddPort, onCopyModule, onMoveUp, onDissolve }: {
   store: ProjectStore; occurrence: ResolvedInstance; occurrences: readonly ResolvedInstance[];
   onAddPort: (path: InstancePath) => void;
+  onCopyModule: (path: InstancePath) => void;
   onMoveUp?: (path: InstancePath) => void;
   onDissolve?: (path: InstancePath) => void;
   jumpToParameter: (path: InstancePath, parameterId: string) => void;
@@ -81,9 +82,9 @@ export function PropertiesPanel({ store, occurrence, occurrences, jumpToParamete
     if (!saved) input.value = previous;
   }
 
-  function addModule(mode: 'reuse' | 'copy') {
+  function reuseModule() {
     const id = crypto.randomUUID();
-    if (commit(draft => instantiateModule(draft, instancePath, mode, id, () => crypto.randomUUID()))) {
+    if (commit(draft => instantiateModule(draft, instancePath, 'reuse', id, () => crypto.randomUUID()))) {
       store.selectModule(parentPath);
       store.selectInstance([...parentPath, id]);
     }
@@ -177,8 +178,8 @@ export function PropertiesPanel({ store, occurrence, occurrences, jumpToParamete
         <h3>模块操作</h3>
         {onDissolve && <button type="button" onClick={() => onDissolve(instancePath)}>解散模块（保留内部对象）</button>}
         {parentLocations.length > 0 && <p className="v1-property-effective">在上级模块添加后，以下位置都会新增此对象：{parentLocations.join('、')}。</p>}
-        <button type="button" onClick={() => addModule('reuse')}>再次使用此模块</button>
-        <button type="button" onClick={() => addModule('copy')}>复制为独立模块</button>
+        <button type="button" onClick={reuseModule}>再次使用此模块</button>
+        <button type="button" onClick={() => onCopyModule(instancePath)}>复制为独立模块</button>
       </section>}
       {definition.kind === 'module' && enclosure && <section>
         <h3>机箱尺寸</h3>

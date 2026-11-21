@@ -137,6 +137,8 @@ type Props = {
   add: (item: LibraryItem, position: XYPosition) => boolean;
   deleteSelection: (path: InstancePath, instanceId?: string, wire?: WiringSelection) => boolean;
   rename: () => void;
+  copyModule: () => boolean;
+  pasteModule: (placement: (ports: readonly PortDefinition[]) => XYPosition | undefined) => boolean;
   report: (message: string) => void;
   undo: () => void;
   redo: () => void;
@@ -148,7 +150,7 @@ export function TopologyCanvas(props: Props) {
 
 function EditableTopologyCanvas({ project, instances, modulePath, selectedInstance, selectedPaths, pathResult, budgetHighlight, expanded,
   toggleModule, selectObject, selectObjects, enterModule, reparent, focusMoved, move, resize, connect, mapPort, add, placingModule, cancelPlacement,
-  deleteSelection, rename, report, undo, redo, openPort, onAddPort, newPort }: Props) {
+  deleteSelection, rename, copyModule, pasteModule, report, undo, redo, openPort, onAddPort, newPort }: Props) {
   const flowStore = useStoreApi<CanvasNode, WiringEdge>();
   const boxSelection = useRef<readonly InstancePath[] | undefined>(undefined);
   const panWithSpace = useKeyPress('Space', { actInsideInputWithModifier: false });
@@ -506,6 +508,37 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     add(item, position);
   }
 
+  function pastePosition(ports: readonly PortDefinition[]) {
+    if (!canvas.current || !flow.current) return;
+    const screen = canvas.current.getBoundingClientRect();
+    const topLeft = flow.current.screenToFlowPosition({ x: screen.left, y: screen.top });
+    const bottomRight = flow.current.screenToFlowPosition({ x: screen.right, y: screen.bottom });
+    const scope = nodeByKey.get(rootKey);
+    const extent = scope?.frame?.saved ? moduleExtent(scope.frame.base, frameInsets(scope.item.definition.ports)) : undefined;
+    const visible: CoordinateExtent = extent ? [
+      [Math.max(topLeft.x, extent[0][0]), Math.max(topLeft.y, extent[0][1])],
+      [Math.min(bottomRight.x, extent[1][0]), Math.min(bottomRight.y, extent[1][1])],
+    ] : [[topLeft.x, topLeft.y], [bottomRight.x, bottomRight.y]];
+    const { width, height } = estimatedBlockSize(ports);
+    const center = { x: (topLeft.x + bottomRight.x - width) / 2, y: (topLeft.y + bottomRight.y - height) / 2 };
+    const occupied = scopes.get(rootKey)?.members.map(item => ({
+      ...item.bounds, width: item.frame?.display.width ?? item.bounds.width, height: item.frame?.display.height ?? item.bounds.height,
+    })) ?? [];
+    const fits = visible[1][0] - visible[0][0] >= width && visible[1][1] - visible[0][1] >= height;
+    // Keep the viewport fixed. Prefer a nearby visible gap and use the least-overlapping candidate in a crowded view.
+    const offsets = [[0, 0], [0, 1], [1, 0], [0, -1], [-1, 0], [1, 1], [-1, 1], [1, -1], [-1, -1]];
+    const candidates = offsets.map(([x, y]) => {
+      const rect = { x: center.x + x * (width + 16), y: center.y + y * (height + 16), width, height };
+      const limit = fits ? visible : extent;
+      const position = limit ? keepNodeInside(rect, limit) : { x: rect.x, y: rect.y };
+      const overlap = occupied.reduce((total, node) => total
+        + Math.max(0, Math.min(node.x + node.width, position.x + width) - Math.max(node.x, position.x))
+        * Math.max(0, Math.min(node.y + node.height, position.y + height) - Math.max(node.y, position.y)), 0);
+      return { position, overlap };
+    });
+    return candidates.reduce((best, candidate) => candidate.overlap < best.overlap ? candidate : best).position;
+  }
+
   useEffect(() => {
     function keyboard(event: KeyboardEvent) {
       if (event.defaultPrevented || canvas.current?.closest('[inert]') || document.querySelector('dialog[open]')) return;
@@ -545,7 +578,12 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
         }
       } else if (event.ctrlKey || event.metaKey) {
         const key = event.key.toLowerCase();
-        if (key === 'z' || key === 'y') {
+        if (!event.altKey && !event.shiftKey && key === 'c' && !event.repeat
+          && (window.getSelection()?.isCollapsed ?? true) && copyModule()) {
+          event.preventDefault();
+        } else if (!event.altKey && !event.shiftKey && key === 'v' && !event.repeat && pasteModule(pastePosition)) {
+          event.preventDefault();
+        } else if (key === 'z' || key === 'y') {
           event.preventDefault();
           if (event.shiftKey || key === 'y') redo();
           else undo();

@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { createLinkBudget } from '../../src/engine/v1/link-budget';
 import { buildSignalGraph } from '../../src/engine/v1/signal-graph';
 import { editInstanceSettings } from '../../src/state/v1/instance-settings';
-import { instantiateModule } from '../../src/state/v1/instantiate-module';
+import { instantiateModule, pasteModule } from '../../src/state/v1/instantiate-module';
 import { createProjectStore } from '../../src/state/v1/project-store';
 import { removeTopologyInstance } from '../../src/state/v1/remove-topology-object';
 import { editModule } from '../../src/state/v1/topology-edits';
@@ -92,4 +92,31 @@ test('reuse takes default settings and a copy owns editable nested definitions a
   const original = layout.physical!.find(item => item.instancePath[0] === 'layoutDemo')!;
   assert.ok(copiedLayout.physical!.some(item => item.instancePath.join('/') === ['layout-copy', ...original.instancePath.slice(1)].join('/')
     && item.enclosurePath.join('/') === ['layout-copy', ...original.enclosurePath.slice(1)].join('/')));
+});
+
+test('clipboard copies the saved module snapshot into a different parent with one history entry', () => {
+  const store = createProjectStore(example());
+  const copied = store.getSnapshot().project;
+  const parent = ['RX_A'];
+  let id = 0;
+  const allocate = () => 'pasted-def-' + ++id;
+
+  assert.equal(store.commit(project => removeTopologyInstance(project, 'system', 'TX_A')).ok, true);
+  const beforePaste = store.getSnapshot().project;
+  const paste = (name: string) => store.commit(project => pasteModule(project, copied, ['TX_A'], parent, name, allocate));
+  assert.deepEqual(paste('first'), { ok: true });
+  assert.deepEqual(paste('second'), { ok: true });
+  const restored = roundTrip(store);
+  const first = restored.resolveInstance([...parent, 'first'])?.definition;
+  const second = restored.resolveInstance([...parent, 'second'])?.definition;
+  assert.ok(first?.kind === 'module' && second?.kind === 'module');
+  assert.notEqual(first.id, second.id);
+  assert.notEqual(first.instances[0].definitionId, second.instances[0].definitionId);
+  assert.deepEqual(first.connections, copied.moduleDefinitions.find(module => module.id === 'tx')?.connections);
+  assert.deepEqual(store.getSnapshot().project.namedLinks, beforePaste.namedLinks);
+  store.undo();
+  assert.ok(store.resolveInstance([...parent, 'first']));
+  assert.equal(store.resolveInstance([...parent, 'second']), undefined);
+  store.undo();
+  assert.equal(store.getSnapshot().project, beforePaste);
 });

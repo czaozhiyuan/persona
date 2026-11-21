@@ -42,6 +42,7 @@
   max-width: calc(100% - 180px); border-radius: .35rem; pointer-events: none;
 }
 .v1-topology-message { bottom: 54px; background: #fff1ef; border: 1px solid #ebc0bb; font-size: .85rem; }
+.v1-module-copy-notice { background: #f1faf6; border-color: #bdd5cd; color: #214d46; pointer-events: none; }
 .v1-canvas-zoom.react-flow__panel {
   display: flex; align-items: center; gap: .15rem; margin: 14px; padding: .15rem; color: #375951; z-index: 2;
 }
