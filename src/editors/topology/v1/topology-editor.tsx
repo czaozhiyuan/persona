@@ -1,9 +1,9 @@
+import { createPortal } from 'react-dom';
 import { portDisplayName, portTypeLabels } from '../../../workbench/v1/labels';
 import { structureScope } from '../../../workbench/v1/structure-scope';
 import { useState } from 'react';
 import type { PathResult } from '../../../engine/v1/path-resolver';
 import type { SignalGraph } from '../../../engine/v1/signal-graph';
-import { builtInDefinitions } from '../../../library/v1/built-in';
 import type { LibraryItem } from '../../../library/v1/insert-library-item';
 import { removeTopologyInstance, removeWiring } from '../../../state/v1/remove-topology-object';
 import type { LocalEndpointRef } from '../../../model/v1/topology';
@@ -20,6 +20,7 @@ import type { BindingPreview } from './port-binding-dialog';
 import { PortDeletionDialog } from './port-deletion-dialog';
 import type { BudgetHighlight } from './path-highlight';
 import { insertCanvasItem } from './topology-layout-edits';
+import { DepthControl } from './canvas-controls';
 import type { CanvasView } from './canvas-controls';
 import { TopologyCanvas } from './topology-canvas';
 import { displayDepth, hierarchyKey, inHierarchy, sharedParent } from './hierarchy-view';
@@ -27,24 +28,27 @@ import { CableForm, ConnectionForm, MappingForm, TopologyTool, field } from './w
 import type { LocalPort, UpdateWiring } from './wiring-forms';
 import './topology.css';
 
-export function TopologyEditor({ store, state, module, pathResult, graph, rename, expanded, setExpanded, budgetHighlight, onPortBudget, onDcBudget, onAddPort, newPort, onAddInside, onSelectObject, onSelectObjects, moveAcrossLevels, requestMoveUp, focusMoved, copyModule, pasteModule, copyNotice, fullPage, toggleFullPage, restoreView }: {
+export function TopologyEditor({ store, state, module, pathResult, graph, rename, expanded, setExpanded, budgetHighlight, onPortBudget, onDcBudget, onAddPort, newPort, onSelectObject, onSelectObjects, moveAcrossLevels, focusMoved, copyModule, pasteModule, copyNotice, fullPage, toggleFullPage, restoreView, placingModule, setPlacingModule, toolsHost, viewHost, topologyActive }: {
   store: ProjectStore; state: ProjectStoreSnapshot; module: ModuleDefinition; pathResult?: PathResult; graph: SignalGraph; rename: () => void;
   expanded: ReadonlySet<string>; setExpanded: (value: ReadonlySet<string>) => void;
   budgetHighlight?: BudgetHighlight;
   onPortBudget: (action: 'optical' | 'from' | 'to', ref: EndpointRef) => void;
   onDcBudget: (scope: InstancePath) => void;
   onAddPort: (path: InstancePath) => void;
-  onAddInside: (path: InstancePath) => void;
   onSelectObject: (path: InstancePath, extend: boolean) => void;
   onSelectObjects: (paths: readonly InstancePath[]) => void;
   moveAcrossLevels: (base: Project, plan: ApprovedMove, layout?: ReparentLayout) => string | undefined;
-  requestMoveUp: (path: InstancePath) => void;
   copyModule: Parameters<typeof TopologyCanvas>[0]['copyModule'];
   pasteModule: Parameters<typeof TopologyCanvas>[0]['pasteModule'];
   copyNotice: string;
   fullPage: boolean;
   toggleFullPage: (view: CanvasView) => void;
   restoreView?: CanvasView;
+  placingModule: boolean;
+  setPlacingModule: (active: boolean) => void;
+  toolsHost: HTMLDivElement | null;
+  viewHost: HTMLDivElement | null;
+  topologyActive: boolean;
   focusMoved?: InstancePath;
   newPort?: EndpointRef;
 }) {
@@ -52,7 +56,6 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
   const scope = selection.modulePath;
   const moduleName = store.resolveInstance(scope)?.instance?.name ?? module.name;
   const [message, setMessage] = useState('');
-  const [placingModule, setPlacingModule] = useState(false);
   const selectedPaths = selection.instancePaths ?? (selection.instancePath ? [selection.instancePath] : []);
   const [groupDialog, setGroupDialog] = useState(false);
   const maxDepth = displayDepth(graph.instances, scope);
@@ -61,18 +64,11 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
   const [portAction, setPortAction] = useState<{ path: InstancePath; portId: string }>();
   const [bindingPreview, setBindingPreview] = useState<BindingPreview>();
   const definitions = new Map([...project.moduleDefinitions, ...project.componentDefinitions].map(definition => [definition.id, definition]));
-  const projectDefinitions = [...definitions.values()].filter(definition =>
-    definition.id !== module.id && definition.id !== project.rootModuleDefinitionId);
-  const availableTemplates = builtInDefinitions.filter(template => !definitions.has(template.id));
-  const selectedItem = selection.instancePath && store.resolveInstance(selection.instancePath);
-  const selected = selectedItem?.definition;
-  const selectedPath = selection.instancePath;
-  const moveUpSource = scope.length > 0 && selectedPath?.length === scope.length + 1
-    && inHierarchy(scope, selectedPath) ? selectedPath : undefined;
-  const selectedModule = selectedItem?.definition.kind === 'module' && selectedItem.instance ? selectedItem : undefined;
-  const dcScope = selected?.kind === 'module' && selected.physicalEnclosure ? selection.instancePath
-    : module.physicalEnclosure ? scope : undefined;
+  const selected = selection.instancePath && store.resolveInstance(selection.instancePath)?.definition;
+  const activeDcShortcut = module.physicalEnclosure && (selection.instancePaths
+    || (selected && (selected.kind !== 'module' || !selected.physicalEnclosure)));
   const sharedLocations = structureScope(graph.instances, module.id);
+  const depth = { value: visibleDepth, max: maxDepth, set: expandTo };
   const ports: LocalPort[] = module.instances.flatMap(instance => {
     const name = store.resolveInstance([...scope, instance.id])?.instance?.name ?? instance.name;
     return definitions.get(instance.definitionId)!.ports.map(port => ({
@@ -215,7 +211,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
         selectedPaths={selectedPaths} selectObject={onSelectObject} selectObjects={onSelectObjects}
         enterModule={store.selectModule} focusMoved={focusMoved}
         fullPage={fullPage} toggleFullPage={toggleFullPage} restoreView={restoreView}
-        depth={{ value: visibleDepth, max: maxDepth, set: expandTo }}
+        depth={depth} viewHost={viewHost} topologyActive={topologyActive}
         reparent={(base, plan, layout) => setMessage(moveAcrossLevels(base, plan, layout) ?? '')}
         onAddPort={onAddPort} newPort={newPort}
         openPort={(path, portId) => { setMessage(''); setPortAction({ path, portId }); }}
@@ -245,97 +241,29 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
       {copyNotice && !message && <p className="v1-topology-message v1-module-copy-notice" role="status">{copyNotice}</p>}
       {message && !preview && !portAction && !bindingPreview && !groupDialog && <p className="v1-topology-message error" role="alert">{message}</p>}
     </div>
-    <div className="v1-topology-tools">
-      <button type="button" className="primary" aria-pressed={placingModule} onClick={() => {
-        setMessage('');
-        setPlacingModule(!placingModule);
-      }}>{placingModule ? '取消放置' : '＋ 新建模块'}</button>
-      {selectedModule && !placingModule && <button type="button" onClick={() => onAddInside(selectedModule.instancePath)}>
-        添加内部对象 · {selectedModule.instance?.name}
-      </button>}
-      {!placingModule && moveUpSource && <button type="button" onClick={() => requestMoveUp(moveUpSource)}>移到上一级</button>}
-      {!placingModule && groupPaths.length > 1 && <>
-        {groupScope && <button type="button" onClick={openGroupDialog}>组成模块</button>}
-        <span className="v1-group-count" role="status">已选 {groupPaths.length} 个{!groupScope && ' · 整体移动和成组需要同一直接父模块'}</span>
-      </>}
-      {dcScope && <button type="button" className="v1-dc-entry" onClick={() => onDcBudget(dcScope)}>查看供电/功耗</button>}
-      {sharedLocations.length > 0 && <details data-workbench-popup>
-        <summary>共享结构 · {sharedLocations.length} 处</summary>
-        <div className="v1-topology-tool-list">
-          <strong>结构改动会应用到以下位置</strong>
-          <ul>{sharedLocations.map(location => <li key={location}>{location}</li>)}</ul>
-        </div>
-      </details>}
-      <details className="v1-topology-toolgroup" data-workbench-popup>
-        <summary>编辑工具</summary>
-        <div className="v1-topology-tool-list">
-      <TopologyTool title="添加器件或模块">
-        <form onSubmit={event => {
-          event.preventDefault();
-          const form = event.currentTarget;
-          const data = new FormData(form);
-          const definitionId = field(data, 'definition');
-          const name = field(data, 'name');
-          if (!definitionId || !name) return;
-          if (add({ source: definitions.has(definitionId) ? 'project' : 'template', id: definitionId, name })) form.reset();
-        }}>
-          <label>器件或模块<select name="definition" required>
-            <option value="">请选择</option>
-            {!!projectDefinitions.length && <optgroup label="工程定义">
-              {projectDefinitions.map(definition =>
-                <option key={definition.id} value={definition.id}>{definition.name} ({definition.id})</option>)}
-            </optgroup>}
-            {!!availableTemplates.length && <optgroup label="内置模板">
-              {availableTemplates.map(template => <option key={template.id} value={template.id}>{template.name}</option>)}
-            </optgroup>}
-          </select></label>
-          <label>名称<input name="name" required /></label>
-          <button type="submit">添加到框图</button>
-        </form>
-        <form onSubmit={event => {
-          event.preventDefault();
-          const form = event.currentTarget;
-          const data = new FormData(form);
-          const name = field(data, 'name');
-          if (!name) return;
-          const id = crypto.randomUUID();
-          const enclosure: ModuleDefinition = {
-            kind: 'module', id, name, ports: [], instances: [],
-            physicalEnclosure: { widthMm: Number(field(data, 'width')), depthMm: Number(field(data, 'depth')), heightMm: Number(field(data, 'height')) },
-          };
-          if (commit(draft => {
-            const updated = editModule(draft, module.id, current => ({
-              ...current, instances: [...current.instances, { id, name, definitionId: id }],
-            }));
-            return { ...updated, moduleDefinitions: [...updated.moduleDefinitions, enclosure] };
-          })) {
-            form.reset();
-            store.selectInstance([...scope, id]);
-          }
-        }}>
-          <p>新建发射或接收机箱时，直接填写机箱名称和尺寸。</p>
-          <label>机箱名称<input name="name" required /></label>
-          <div className="v1-topology-dimensions">
-            <label>宽 (mm)<input name="width" type="number" min="0.001" step="any" defaultValue={440} required /></label>
-            <label>深 (mm)<input name="depth" type="number" min="0.001" step="any" defaultValue={350} required /></label>
-            <label>高 (mm)<input name="height" type="number" min="0.001" step="any" defaultValue={44.45} required /></label>
-          </div>
-          <button type="submit">新建空机箱</button>
-        </form>
-      </TopologyTool>
-      <TopologyTool title="对外端口">
-        <button type="button" disabled={groupPaths.length > 1} onClick={() => onAddPort(selection.instancePath ?? scope)}>
-          ＋ 添加端口 · {selectedItem?.instance?.name ?? selectedItem?.definition.name ?? module.name}
-        </button>
-        {portRemoval(module.id, '删除对外端口')}
-        {selected && selected.id !== module.id && portRemoval(selected.id, `删除所选实例的定义端口 · ${selected.name}`)}
-      </TopologyTool>
-      <ConnectionForm module={module} ports={ports} update={updateWiring} />
-      <MappingForm module={module} ports={ports} connect={(portId, target) => requestBinding(scope, portId, target)} />
-      <CableForm module={module} ports={ports} update={updateWiring} />
-        </div>
+    {topologyActive && viewHost && createPortal(<DepthControl depth={depth} showValue />, viewHost)}
+    {topologyActive && toolsHost && createPortal(<div className="v1-module-tools">
+      {groupPaths.length > 1 && <section className="v1-multi-operations">
+        <p className="v1-property-effective" role="status">已选中 {groupPaths.length} 个对象。</p>
+        {groupScope ? <button type="button" onClick={openGroupDialog}>组成模块</button>
+          : <p className="v1-property-effective">组成模块需要选择同一直接父模块下的对象。</p>}
+      </section>}
+      <details key={hierarchyKey(scope)} className="v1-current-module-tools">
+        <summary>当前编辑模块 · {moduleName}</summary>
+        {sharedLocations.length > 0 && <p className="v1-property-effective">
+          「{moduleName}」的共享结构改动会应用到 {sharedLocations.join('、')}。
+        </p>}
+
+        {activeDcShortcut && <button type="button" onClick={() => onDcBudget(scope)}>查看供电/功耗 · {moduleName}</button>}
+        <TopologyTool title="模块对外端口">
+          <button type="button" onClick={() => onAddPort(scope)}>＋ 添加对外端口</button>
+          {portRemoval(module.id, '删除对外端口')}
+        </TopologyTool>
+        <ConnectionForm module={module} ports={ports} update={updateWiring} />
+        <MappingForm module={module} ports={ports} connect={(portId, target) => requestBinding(scope, portId, target)} />
+        <CableForm module={module} ports={ports} update={updateWiring} />
       </details>
-    </div>
+    </div>, toolsHost)}
     {groupDialog && groupScope && <dialog ref={dialog => { if (dialog && !dialog.open) dialog.showModal(); }}
       className="v1-topology-dialog" aria-labelledby="group-module-title" onCancel={() => { setGroupDialog(false); setMessage(''); }}>
       <h3 id="group-module-title">组成模块</h3>

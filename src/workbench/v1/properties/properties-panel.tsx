@@ -26,10 +26,12 @@ function readDefault(data: FormData, parameter: ParameterDefinition): ParameterD
     range: min === undefined && max === undefined ? undefined : { min, max } };
 }
 
-export function PropertiesPanel({ store, occurrence, occurrences, jumpToParameter, onAddPort, onCopyModule, onMoveUp, onDissolve }: {
+export function PropertiesPanel({ store, occurrence, occurrences, jumpToParameter, onAddPort, onCopyModule, onMoveUp, onDissolve, onAddInside, onDcBudget }: {
   store: ProjectStore; occurrence: ResolvedInstance; occurrences: readonly ResolvedInstance[];
   onAddPort: (path: InstancePath) => void;
   onCopyModule: (path: InstancePath) => void;
+  onAddInside?: (path: InstancePath) => void;
+  onDcBudget?: (path: InstancePath) => void;
   onMoveUp?: (path: InstancePath) => void;
   onDissolve?: (path: InstancePath) => void;
   jumpToParameter: (path: InstancePath, parameterId: string) => void;
@@ -114,7 +116,11 @@ export function PropertiesPanel({ store, occurrence, occurrences, jumpToParamete
 
   return <section className="panel v1-properties" aria-labelledby="v1-properties-heading">
     <h2 id="v1-properties-heading">对象属性 · {name}</h2>
-    {onMoveUp && <button type="button" onClick={() => onMoveUp(instancePath)}>移到上一级</button>}
+    {(onMoveUp || onAddInside || onDcBudget) && <div className="v1-context-actions">
+      {onAddInside && <button type="button" onClick={() => onAddInside(instancePath)}>添加内部对象 · {name}</button>}
+      {onMoveUp && <button type="button" onClick={() => onMoveUp(instancePath)}>移到上一级</button>}
+      {onDcBudget && <button type="button" onClick={() => onDcBudget(instancePath)}>查看供电/功耗 · {name}</button>}
+    </div>}
     {error && <p className="error" role="alert">{error}</p>}
     <p className="v1-property-effective">名称、端口和参数自动保存。文本和数值按 Enter 或离开输入框时应用，多行文本离开输入框时应用。</p>
     {!instance && nameField}

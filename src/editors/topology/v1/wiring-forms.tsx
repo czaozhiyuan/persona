@@ -9,7 +9,7 @@ export type LocalPort = { ref: LocalEndpointRef; port: PortDefinition; label: st
 export type UpdateWiring = (change: (module: ModuleDefinition) => ModuleDefinition) => boolean;
 
 export function TopologyTool({ title, children }: { title: string; children: ReactNode }) {
-  return <details name="topology-tools" data-workbench-popup>
+  return <details className="v1-inline-topology-tool">
     <summary>{title}</summary>
     <div className="v1-topology-popup" aria-label={title}>{children}</div>
   </details>;
