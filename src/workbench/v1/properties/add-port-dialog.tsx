@@ -22,10 +22,19 @@ export function AddPortDialog({ name, locations, add, close }: {
       else close();
     }}>
       <label>端口名称<input name="name" required autoFocus /></label>
-      <label>类型<select name="type">
-        {Object.entries(portTypeLabels).map(([type, label]) => <option value={type} key={type}>{type} · {label}</option>)}
-      </select></label>
-      <label>方向<select name="direction"><option value="in">输入</option><option value="out">输出</option></select></label>
+      <div className="v1-port-choices">
+        <fieldset>
+          <legend>类型</legend>
+          {Object.entries(portTypeLabels).map(([type, label]) => <label key={type}>
+            <input type="radio" name="type" value={type} defaultChecked={type === 'RF'} />{type} · {label}
+          </label>)}
+        </fieldset>
+        <fieldset>
+          <legend>方向</legend>
+          <label><input type="radio" name="direction" value="in" defaultChecked />输入</label>
+          <label><input type="radio" name="direction" value="out" />输出</label>
+        </fieldset>
+      </div>
       {error && <p className="error" role="alert">{error}</p>}
       <div className="actions">
         <button type="submit">添加端口</button>
