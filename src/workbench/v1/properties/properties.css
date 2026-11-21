@@ -17,3 +17,11 @@
 .v1-properties fieldset { min-width: 0; margin: .55rem 0; border: 1px solid #d2dfdb; border-radius: .35rem; }
 .v1-properties form button + button { margin-left: .4rem; }
 .v1-property-effective { margin: .45rem 0; color: #42605f; overflow-wrap: anywhere; }
+.v1-calibration-plot { display: block; width: 100%; margin: .4rem 0 .7rem; touch-action: none; }
+.v1-calibration-plot-area { fill: #f4f9f8; cursor: crosshair; }
+.v1-calibration-axis { pointer-events: none; font-size: 11px; fill: #42605f; }
+.v1-calibration-axis line { stroke: #cededb; }
+.v1-calibration-trace { fill: none; stroke: #267e73; stroke-width: 2; pointer-events: none; }
+.v1-calibration-point { fill: #fff; stroke: #267e73; stroke-width: 2; cursor: grab; }
+.v1-calibration-point[aria-pressed=true] { fill: #267e73; stroke: #174e47; }
+.v1-calibration-point:active { cursor: grabbing; }
