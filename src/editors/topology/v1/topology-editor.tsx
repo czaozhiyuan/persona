@@ -237,7 +237,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
         <button type="button" onClick={() => expandTo(maxDepth + 1)}>展开全部</button>
         <output htmlFor="topology-depth">{visibleDepth} / {maxDepth}</output>
       </div>
-      {placingModule && <p className="v1-placement-hint" role="status">点击画布放置到「{moduleName}」，按 Esc 取消。</p>}
+      {placingModule && <p className="v1-placement-hint" role="status">单击画布放置到「{moduleName}」 · Esc 取消</p>}
       {message && !preview && !portAction && !bindingPreview && !groupDialog && <p className="v1-topology-message error" role="alert">{message}</p>}
     </div>
     <div className="v1-topology-tools">
