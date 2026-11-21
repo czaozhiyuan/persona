@@ -56,7 +56,12 @@ function PortControls({ port, remove }: { port: PortDefinition; remove: () => vo
     {ratings.length > 0 && <fieldset key={type}>
       <legend>输入额定范围（可选）</legend>
       <label>单位<select name="ratingUnit" defaultValue={ratings.includes(port.inputRating?.unit as InputRating['unit'])
-        ? port.inputRating?.unit : ratings[0]}>
+        ? port.inputRating?.unit : ratings[0]} onChange={event => {
+        if (event.currentTarget.value === port.inputRating?.unit) return;
+        // Clear the uncontrolled bounds before the parent form reads and validates them.
+        event.currentTarget.form?.querySelectorAll<HTMLInputElement>('input[name="minimum"], input[name="maximum"]')
+          .forEach(input => { input.value = ''; });
+      }}>
         {ratings.map(unit => <option key={unit}>{unit}</option>)}
       </select></label>
       <div className="v1-property-pair">
