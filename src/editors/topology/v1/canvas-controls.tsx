@@ -1,8 +1,8 @@
 import { Panel, useReactFlow, useViewport, type AriaLabelConfig } from '@xyflow/react';
-import type { FitViewOptions } from '@xyflow/react';
+import type { FitViewOptions, Viewport } from '@xyflow/react';
 
 export const canvasFitOptions: FitViewOptions = {
-  padding: { left: '30px', right: '88px', top: '56px', bottom: '50px' },
+  padding: { left: '30px', right: '30px', top: '56px', bottom: '50px' },
 };
 
 export const flowAriaLabels = {
@@ -13,14 +13,27 @@ export const flowAriaLabels = {
   'handle.ariaLabel': '端口',
 } satisfies Partial<AriaLabelConfig>;
 
-export function CanvasControls({ locate, canLocate = false }: { locate?: () => void; canLocate?: boolean }) {
+export type CanvasView = { viewport: Viewport; edgeId?: string };
+export type ExpansionDepth = { value: number; max: number; set: (depth: number) => void };
+
+export function CanvasControls({ locate, canLocate, depth, fullPage, toggleFullPage }: {
+  locate: () => void; canLocate: boolean; depth: ExpansionDepth; fullPage: boolean; toggleFullPage: () => void;
+}) {
   const { zoomIn, zoomOut, fitView } = useReactFlow();
   const { zoom } = useViewport();
-  return <Panel position="bottom-right" className="v1-canvas-zoom" aria-label="画布缩放">
+  const displayLabel = fullPage ? '退出全页展示' : '全页展示';
+  return <Panel position="bottom-right" className="v1-canvas-zoom nopan nowheel" aria-label="框图视图控件">
+    <div className="v1-hierarchy-depth">
+      <button type="button" disabled={depth.max === 1} onClick={() => depth.set(1)}>收起</button>
+      <input type="range" min={1} max={depth.max} value={depth.value} disabled={depth.max === 1}
+        aria-label="模块展开深度" onChange={event => depth.set(Number(event.currentTarget.value))} />
+      <button type="button" disabled={depth.max === 1} onClick={() => depth.set(depth.max)}>展开</button>
+    </div>
     <button type="button" aria-label="缩小" title="缩小" onClick={() => void zoomOut()}>−</button>
     <output aria-label="缩放比例">{Math.round(zoom * 100)}%</output>
     <button type="button" aria-label="放大" title="放大" onClick={() => void zoomIn()}>+</button>
-    {locate && <button type="button" aria-label="定位选中" title="定位选中" disabled={!canLocate} onClick={locate}>◎</button>}
+    <button type="button" aria-label="定位选中" title="定位选中" disabled={!canLocate} onClick={locate}>◎</button>
     <button type="button" aria-label="适应画布" title="适应画布" onClick={() => void fitView(canvasFitOptions)}>⛶</button>
+    <button type="button" className="v1-full-page-toggle" aria-pressed={fullPage} onClick={toggleFullPage}>{displayLabel}</button>
   </Panel>;
 }

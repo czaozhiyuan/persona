@@ -20,6 +20,7 @@ import { ModulePlacement } from './module-placement';
 import { FrameResizeHandles } from './frame-resize-handles';
 import { keepGraphVisible } from './viewport';
 import { CanvasControls, canvasFitOptions, flowAriaLabels } from './canvas-controls';
+import type { CanvasView, ExpansionDepth } from './canvas-controls';
 import { hierarchyKey, sharedParent } from './hierarchy-view';
 import { projectPathHighlight } from './path-highlight';
 import type { BudgetHighlight } from './path-highlight';
@@ -129,6 +130,10 @@ type Props = {
   enterModule: (path: InstancePath) => void;
   reparent: (base: Project, plan: ApprovedMove, layout?: ReparentLayout) => void;
   focusMoved?: InstancePath;
+  depth: ExpansionDepth;
+  fullPage: boolean;
+  toggleFullPage: (view: CanvasView) => void;
+  restoreView?: CanvasView;
   move: (placements: readonly TopologyPlacement[], frame?: TopologyFrame) => void;
   resize: (frame: TopologyFrame, placementAdjustments: readonly TopologyPlacement[]) => void;
   connect: (scope: InstancePath, connection: Omit<Connection, 'id'>) => void;
@@ -152,7 +157,8 @@ export function TopologyCanvas(props: Props) {
 
 function EditableTopologyCanvas({ project, instances, modulePath, selectedInstance, selectedPaths, pathResult, budgetHighlight, expanded,
   toggleModule, selectObject, selectObjects, enterModule, reparent, focusMoved, move, resize, connect, mapPort, add, placingModule, cancelPlacement,
-  deleteInstance, deleteWiring, rename, copyModule, pasteModule, report, undo, redo, openPort, onAddPort, newPort }: Props) {
+  deleteInstance, deleteWiring, rename, copyModule, pasteModule, report, undo, redo, openPort, onAddPort, newPort,
+  depth, fullPage, toggleFullPage, restoreView }: Props) {
   const flowStore = useStoreApi<CanvasNode, WiringEdge>();
   const boxSelection = useRef<readonly InstancePath[] | undefined>(undefined);
   const panWithSpace = useKeyPress('Space', { actInsideInputWithModifier: false });
@@ -161,7 +167,9 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
   const [wireStart, setWireStart] = useState<string>();
   const cancelled = useRef(false);
   const connected = useRef(false);
-  const [viewport, setViewport] = useState<Viewport>();
+  const [initialViewport] = useState(() => restoreView?.viewport);
+  const [viewport, setViewport] = useState<Viewport | undefined>(initialViewport);
+  const appliedView = useRef<CanvasView>(undefined);
   const [resizePreview, setResizePreview] = useState<FrameResizePreview>();
   const [measured, setMeasured] = useState<ReadonlyMap<string, { width: number; height: number }>>(new Map());
   const dragSession = useRef<DragSession | undefined>(undefined);
@@ -169,7 +177,7 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
   const renderedPreview = useRef<DropPreview | undefined>(undefined);
   useLayoutEffect(() => { renderedPreview.current = dropPreview; }, [dropPreview]);
   const [drag, setDrag] = useState<ReadonlyMap<string, XYPosition>>();
-  const [selectedEdgeKey, setSelectedEdgeKey] = useState<string>();
+  const [selectedEdgeKey, setSelectedEdgeKey] = useState<string | undefined>(() => restoreView?.edgeId);
   const canvas = useRef<HTMLDivElement>(null);
   const flow = useRef<ReactFlowInstance<CanvasNode, WiringEdge>>(null);
 
@@ -204,12 +212,18 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     setViewport(next);
   }, [rootKey]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    if (restoreView && appliedView.current !== restoreView) {
+      appliedView.current = restoreView;
+      setViewport(restoreView.viewport);
+      setSelectedEdgeKey(restoreView.edgeId);
+      return;
+    }
     const frame = requestAnimationFrame(() => {
       if (flow.current) changeViewport(flow.current.getViewport());
     });
     return () => cancelAnimationFrame(frame);
-  }, [expanded, changeViewport]);
+  }, [expanded, changeViewport, restoreView]);
 
   const fromPort = wireStart ? ports.get(wireStart) : undefined;
   function wireState(node: string, portId: string, inner = false) {
@@ -250,7 +264,9 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
 
   const active = selectedInstance && hierarchyKey(selectedInstance);
   const selectedNode = active && nodeByKey.get(active);
-  const selectedWiring = !selectedNode && edges.find(edge => edge.id === selectedEdgeKey);
+  const selectedWiring = !selectedPaths.length && edges.find(edge => edge.id === selectedEdgeKey);
+  const locateIds = selectedWiring ? [selectedWiring.source, selectedWiring.target]
+    : selectedPaths.map(hierarchyKey).filter(key => nodeByKey.has(key)).map(nodeId);
   useEffect(() => { if (selectedPaths.length) setSelectedEdgeKey(undefined); }, [selectedPaths.length, selectedInstance]);
 
   const deepest = items.reduce((max, node) => Math.max(max, node.item.instancePath.length), modulePath.length);
@@ -596,7 +612,7 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
       zoom={() => flow.current?.getZoom()}
       place={screen => placeAt({ source: 'template', id: blankModuleId, name: '新建模块' }, screen)} />}
     <ReactFlow<CanvasNode, WiringEdge> nodes={nodes} edges={edges.map(edge => ({ ...edge, selected: selectedWiring === edge }))}
-      nodeTypes={nodeTypes} edgeTypes={edgeTypes} ariaLabelConfig={flowAriaLabels} fitView fitViewOptions={canvasFitOptions}
+      nodeTypes={nodeTypes} edgeTypes={edgeTypes} ariaLabelConfig={flowAriaLabels} fitView={!initialViewport} defaultViewport={initialViewport} fitViewOptions={canvasFitOptions}
       viewport={viewport} onViewportChange={changeViewport} onInit={instance => { flow.current = instance; }}
       minZoom={0.001} maxZoom={2} deleteKeyCode={null} connectionMode={ConnectionMode.Loose}
       zIndexMode="manual" selectNodesOnDrag={false}
@@ -692,9 +708,10 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
       onNodeDragStop={finishDrag}>
       <Background />
       <ViewportPortal><div className="v1-frame-surfaces" aria-hidden="true">{frameSurfaces}</div></ViewportPortal>
-      <CanvasControls canLocate={!!(selectedNode || selectedWiring)} locate={() => {
-        const ids = selectedNode ? [nodeId(selectedNode.key)] : selectedWiring ? [selectedWiring.source, selectedWiring.target] : [];
-        if (ids.length) void flow.current?.fitView({ ...canvasFitOptions, maxZoom: 1.2, nodes: ids.map(id => ({ id })) });
+      <CanvasControls depth={depth} fullPage={fullPage} canLocate={!!locateIds.length} locate={() => {
+        if (locateIds.length) void flow.current?.fitView({ ...canvasFitOptions, nodes: locateIds.map(id => ({ id })), maxZoom: 1.2 });
+      }} toggleFullPage={() => {
+        if (flow.current) toggleFullPage({ viewport: flow.current.getViewport(), edgeId: selectedWiring ? selectedWiring.id : undefined });
       }} />
     </ReactFlow>
     {dropPreview && <>
