@@ -28,12 +28,7 @@ function deepTopology() {
   }));
   const original = topologyExample.namedLinks[2];
   const leafPath = ['TX_A', 'mzm', 'child', 'child', 'child'];
-  const link: NamedLink = {
-    ...original,
-    conversionBindings: original.conversionBindings!.map(binding => ({
-      ...binding, eo: { ...binding.eo, instancePath: leafPath },
-    })),
-  };
+  const link: NamedLink = original;
   const project: Project = {
     ...topologyExample, namedLinks: [link],
     componentDefinitions: [...topologyExample.componentDefinitions, {
@@ -53,7 +48,7 @@ function deepTopology() {
   return { project, link, leafPath, laser1: endpoint(['TX_A', 'laser1'], 'OUT'), laser2: endpoint(['TX_A', 'laser2'], 'OUT') };
 }
 
-test('a cross-chassis route traces six object levels, a fibre, EO/OE and their calibration binding', () => {
+test('a cross-chassis route traces six object levels, a fibre, EO/OE', () => {
   const { project, link, leafPath, laser1 } = deepTopology();
   const { resolveNamedLink, resolveLocalPath } = createPathResolver(project);
   const options = { opticalSources: [laser1] };
@@ -65,9 +60,6 @@ test('a cross-chassis route traces six object levels, a fibre, EO/OE and their c
   const [eo, oe] = result.trace.conversions;
   assert.deepEqual(result.trace.steps[eo.edgeIndex].port.ref, endpoint(leafPath, 'RF_IN'));
   assert.deepEqual(result.trace.steps[oe.edgeIndex].channelIds, [ch28]);
-  assert.deepEqual(result.trace.bindings, [
-    { binding: link.conversionBindings![0], eoEdgeIndex: eo.edgeIndex, oeEdgeIndex: oe.edgeIndex, matched: true },
-  ]);
   const [supply] = result.trace.supplies;
   assert.equal(supply.status, 'resolved');
   assert.deepEqual(supply.path.steps[0].port.ref, laser1);

@@ -81,23 +81,3 @@ test('required connections are scoped to a concrete module occurrence and fibres
   assert.throws(() => validateProject(withLink({ ...fullLink, via: [{ scopePath: [], bundleId: 'mpo-12', coreId: 'missing' }] })),
     /必经纤芯不存在/);
 });
-
-test('multiple conversion spans can share a profile with independent overrides and valid EO/OE boundaries', () => {
-  const [binding] = fullLink.conversionBindings!;
-  const second = {
-    ...binding, id: 'span-2',
-    eo: { ...binding.eo, instancePath: ['TX_B', 'mzm'] },
-    oe: { ...binding.oe, instancePath: ['RX_B', 'pd'] },
-    overrides: { k: 2.1, pdPowerRefDbm: -3, rfGainRefDb: { kind: 'fixed' as const, value: -25 } },
-  };
-  validateProject(withLink({ ...fullLink, conversionBindings: [binding, second] }));
-  assert.equal(topologyExample.conversionProfiles[0].pdPowerRefDbm, -2);
-  assert.throws(() => validateProject(withLink({ ...fullLink, conversionBindings: [{ ...binding, profileId: 'missing' }] })),
-    /标定方案「missing」不存在/);
-  assert.throws(() => validateProject(withLink({ ...fullLink, conversionBindings: [{ ...binding, eo: binding.oe }] })),
-    /电光转换边界无效/);
-  assert.throws(() => validateProject(withLink({ ...fullLink, conversionBindings: [binding, { ...second, oe: binding.oe }] })),
-    /此转换边界已绑定/);
-  assert.throws(() => validateProject(withLink({ ...fullLink, conversionBindings: [{ ...binding, overrides: { k: Infinity } }] })),
-    /覆盖值须为有限数值/);
-});

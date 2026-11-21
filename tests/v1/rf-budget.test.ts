@@ -94,13 +94,13 @@ test('missing NF or out-of-range gain only affects dependent metrics and preserv
   assert.equal(noNf.status, 'partial');
   assert.equal(value(noNf.gainDb), 5);
   assert.equal(value(noNf.powerDbm), -15);
-  missing(noNf.nfDb, /未设置经验值/);
+  missing(noNf.nfDb, /未设置数值/);
   const last = createRfBudget(fixture({ limitedGain: 'last' })).calculateLocal(request, { ...input, frequencyGHz: 0 });
   assert.equal(last.status, 'partial');
   assert.equal(value(last.stages[2].powerDbm), -10);
   assert.ok(Math.abs(value(last.nfDb) - value(createRfBudget(fixture()).calculateLocal(request, input).nfDb)) < 1e-12);
-  missing(last.gainDb, /超出经验曲线范围/);
-  missing(last.powerDbm, /超出经验曲线范围/);
+  missing(last.gainDb, /超出曲线范围/);
+  missing(last.powerDbm, /超出曲线范围/);
   const first = createRfBudget(fixture({ limitedGain: 'first' })).calculateLocal(request, input);
   assert.ok(Math.abs(value(first.stages[2].cumulativeNfDb) - 3) < 1e-12);
   missing(first.nfDb, /前级射频增益/);

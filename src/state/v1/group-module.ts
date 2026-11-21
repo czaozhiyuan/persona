@@ -111,7 +111,6 @@ export function groupModule(project: Project, paths: readonly InstancePath[], na
         ('bundleId' in ref ? movedBundles.has(ref.bundleId) : movedWires.has(ref.connectionId))
         ? [...ref.scopePath, instanceId] : remap(ref.scopePath),
     })),
-    conversionBindings: link.conversionBindings?.map(binding => ({ ...binding, eo: endpoint(binding.eo), oe: endpoint(binding.oe) })),
     ...(link.trial && { trial: { ...link.trial, opticalSources: link.trial.opticalSources?.map(source => ({
       ...source, endpoint: endpoint(source.endpoint),
     })) } }),

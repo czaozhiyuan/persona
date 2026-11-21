@@ -93,8 +93,8 @@ test('instance switch selection and declared MUX/DEMUX channels determine device
   assert.equal(route('board', 'RX_IN', 'TX_OUT'), undefined);
   assert.equal(graph.edges.some(edge => edge.from.ref.instancePath.includes('RX_850')
     && edge.to.ref.instancePath.includes('TX_CH30')), false);
-  assert.deepEqual(graph.instances.find(instance => instance.instancePath.at(-1) === 'mzm')?.parameters.get('modulatorGain')?.value,
-    { kind: 'fixed', value: -4 });
+  assert.deepEqual(graph.instances.find(instance => instance.instancePath.at(-1) === 'mzm')?.parameters.get('modulatorLoss')?.value,
+    { kind: 'fixed', value: 4 });
 });
 
 test('only an explicit converter changes an optical channel and DC stays in its domain', () => {

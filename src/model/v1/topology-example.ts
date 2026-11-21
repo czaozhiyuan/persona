@@ -1,6 +1,5 @@
 import type { OpticalChannelId } from './channels';
 import type { NumericParameter } from './parameters';
-import type { ConversionBinding } from './topology';
 import type { PortDirection, Project } from './types';
 
 const wdmChannels = ['DWDM_CH28', 'DWDM_CH30'] as const;
@@ -8,17 +7,9 @@ const optical = (id: string, direction: PortDirection, channelIds: readonly Opti
   ({ id, type: 'OPTICAL' as const, direction, channelIds });
 const rf = (id: string, direction: PortDirection) => ({ id, type: 'RF' as const, direction });
 const local = (instanceId: string, portId: string) => ({ instanceId, portId });
-const operatingPointLoss: NumericParameter = {
-  id: 'operatingPointLoss', name: '控制点附加损耗', kind: 'numeric', unit: 'dB', valueKind: 'fixed',
+const insertionLoss: NumericParameter = {
+  id: 'insertionLoss', name: '最大透过状态光插损', kind: 'numeric', unit: 'dB', valueKind: 'fixed',
   range: { min: 0 }, defaultValue: { kind: 'fixed', value: 2 }, overridable: true,
-};
-
-const binding: ConversionBinding = {
-  id: 'span-1',
-  profileId: 'reference',
-  eo: { instancePath: ['TX_A', 'mzm'], fromPortId: 'RF_IN', toPortId: 'OUT' },
-  oe: { instancePath: ['RX_A', 'pd'], fromPortId: 'IN', toPortId: 'RF_OUT' },
-  overrides: { k: 1.8 },
 };
 
 export const topologyExample = {
@@ -28,16 +19,14 @@ export const topologyExample = {
     {
       kind: 'component', id: 'mzm', name: 'MZM',
       ports: [rf('RF_IN', 'in'), optical('SUPPLY', 'in'), optical('OUT', 'out')],
-      parameters: [operatingPointLoss],
-      transfers: [{ kind: 'eo', fromPortId: 'RF_IN', toPortId: 'OUT', supplyPortId: 'SUPPLY', opticalLoss: {
-        intrinsicLossDb: { kind: 'fixed', value: 3 },
-        operatingPointLossDb: { kind: 'parameter', parameterId: operatingPointLoss.id },
-      } }],
+      parameters: [insertionLoss],
+      transfers: [{ kind: 'eo', fromPortId: 'RF_IN', toPortId: 'OUT', supplyPortId: 'SUPPLY',
+        insertionLossDb: { kind: 'parameter', parameterId: insertionLoss.id }, vPi: { kind: 'fixed', value: 5 } }],
     },
     {
       kind: 'component', id: 'pd', name: 'PD',
       ports: [optical('IN', 'in'), rf('RF_OUT', 'out')],
-      transfers: [{ kind: 'oe', fromPortId: 'IN', toPortId: 'RF_OUT' }],
+      transfers: [{ kind: 'oe', fromPortId: 'IN', toPortId: 'RF_OUT', receiver: 'external50', responsivity: { kind: 'fixed', value: 0.8 } }],
     },
   ],
   moduleDefinitions: [
@@ -72,9 +61,9 @@ export const topologyExample = {
         { id: 'mzm', name: 'MZM', definitionId: 'mzm' },
       ],
       portMappings: [{ portId: 'OPT_OUT', target: local('mzm', 'OUT') }],
-      parameters: [operatingPointLoss],
-      parameterMappings: [{ parameterId: operatingPointLoss.id,
-        target: { instanceId: 'mzm', parameterId: operatingPointLoss.id } }],
+      parameters: [insertionLoss],
+      parameterMappings: [{ parameterId: insertionLoss.id,
+        target: { instanceId: 'mzm', parameterId: insertionLoss.id } }],
       connections: [{ id: 'rf-feed', from: local('source', 'OUT'), to: local('mzm', 'RF_IN'), mediaKind: 'RF_COAX' }],
     },
     {
@@ -86,7 +75,6 @@ export const topologyExample = {
       instances: [{ id: 'pd', name: 'PD', definitionId: 'pd' }],
     },
   ],
-  conversionProfiles: [{ id: 'reference', name: 'Reference', rfGainRefDb: { kind: 'fixed', value: -22 }, pdPowerRefDbm: -2 }],
   namedLinks: [
     { id: 'draft', name: 'Optical budget' },
     { id: 'tx-only', name: 'Optical budget', from: { instancePath: ['TX_A'], portId: 'OPT_OUT' } },
@@ -95,7 +83,6 @@ export const topologyExample = {
       from: { instancePath: ['TX_A', 'source'], portId: 'OUT' },
       to: { instancePath: ['RX_A', 'pd'], portId: 'RF_OUT' },
       via: [{ scopePath: ['TX_A'], connectionId: 'rf-feed' }, { scopePath: [], bundleId: 'mpo-12', coreId: 'wdm' }],
-      conversionBindings: [binding],
     },
     {
       id: 'wdm30', name: 'CH30 on the same core', channelId: 'DWDM_CH30',

@@ -30,8 +30,8 @@ function fixture(): Project {
   const [{ instances }, board, tx, rx] = deviceExample.moduleDefinitions;
   const root: ModuleDefinition = {
     kind: 'module', id: 'system', name: 'System', ports: [],
-    instances: [{ ...instances[0], parameterOverrides: { modulatorGain: fixed(-3) } }, ...instances.slice(1),
-      { ...instances[0], id: 'boardB', parameterOverrides: { modulatorGain: fixed(-6) } },
+    instances: [{ ...instances[0], parameterOverrides: { modulatorLoss: fixed(3) } }, ...instances.slice(1),
+      { ...instances[0], id: 'boardB', parameterOverrides: { modulatorLoss: fixed(6) } },
       { id: 'converter', name: 'Converter', definitionId: 'converter' }],
     cableBundles: [{ id: 'mpo', coreCount: 12, cores: [{
       id: 'tx', a: { pin: 1, endpoint: local('board', 'TX_OUT') }, b: { pin: 12, endpoint: local('converter', 'IN') },
@@ -69,8 +69,8 @@ test('empirical values preserve zero, interpolate RF endpoints, and require exac
   for (const [frequencyGHz, expected] of [[0, 0], [33.5, -1], [67, -2]]) {
     assert.deepEqual(resolveEmpiricalValue('dB', curve, { frequencyGHz }), { unit: 'dB', availability: 'available', value: expected });
   }
-  unavailableBecause(resolveEmpiricalValue('dB', curve, { frequencyGHz: 68 }), /超出经验曲线范围/);
-  unavailableBecause(resolveEmpiricalValue('dB', undefined), /未设置经验值/);
+  unavailableBecause(resolveEmpiricalValue('dB', curve, { frequencyGHz: 68 }), /超出曲线范围/);
+  unavailableBecause(resolveEmpiricalValue('dB', undefined), /未设置数值/);
   const table = { kind: 'channelTable' as const, values: { [ch30]: 0 } };
   unavailableBecause(resolveEmpiricalValue('dB', table, { channelId: ch28 }), /DWDM_CH28/);
   assert.deepEqual(resolveEmpiricalValue('dB', table, { channelId: ch30 }), { unit: 'dB', availability: 'available', value: 0 });
@@ -84,8 +84,8 @@ test('local EO budget traces separate supply, applies occurrence gain, and propa
   const moduleOut = ref(['board'], 'TX_OUT');
   const output = calculateLocal({ ...query, to: moduleOut });
   assert.equal(output.status, 'valid');
-  assert.deepEqual(output.powerDbm, { unit: 'dBm', availability: 'available', value: -3 });
-  assert.deepEqual(output.gainDb, { unit: 'dB', availability: 'available', value: -3 });
+  assert.deepEqual(output.powerDbm, { unit: 'dBm', availability: 'available', value: -3 - q });
+  assert.deepEqual(output.gainDb, { unit: 'dB', availability: 'available', value: -3 - q });
   assert.deepEqual(output.stages.map(({ endpoint }) => endpoint.portId), ['OUT', 'LASER_IN', 'OPT_OUT', 'OUT', 'TX_OUT']);
   assert.equal(output.stages[2].incoming?.edge.from.ref.portId, 'RF_IN');
   assert.deepEqual(output.stages[1].rating, {
@@ -95,7 +95,7 @@ test('local EO budget traces separate supply, applies occurrence gain, and propa
   assert.equal(createPathResolver(project).resolveLocalPath({ from: source.endpoint, to: moduleOut, channelId: ch30 }).status, 'unreachable');
 
   const remote = calculateLocal({ ...query, to: ref(['swB'], 'OUT_B') });
-  assert.deepEqual(remote.powerDbm, { unit: 'dBm', availability: 'available', value: -6.2 });
+  assert.deepEqual(remote.powerDbm, { unit: 'dBm', availability: 'available', value: -3 - q - 2 - 1.2 });
   assert.deepEqual(remote.stages.slice(-4).map(({ channelId }) => channelId), [ch30, ch28, ch28, ch28]);
   assert.deepEqual(remote.stages.find(item => item.incoming?.edge.source.kind === 'cableCore')?.incoming?.gainDb,
     { unit: 'dB', availability: 'available', value: 0 });
@@ -103,8 +103,8 @@ test('local EO budget traces separate supply, applies occurrence gain, and propa
 
   const second = calculateLocal({ eo: eo('boardB'), sources: [{ ...laser('boardB'), powerDbm: 2 }], channelId: ch30,
     to: ref(['boardB'], 'TX_OUT') });
-  assert.deepEqual(second.gainDb, { unit: 'dB', availability: 'available', value: -6 });
-  assert.deepEqual(second.powerDbm, { unit: 'dBm', availability: 'available', value: -4 });
+  assert.deepEqual(second.gainDb, { unit: 'dB', availability: 'available', value: -6 - q });
+  assert.deepEqual(second.powerDbm, { unit: 'dBm', availability: 'available', value: 2 + (-6 - q) });
   assert.equal(calculateLocal({ source, to: ref(eo('board').instancePath, 'LASER_IN') }).status, 'valid');
 });
 
@@ -133,17 +133,18 @@ test('an undeclared optical transfer gain does not become a lossless device', ()
   const project = fixture();
   const componentDefinitions = project.componentDefinitions.map(definition => definition.id !== 'mzm' ? definition : {
     ...definition,
-    transfers: definition.transfers?.map(transfer => transfer.kind !== 'eo' ? transfer : { ...transfer, gainDb: undefined }),
+    transfers: definition.transfers?.map(transfer => transfer.kind !== 'eo' ? transfer : { ...transfer, insertionLossDb: undefined }),
   });
   const { calculateLocal } = createOpticalBudget({ ...project, componentDefinitions });
   const result = calculateLocal({ eo: eo('board'), sources: [laser('board')], channelId: ch30,
     to: ref(['board'], 'TX_OUT') });
   assert.equal(result.status, 'partial');
   assert.deepEqual(result.stages[1].powerDbm, { unit: 'dBm', availability: 'available', value: 0 });
-  unavailableBecause(result.powerDbm, /未设置经验值/);
-  unavailableBecause(result.gainDb, /未设置经验值/);
+  unavailableBecause(result.powerDbm, /未设置数值/);
+  unavailableBecause(result.gainDb, /未设置数值/);
 });
 
+const q = 10 * Math.log10(2);
 const splitTransfer = topologyExample.componentDefinitions.find(definition => definition.id === 'mzm')
   ?.transfers?.find(transfer => transfer.kind === 'eo')!;
 
@@ -171,14 +172,14 @@ function splitLossBudget(project: Project, tx: string, channelId: OpticalSource[
   });
 }
 
-test('each MZM loss is applied once and changing one transmitter operating point leaves its peer unchanged', () => {
+test('each MZM loss is applied once and changing one transmitter insertion loss leaves its peer unchanged', () => {
   const project = splitLossProject();
   const before = splitLossBudget(project, 'TX_A');
   const after = parseProjectJson(serializeProjectJson({
     ...project,
     moduleDefinitions: project.moduleDefinitions.map(module => module.id !== 'system' ? module : {
       ...module, instances: module.instances.map(instance => instance.id !== 'TX_A' ? instance : {
-        ...instance, parameterOverrides: { operatingPointLoss: fixed(0) },
+        ...instance, parameterOverrides: { insertionLoss: fixed(0) },
       }),
     }),
   }));
@@ -187,25 +188,19 @@ test('each MZM loss is applied once and changing one transmitter operating point
   const loss = (result: ReturnType<typeof splitLossBudget>) => result.stages
     .find(step => step.endpoint.portId === 'OUT' && step.endpoint.instancePath.at(-1) === 'mzm')?.incoming?.opticalLoss;
   const db = (value: number) => ({ unit: 'dB', availability: 'available', value });
-  assert.deepEqual(loss(before), { intrinsicLossDb: db(3), operatingPointLossDb: db(2) });
-  assert.deepEqual(loss(a), { intrinsicLossDb: db(3), operatingPointLossDb: db(0) });
+  assert.deepEqual(loss(before), { intrinsicLossDb: db(2), quadratureLossDb: db(q) });
+  assert.deepEqual(loss(a), { intrinsicLossDb: db(0), quadratureLossDb: db(q) });
   assert.deepEqual(loss(b), loss(before));
-  assert.deepEqual([before, a, b].map(result => result.powerDbm), [-5, -3, -5].map(value =>
+  assert.deepEqual([before, a, b].map(result => result.powerDbm), [-2-q, -q, -2-q].map(value =>
     ({ unit: 'dBm', availability: 'available', value })));
-  assert.deepEqual([before.gainDb, a.gainDb], [db(-5), db(-3)]);
+  assert.deepEqual([before.gainDb, a.gainDb], [db(-2-q), db(-q)]);
 });
 
-test('split losses reject negative or conflicting values and identify missing operating-point data', () => {
-  const intrinsicLossDb = fixed(3);
-  for (const opticalLoss of [{ intrinsicLossDb }, {
-    intrinsicLossDb, operatingPointLossDb: { kind: 'channelTable', values: { [ch30]: 2 } },
-  }] as const) {
-    const result = splitLossBudget(splitLossProject({ ...splitTransfer, opticalLoss }), 'TX_A');
-    unavailableBecause(result.powerDbm, /控制点附加损耗：.*(未设置经验值|DWDM_CH28)/);
+test('MZM insertion loss rejects negative values and reports missing channel data', () => {
+  for (const insertionLossDb of [undefined, { kind: 'channelTable', values: { [ch30]: 2 } }] as const) {
+    const result = splitLossBudget(splitLossProject({ ...splitTransfer, insertionLossDb }), 'TX_A');
+    unavailableBecause(result.powerDbm, /最大透过插损/);
     assert.equal(result.status, 'partial');
   }
-  assert.throws(() => serializeProjectJson(splitLossProject({ ...splitTransfer,
-    opticalLoss: { intrinsicLossDb: fixed(-3), operatingPointLossDb: fixed(2) },
-  })), /固有插损: 应为指定范围内的有限数值/);
-  assert.throws(() => serializeProjectJson(splitLossProject({ ...splitTransfer, gainDb: fixed(-5) })), /净增益和独立光损耗只能选一种方式设置/);
+  assert.throws(() => serializeProjectJson(splitLossProject({ ...splitTransfer, insertionLossDb: fixed(-3) })), /最大透过插损/);
 });

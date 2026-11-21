@@ -7,7 +7,7 @@ export type RfValue = FixedValue | RfCurve;
 export type OpticalValue = FixedValue | ChannelTable;
 export type EmpiricalValue = RfValue | ChannelTable;
 export type ParameterValue = EmpiricalValue | string;
-export type NumericUnit = 'dB' | 'dBm' | 'V' | 'A' | 'W' | 'GHz' | 'nm' | 'ohm' | 'ratio';
+export type NumericUnit = 'dB' | 'dBm' | 'V' | 'A' | 'W' | 'GHz' | 'nm' | 'A/W' | 'V/W' | 'ohm' | 'ratio';
 export type NumericRange = { min?: number; max?: number };
 
 type ParameterIdentity = {
@@ -19,10 +19,16 @@ type ParameterIdentity = {
 export type NumericParameter = ParameterIdentity & {
   kind: 'numeric';
   unit: NumericUnit;
-  valueKind: EmpiricalValue['kind'];
+  valueKind: EmpiricalValue['kind'] | 'rfValue' | 'opticalValue';
   range?: NumericRange;
   defaultValue?: EmpiricalValue;
 };
+
+export function parameterValueKinds(parameter: NumericParameter): readonly EmpiricalValue['kind'][] {
+  if (parameter.valueKind === 'rfValue') return ['fixed', 'rfCurve'];
+  if (parameter.valueKind === 'opticalValue') return ['fixed', 'channelTable'];
+  return [parameter.valueKind];
+}
 
 export type ParameterDefinition = NumericParameter | (ParameterIdentity & {
   kind: 'enum';

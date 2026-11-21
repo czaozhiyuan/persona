@@ -16,6 +16,7 @@ export function RfScanPlot({ points, metric, selected }: {
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const values = points.map(point => point[metric]).filter(item => item.availability === 'available');
+  const extrapolated = (point: LinkBudgetPoint) => point.kind === 'conversion' && point.segments.some(segment => segment.extrapolated);
   const unavailableCount = points.length - values.length;
 
   useEffect(() => {
@@ -73,11 +74,11 @@ export function RfScanPlot({ points, metric, selected }: {
       continuous = true;
     });
     ctx.stroke();
-    ctx.fillStyle = '#207365';
     points.forEach((point, index) => {
       const item = point[metric];
       if (item.availability !== 'available') return;
       ctx.beginPath();
+      ctx.fillStyle = extrapolated(point) ? '#a14e0b' : '#207365';
       ctx.arc(x(index), y(item.value), point.frequencyGHz === selected ? 4 : 2, 0, 2 * Math.PI);
       ctx.fill();
     });
@@ -87,6 +88,6 @@ export function RfScanPlot({ points, metric, selected }: {
     {values.length ? <canvas ref={canvas} width={width} height={height} role="img"
       aria-label={`${scanMetrics[metric]}扫频曲线，缺值位置留空`} data-available={values.length} data-unavailable={unavailableCount} />
       : <p>当前指标没有可绘制的频点。请查看下方逐点诊断。</p>}
-    <figcaption>{points.length} 个频点 · {unavailableCount} 点不可用</figcaption>
+    <figcaption>{points.length} 个频点 · {unavailableCount} 点不可用{points.some(extrapolated) && ' · 橙色点为线性外推'}</figcaption>
   </figure>;
 }

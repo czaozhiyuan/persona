@@ -40,7 +40,7 @@ export function LocalOpticalPanel({ options, settings, onChange, target, result,
 
   return <section className="panel v1-budget-report" aria-labelledby="v1-optical-heading">
     <h2 id="v1-optical-heading">局部光功率</h2>
-    <p>光源与功率输入用于本次会话的试算。</p>
+    <p>默认按器件有效光功率计算，临时功率可覆盖器件值。</p>
     <label>计算方式<select name="opticalMode" value={mode} onChange={event => setMode(event.currentTarget.value === 'eo' ? 'eo' : 'direct')}>
       <option value="direct">纯光路径</option>
       <option value="eo">外部供光的电光路径</option>
@@ -94,6 +94,7 @@ export function OpticalResult({ result, target, showEndpoint, locate }: {
       <h3>{showEndpoint(target)} · {statusLabels[result.status]}</h3>
       <dl className="v1-budget-metrics">
         <div><dt>目标光功率</dt><dd data-metric="optical-power"><Metric metric={result.powerDbm} /></dd></div>
+        {result.averageCurrent && <div><dt>平均光电流</dt><dd><Metric metric={result.averageCurrent} /></dd></div>}
         <div><dt>累计光增益</dt><dd data-metric="optical-gain"><Metric metric={result.gainDb} /></dd></div>
       </dl>
       {result.pathIssue && <p role="status" data-path-status={result.pathIssue.status}>
@@ -101,13 +102,13 @@ export function OpticalResult({ result, target, showEndpoint, locate }: {
       </p>}
       {result.stages.length > 0 && <div className="v1-budget-table"><table><thead><tr>
         <th>光端口</th><th>通道</th><th>光功率</th><th>本级增益</th>
-        {lossColumns && <><th>固有插损</th><th>控制点附加损耗</th></>}
+        {lossColumns && <><th>最大透过插损</th><th>正交损耗</th></>}
         <th>输入额定</th>
       </tr></thead><tbody>{result.stages.map((stage, index) => <tr key={index}>
         <th scope="row"><EndpointLocation endpoint={stage.endpoint} label={showEndpoint(stage.endpoint)} locate={locate} /></th><td>{stage.channelId}</td>
         <td><Metric metric={stage.powerDbm} /></td><td><Metric metric={stage.incoming?.gainDb} /></td>
         {lossColumns && <><td><Metric metric={stage.incoming?.opticalLoss?.intrinsicLossDb} /></td>
-          <td><Metric metric={stage.incoming?.opticalLoss?.operatingPointLossDb} /></td></>}
+          <td><Metric metric={stage.incoming?.opticalLoss?.quadratureLossDb} /></td></>}
         <td><Rating check={stage.rating} /></td>
       </tr>)}</tbody></table></div>}
     </div>;

@@ -14,10 +14,9 @@ export type DcLoad = { portId: string; powerW?: DcValue };
 
 export type OpticalRoute = PortPair & ChannelFilter & { gainDb?: Quantity<OpticalValue> };
 
-export type EoOpticalLoss = {
-  intrinsicLossDb?: Quantity<OpticalValue>;
-  operatingPointLossDb?: Quantity<OpticalValue>;
-};
+export type OpticalEmitter = { powerDbm?: Quantity<OpticalValue> };
+export const receiverModes = ['external50', 'parallel50', 'active50'] as const;
+export type ReceiverMode = typeof receiverModes[number];
 
 export type Transfer =
   | (PortPair & { kind: 'rf'; gainDb?: Quantity<RfValue>; nfDb?: Quantity<RfValue> })
@@ -33,11 +32,16 @@ export type Transfer =
     kind: 'eo';
     /** The optical input required by externally supplied modulators such as an MZM. */
     supplyPortId?: string;
-    /** Positive optical losses. This is mutually exclusive with a signed net gain. */
-    opticalLoss?: EoOpticalLoss;
-    gainDb?: Quantity<OpticalValue>;
+    insertionLossDb?: Quantity<OpticalValue>;
+    vPi?: Quantity<RfValue>;
   })
-  | (PortPair & ChannelFilter & { kind: 'oe' })
+  | (PortPair & ChannelFilter & {
+    kind: 'oe';
+    receiver?: Quantity<ReceiverMode>;
+    responsivity?: Quantity<OpticalValue>;
+    responseDb?: Quantity<RfValue>;
+    loadedGain?: Quantity<RfValue>;
+  })
   | (PortPair & { kind: 'dc'; efficiency?: DcValue; capacity?: DcCapacity });
 
 export type SwitchState = {
@@ -45,19 +49,4 @@ export type SwitchState = {
   name: string;
   /** Active optical paths within this state. An empty list opens all paths. */
   routes: readonly OpticalRoute[];
-};
-
-export const DEFAULT_CONVERSION_K = 2;
-
-export type ConversionProfile = {
-  id: string;
-  name: string;
-  rfGainRefDb: RfValue;
-  pdPowerRefDbm: number;
-  /** Omission selects DEFAULT_CONVERSION_K. */
-  k?: number;
-  applicability?: {
-    channelIds?: readonly OpticalChannelId[];
-    notes?: string;
-  };
 };

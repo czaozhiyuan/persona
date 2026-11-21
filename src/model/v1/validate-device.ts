@@ -1,5 +1,7 @@
-import type { ConversionProfile, DcCapacity, DcValue, Transfer } from './device';
-import type { EmpiricalValue, ParameterDefinition } from './parameters';
+import { parameterValueKinds } from './parameters';
+import { receiverModes } from './device';
+import type { DcCapacity, DcValue, Transfer } from './device';
+import type { EmpiricalValue, NumericUnit, ParameterDefinition } from './parameters';
 import type { ComponentDefinition, PortDefinition, PortType } from './types';
 import { validateChannelIds, validateEmpirical, validateRange } from './validate-parameters';
 import { indexById, requireValid } from './validation';
@@ -20,11 +22,31 @@ function validateDcValue(value: DcValue | undefined, unit: 'V' | 'A' | 'W' | 'ra
   }
 }
 
+function validateQuantity(
+  parameters: ReadonlyMap<string, ParameterDefinition>, unit: NumericUnit,
+  value: EmpiricalValue | { kind: 'parameter'; parameterId: string },
+  kinds: readonly EmpiricalValue['kind'][], context: string, minimum?: number,
+) {
+  if (value.kind === 'parameter') {
+    const parameter = parameters.get(value.parameterId);
+    requireValid(parameter?.kind === 'numeric' && parameter.unit === unit && parameterValueKinds(parameter).every(kind => kinds.includes(kind)),
+      `${context}: 无效的 ${unit} 参数引用「${value.parameterId}」`);
+    if (minimum !== undefined) requireValid((parameter.range?.min ?? -Infinity) >= minimum,
+      `${context}: 参数下限须至少为 ${minimum}`);
+  } else {
+    validateEmpirical(value, kinds, context, minimum === undefined ? undefined : { min: minimum });
+  }
+}
+
 export function validatePortConstraints(port: PortDefinition, parameters: ReadonlyMap<string, ParameterDefinition>, context: string): void {
   requireValid(port.name === undefined || port.name.trim(), `${context}: 端口显示名称不能为空`);
   if (port.channelIds !== undefined) {
     requireValid(port.type === 'OPTICAL', `${context}: 仅光端口可以设置光通道 ID`);
     validateChannelIds(port.channelIds, context);
+  }
+  if (port.opticalEmitter) {
+    requireValid(port.type === 'OPTICAL' && port.direction === 'out', `${context}: 光源必须声明在光输出端口`);
+    if (port.opticalEmitter.powerDbm) validateQuantity(parameters, 'dBm', port.opticalEmitter.powerDbm, ['fixed', 'channelTable'], context);
   }
   if (port.inputRating) {
     const { unit } = port.inputRating;
@@ -80,13 +102,21 @@ export function validateDevice(
         || route.channelIds.every(id => supply.channelIds?.includes(id))), `${context}: 供光通道不匹配`);
     }
     const kinds = route.kind === 'rf' ? ['fixed', 'rfCurve'] as const : ['fixed', 'channelTable'] as const;
-    if ('gainDb' in route && route.gainDb !== undefined) validateDb(route.gainDb, kinds, context);
-    if (route.kind === 'rf' && route.nfDb !== undefined) validateDb(route.nfDb, kinds, `${context} NF`);
-    if (route.kind === 'eo' && route.opticalLoss !== undefined) {
-      requireValid(route.gainDb === undefined, `${context}: 净增益和独立光损耗只能选一种方式设置`);
-      const { intrinsicLossDb, operatingPointLossDb } = route.opticalLoss;
-      if (intrinsicLossDb !== undefined) validateDb(intrinsicLossDb, kinds, `${context} 固有插损`, 0);
-      if (operatingPointLossDb !== undefined) validateDb(operatingPointLossDb, kinds, `${context} 控制点附加损耗`, 0);
+    if ('gainDb' in route && route.gainDb !== undefined) validateQuantity(parameters, 'dB', route.gainDb, kinds, context);
+    if (route.kind === 'rf' && route.nfDb !== undefined) validateQuantity(parameters, 'dB', route.nfDb, kinds, `${context} NF`);
+    if (route.kind === 'eo') {
+      if (route.insertionLossDb) validateQuantity(parameters, 'dB', route.insertionLossDb, kinds, `${context} 最大透过插损`, 0);
+      if (route.vPi) validateQuantity(parameters, 'V', route.vPi, ['fixed', 'rfCurve'], `${context} RF Vπ`, Number.MIN_VALUE);
+    }
+    if (route.kind === 'oe') {
+      if (route.responsivity) validateQuantity(parameters, 'A/W', route.responsivity, kinds, context, 0);
+      if (route.responseDb) validateQuantity(parameters, 'dB', route.responseDb, ['fixed', 'rfCurve'], context);
+      if (route.loadedGain) validateQuantity(parameters, 'V/W', route.loadedGain, ['fixed', 'rfCurve'], context);
+      if (typeof route.receiver === 'object') {
+        const mode = parameters.get(route.receiver.parameterId);
+        requireValid(mode?.kind === 'enum' && mode.options.every(option => receiverModes.some(value => value === option)),
+          `${context}: 接收结构参数无效`);
+      }
     }
     if (route.kind === 'dc') {
       validateDcValue(route.efficiency, 'ratio', parameters, `${context}的转换效率`);
@@ -116,21 +146,6 @@ export function validateDevice(
     validateDcValue(powerW, 'W', parameters, `${context}的功耗`);
   }
 
-  function validateDb(
-    value: EmpiricalValue | { kind: 'parameter'; parameterId: string },
-    kinds: readonly EmpiricalValue['kind'][], context: string, minimum?: number,
-  ) {
-    if (value.kind === 'parameter') {
-      const parameter = parameters.get(value.parameterId);
-      requireValid(parameter?.kind === 'numeric' && parameter.unit === 'dB' && kinds.includes(parameter.valueKind),
-        `${context}: 无效的 dB 参数引用「${value.parameterId}」`);
-      if (minimum !== undefined) requireValid((parameter.range?.min ?? -Infinity) >= minimum,
-        `${context}: 引用的损耗参数须有非负下限`);
-    } else {
-      validateEmpirical(value, kinds, context, minimum === undefined ? undefined : { min: minimum });
-    }
-  }
-
   for (const route of definition.transfers ?? []) {
     const context = `定义「${definition.id}」的传输「${route.fromPortId} → ${route.toPortId}」`;
     requireValid(!definition.switchStates || !['optical', 'wavelengthConversion'].includes(route.kind),
@@ -151,12 +166,4 @@ export function validateDevice(
       pairs.add(key);
     }
   }
-}
-
-export function validateConversionProfile(profile: ConversionProfile): void {
-  const context = `标定方案「${profile.id}」`;
-  validateEmpirical(profile.rfGainRefDb, ['fixed', 'rfCurve'], context);
-  requireValid(Number.isFinite(profile.pdPowerRefDbm) && (profile.k === undefined || Number.isFinite(profile.k)),
-    `${context}: 参考功率和指定的经验系数 K 必须为有限数值`);
-  if (profile.applicability?.channelIds) validateChannelIds(profile.applicability.channelIds, context);
 }

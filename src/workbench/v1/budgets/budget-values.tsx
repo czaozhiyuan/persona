@@ -6,6 +6,12 @@ export function Metric({ metric }: { metric?: BudgetMetric }) {
   if (metric.availability === 'unavailable') {
     return <span className="v1-budget-unavailable" title={metric.reason}>不可用 · {metric.reason}</span>;
   }
+  if (metric.unit === 'V' || metric.unit === 'A') {
+    const magnitude = Math.abs(metric.value);
+    const [scale, prefix] = magnitude === 0 || magnitude >= 1 ? [1, ''] as const
+      : magnitude >= 0.001 ? [1e3, 'm'] as const : [1e6, 'µ'] as const;
+    return <>{Number((metric.value * scale).toPrecision(6))} {prefix}{metric.unit}</>;
+  }
   return <>{metric.unit === 'ratio' ? `${(metric.value * 100).toFixed(1)}%` : `${metric.value.toFixed(1)} ${metric.unit}`}</>;
 }
 

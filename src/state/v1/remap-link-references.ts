@@ -10,11 +10,6 @@ export function remapLinkReferences(link: NamedLink, path: (path: InstancePath) 
       const next = required(ref);
       return next ? [next] : [];
     }),
-    conversionBindings: link.conversionBindings?.map(binding => ({
-      ...binding,
-      eo: { ...binding.eo, instancePath: path(binding.eo.instancePath) },
-      oe: { ...binding.oe, instancePath: path(binding.oe.instancePath) },
-    })),
     ...(link.trial && { trial: { ...link.trial, opticalSources: link.trial.opticalSources?.map(source => ({
       ...source, endpoint: endpoint(source.endpoint),
     })) } }),

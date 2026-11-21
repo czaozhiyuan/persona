@@ -1,8 +1,9 @@
+import { parameterValueKinds } from '../../../model/v1/parameters';
 import { useState } from 'react';
 import { flushSync } from 'react-dom';
 import { resolveOpticalChannel } from '../../../model/v1/channels';
 import type { OpticalChannelId } from '../../../model/v1/channels';
-import type { EmpiricalValue, ParameterDefinition, ParameterValue } from '../../../model/v1/parameters';
+import type { EmpiricalValue, NumericParameter, NumericUnit, ParameterDefinition, ParameterValue } from '../../../model/v1/parameters';
 import { ChannelField } from './channel-field';
 
 export const choice = (data: FormData, name: string) => String(data.get(name) ?? '');
@@ -27,7 +28,10 @@ export function channelList(data: FormData, name: string) {
   return ids.length ? ids : undefined;
 }
 
-function enumLabel(value: string): string {
+export function enumLabel(value: string): string {
+  if (value === 'external50') return '光电流直接驱动外部 50 Ω';
+  if (value === 'parallel50') return '内部并联 50 Ω，外接 50 Ω';
+  if (value === 'active50') return '有源接收机（外接 50 Ω）';
   if (value === 'normal') return '正常（normal）';
   if (value === 'standby') return '待机（standby）';
   return value;
@@ -76,8 +80,14 @@ export function readEmpirical(data: FormData, name: string, kind: ValueKind): Em
   return { kind, points: rows.map(([frequency, value]) => [Number(frequency), value]) };
 }
 
+export function readNumericParameter(data: FormData, name: string, parameter: NumericParameter) {
+  const allowed = parameterValueKinds(parameter);
+  const kind = allowed.find(kind => kind === data.get(name + 'Kind')) ?? allowed[0];
+  return readEmpirical(data, name, kind);
+}
+
 export function readParameter(data: FormData, name: string, parameter: ParameterDefinition): ParameterValue | undefined {
-  return parameter.kind === 'enum' ? choice(data, name) || undefined : readEmpirical(data, name, parameter.valueKind);
+  return parameter.kind === 'enum' ? choice(data, name) || undefined : readNumericParameter(data, name, parameter);
 }
 
 export function EmpiricalField({ kind, name, label, value, required, autosave }: {
@@ -131,8 +141,22 @@ export function ParameterField({ parameter, value, label, autosave }: { paramete
       {parameter.options.map(option => <option key={option} value={option}>{enumLabel(option)}</option>)}
     </select></label>;
   }
-  return <EmpiricalField name="value" kind={parameter.valueKind} label={`${label} (${parameter.unit})`}
-    value={typeof value === 'string' ? undefined : value} autosave={autosave} />;
+  return <NumericField parameter={parameter} value={typeof value === 'string' ? undefined : value} label={label} autosave={autosave} />;
+}
+
+function NumericField({ parameter, value, label, autosave }: {
+  parameter: NumericParameter; value?: EmpiricalValue; label: string; autosave?: boolean;
+}) {
+  const kinds = parameterValueKinds(parameter);
+  const [kind, setKind] = useState(value?.kind ?? kinds[0]);
+  return <>
+    {kinds.length > 1 && <label>取值方式<select value={kind} onChange={event => setKind(event.target.value as ValueKind)}>
+      {kinds.map(item => <option key={item} value={item}>{modeNames[item]}</option>)}
+    </select></label>}
+    <input type="hidden" name="valueKind" value={kind} />
+    <EmpiricalField key={kind} name="value" kind={kind} label={`${label} (${parameter.unit})`}
+    value={value} autosave={autosave} />
+  </>;
 }
 
 type Quantity<K extends ValueKind> = Extract<EmpiricalValue, { kind: K }> | { kind: 'parameter'; parameterId: string };
@@ -148,14 +172,14 @@ export const rfKinds = ['fixed', 'rfCurve'] as const;
 export const opticalKinds = ['fixed', 'channelTable'] as const;
 const modeNames = { fixed: '固定值', rfCurve: '射频曲线折点', channelTable: '通道表', parameter: '引用参数' };
 
-export function QuantityField({ name, label, kinds, value, parameters, minimum }: {
+export function QuantityField({ name, label, kinds, value, parameters, minimum, unit = 'dB' }: {
   name: string; label: string; kinds: readonly ValueKind[];
   value?: EmpiricalValue | { kind: 'parameter'; parameterId: string }; parameters: readonly ParameterDefinition[];
-  minimum?: number;
+  minimum?: number; unit?: NumericUnit;
 }) {
   const [kind, setKind] = useState<ValueKind | 'parameter' | ''>(value?.kind ?? '');
   const options = parameters.filter(parameter =>
-    parameter.kind === 'numeric' && parameter.unit === 'dB' && kinds.some(item => item === parameter.valueKind)
+    parameter.kind === 'numeric' && parameter.unit === unit && parameterValueKinds(parameter).every(item => kinds.includes(item))
     && (minimum === undefined || (parameter.range?.min ?? -Infinity) >= minimum));
   return <fieldset>
     <legend>{label}</legend>
@@ -167,7 +191,7 @@ export function QuantityField({ name, label, kinds, value, parameters, minimum }
     {kind === 'parameter' ? <label>参数<select name={name} defaultValue={value?.kind === 'parameter' ? value.parameterId : ''} required>
       <option value="">请选择</option>
       {options.map(parameter => <option key={parameter.id} value={parameter.id}>{parameter.name}</option>)}
-    </select></label> : kind && <EmpiricalField key={kind} kind={kind} name={name} label="数值 (dB)" required
+    </select></label> : kind && <EmpiricalField key={kind} kind={kind} name={name} label={`数值 (${unit})`} required
       value={value?.kind === 'parameter' ? undefined : value} />}
   </fieldset>;
 }

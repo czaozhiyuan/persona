@@ -24,7 +24,8 @@ test('saved link trials persist inputs and recalculate using the current project
   assert.equal(sameTrial(undefined, trial), false);
   assert.equal(sameTrial(link.trial, { ...trial, frequencyGHz: 2 }), false);
   const result = createLinkBudget(restored).calculateNamedLink(link, link.trial!);
-  assert.deepEqual(result.powerDbm, { availability: 'available', unit: 'dBm', value: -42 });
+  assert.equal(result.powerDbm.availability, 'available');
+  assert.ok(Math.abs(result.powerDbm.value - (-31.995203 - 2 * 8.0102999566 - 20)) < 1e-6);
   assert.throws(() => serializeProjectJson({ ...withTrial, namedLinks: [{ ...link, trial: { ...trial, frequencyGHz: 68 } }] }), /试算频率/);
   const laserId = project.moduleDefinitions.find(module => module.id === 'tx')!.instances.find(instance => instance.id === 'laser')!.definitionId;
   const plan = planPortDeletion(restored, laserId, 'OUT')!;

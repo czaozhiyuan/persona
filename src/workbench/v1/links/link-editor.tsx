@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { createLinkBudget } from '../../../engine/v1/link-budget';
 import type { OpticalBudget } from '../../../engine/v1/optical-budget';
 import type { PathResult } from '../../../engine/v1/path-resolver';
 import { signalPortKey } from '../../../engine/v1/signal-graph';
 import { resolveOpticalChannel } from '../../../model/v1/channels';
-import type { ConversionBinding, LinkTrial, NamedLink } from '../../../model/v1/topology';
+import type { LinkTrial, NamedLink } from '../../../model/v1/topology';
 import type { EndpointRef, Project } from '../../../model/v1/types';
 import type { ProjectStore } from '../../../state/v1/project-store';
 import { EndpointLocation } from '../budgets/budget-dock';
@@ -12,7 +12,7 @@ import { OpticalResult } from '../budgets/local-optical-panel';
 import { ChannelField } from '../properties/channel-field';
 import { LinkBudgetPanel } from './link-budget-panel';
 import { LinkSupplyFields } from './link-supply-fields';
-import { conversionKey, requiredEdgeKey } from './link-options';
+import { requiredEdgeKey } from './link-options';
 import type { LinkOptions, Option } from './link-options';
 import './link-editor.css';
 
@@ -72,10 +72,6 @@ function Diagnostics({ result, showEndpoint, locate }: {
 export function LinkEditor({ store, project, options, selected, result, budget, conditions, setConditions,
   draft, opticalResult, saveTrial, trialSaved, choose, locate, setDraftChannel }: Props) {
   const [error, setError] = useState('');
-  const [bindingId, setBindingId] = useState('');
-  const binding = selected?.conversionBindings?.find(item => item.id === bindingId);
-  const bindings = selected?.conversionBindings ?? [];
-  const profiles = project.conversionProfiles ?? [];
   const [fromKey, setFromKey] = useState(selected?.from ? signalPortKey(selected.from) : '');
   const [toKey, setToKey] = useState(selected?.to ? signalPortKey(selected.to) : '');
   const domain = (key: string) => options.graph.ports.get(key)?.definition.type;
@@ -84,9 +80,16 @@ export function LinkEditor({ store, project, options, selected, result, budget, 
   const opticalLink = fromDomain === 'OPTICAL' && toDomain === 'OPTICAL';
   const conversions = result?.trace?.conversions ?? [];
   const hasEo = conversions.some(step => step.kind === 'eo');
-  const fullConversion = hasEo && conversions.some(step => step.kind === 'oe')
-    && fromDomain === 'RF' && toDomain === 'RF';
-  const showOptical = domain(fromKey) === 'OPTICAL' || domain(toKey) === 'OPTICAL' || conversions.length > 0 || bindings.length > 0;
+  const crossesOptical = useMemo(() => {
+    if (domain(fromKey) !== 'RF' || domain(toKey) !== 'RF') return false;
+    if (fromKey === (selected?.from && signalPortKey(selected.from)) && toKey === (selected?.to && signalPortKey(selected.to))) {
+      return conversions.length > 0 || (result?.status === 'ambiguous' && options.eo.length > 0);
+    }
+    const path = budget.resolveNamedLink({ id: 'preview', name: '预览', from: options.graph.ports.get(fromKey)?.ref,
+      to: options.graph.ports.get(toKey)?.ref });
+    return !!path.trace?.conversions.length || (path.status === 'ambiguous' && options.eo.length > 0);
+  }, [budget, options, selected, fromKey, toKey, result]);
+  const showOptical = selected?.channelId || crossesOptical || domain(fromKey) === 'OPTICAL' || domain(toKey) === 'OPTICAL' || conversions.length > 0;
 
   function commitLink(link: NamedLink) {
     const edit = store.commit(draft => ({
@@ -157,14 +160,14 @@ export function LinkEditor({ store, project, options, selected, result, budget, 
       </form>
     </details>
     {selected && <>
-      {(hasEo || opticalLink || !!conditions.opticalSources?.length) && <LinkSupplyFields
+      {(hasEo || fromDomain === 'OPTICAL' || !!conditions.opticalSources?.length) && <LinkSupplyFields
         options={opticalLink && selected.from ? options.opticalSources.filter(item => item.key === signalPortKey(selected.from!)) : options.opticalSources}
         sources={conditions.opticalSources ?? []}
         onChange={opticalSources => setConditions({ ...conditions, opticalSources })} />}
       {opticalLink ? (opticalResult && selected.to
         ? <OpticalResult result={opticalResult} target={selected.to} showEndpoint={options.showEndpoint} locate={locate} />
         : <p role="status">{selected.via?.length ? '带必经边约束的光路可查看路径。请从光输出端口打开局部光功率，按供光条件试算。'
-          : '光功率试算需要选定光通道和起点的供光条件。可在「供光查询」中填写光源功率。'}</p>)
+          : '请选择光通道。可在「供光选择与临时覆盖」中设置试算功率。'}</p>)
         : <LinkBudgetPanel link={selected} budget={budget} conditions={conditions} labels={options} locate={locate}
           frequency={conditions.frequencyGHz} setFrequency={frequencyGHz => setConditions({ ...conditions, frequencyGHz })}
           setInputPower={inputPowerDbm => setConditions({ ...conditions, inputPowerDbm })} />}
@@ -174,45 +177,6 @@ export function LinkEditor({ store, project, options, selected, result, budget, 
           || !Number.isFinite(conditions.frequencyGHz) || conditions.frequencyGHz < 0 || conditions.frequencyGHz > 67}>保存试算条件</button>
         {draft && <span>先保存链路，再保存试算条件。</span>}
       </div>
-      {(fullConversion || bindings.length > 0) && <details>
-        <summary>电光—光电标定绑定</summary>
-        <label>工程内绑定<select value={binding?.id ?? ''} onChange={event => { setBindingId(event.target.value); setError(''); }}>
-          <option value="">新建绑定</option>
-          {bindings.map(item => <option key={item.id} value={item.id}>
-            {profiles.find(profile => profile.id === item.profileId)?.name} · {options.showEndpoint({ instancePath: item.eo.instancePath, portId: item.eo.fromPortId })}
-          </option>)}
-        </select></label>
-        {bindings.length > 0 && <ul className="v1-binding-matches">{bindings.map(item => {
-          const match = result?.trace?.bindings.find(candidate => candidate.binding.id === item.id);
-          return <li key={item.id}>{profiles.find(profile => profile.id === item.profileId)?.name} · {
-            match?.matched ? '已匹配当前路径' : result?.trace ? '当前路径未匹配' : '等待路径解析'
-          }</li>;
-        })}</ul>}
-        <form key={JSON.stringify(binding ?? null)} onSubmit={event => {
-          event.preventDefault();
-          const fields = new FormData(event.currentTarget);
-          const profile = profiles.find(item => item.id === fields.get('profile'));
-          const eo = options.eo.find(item => item.key === fields.get('eo'))?.value;
-          const oe = options.oe.find(item => item.key === fields.get('oe'))?.value;
-          if (!profile || !eo || !oe) { setError('请选择标定方案，并分别指定电光和光电转换边界。'); return; }
-          const next: ConversionBinding = { ...binding, id: binding?.id ?? crypto.randomUUID(), profileId: profile.id, eo, oe };
-          const conversionBindings = binding ? bindings.map(item => item.id === binding.id ? next : item) : [...bindings, next];
-          if (commitLink({ ...selected, conversionBindings })) setBindingId(next.id);
-        }}>
-          <div className="v1-link-fields">
-            <Choice title="标定方案" name="profile" required
-              options={profiles.map(item => ({ key: item.id, label: item.name, value: item }))}
-              value={binding?.profileId} />
-            <Choice title="电光转换边界" name="eo" options={options.eo} required value={binding && conversionKey(binding.eo)} />
-            <Choice title="光电转换边界" name="oe" options={options.oe} required value={binding && conversionKey(binding.oe)} />
-          </div>
-          {!profiles.length && <p>请先新建工程标定方案。</p>}
-          <button type="submit" disabled={draft || !profiles.length || !options.eo.length || !options.oe.length}>{binding ? '保存绑定' : '创建绑定'}</button>
-          {binding && <button type="button" onClick={() => {
-            if (commitLink({ ...selected, conversionBindings: bindings.filter(item => item.id !== binding.id) })) setBindingId('');
-          }}>移除绑定</button>}
-        </form>
-      </details>}
     </>}
   </section>;
 }

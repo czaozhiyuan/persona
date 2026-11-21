@@ -57,7 +57,6 @@ test('rename and internal disconnect retain the upper wire, stable path referenc
   assert.equal(createLinkOptions(restored).showEndpoint(endpoint), 'TX_A · 射频输入（RF_IN）');
   assert.equal(portDisplayName({ id: 'RF_IN' }), 'RF_IN');
   assert.deepEqual(restored.namedLinks, wired.namedLinks);
-  assert.deepEqual(restored.conversionProfiles, wired.conversionProfiles);
   assert.deepEqual(restored.moduleDefinitions.find(module => module.id === project.rootModuleDefinitionId)?.connections,
     wired.moduleDefinitions.find(module => module.id === project.rootModuleDefinitionId)?.connections);
   assert.ok(graph.edges.some(edge => edge.source.kind === 'portMapping' && edge.from === projection

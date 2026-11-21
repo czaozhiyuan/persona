@@ -1,5 +1,5 @@
 import { resolveHierarchy } from '../../engine/v1/hierarchy';
-import type { CableCoreRef, CableCore, ConversionBoundary, LocalEndpointRef } from '../../model/v1/topology';
+import type { CableCoreRef, CableCore, LocalEndpointRef } from '../../model/v1/topology';
 import type { ConnectionRef, EndpointRef, InstancePath, ModuleDefinition, Project, TopologyFrame } from '../../model/v1/types';
 
 type Via = ConnectionRef | CableCoreRef;
@@ -48,7 +48,7 @@ export function resizeTopologyFrame(project: Project, frame: TopologyFrame): Pro
   return { ...project, layout: { ...project.layout, topologyFrames: [...topologyFrames, frame] } };
 }
 
-type ImpactKind = '端口' | '连接' | '端口映射' | '纤芯附件' | '器件传输' | '开关路由' | '链路端点' | '链路必经边' | '标定绑定' | '直流电源' | '直流负载';
+type ImpactKind = '端口' | '连接' | '端口映射' | '纤芯附件' | '器件传输' | '开关路由' | '链路端点' | '链路必经边' | '直流电源' | '直流负载';
 export type PortDeletionImpact = {
   kind: ImpactKind;
   name: string;
@@ -143,12 +143,7 @@ export function planPortDeletion(project: Project, definitionId: string, portId:
   });
 
   const modules = new Map(moduleDefinitions.map(module => [module.id, module]));
-  const components = new Map(componentDefinitions.map(component => [component.id, component]));
   const scopeId = (path: InstancePath) => instances.get(JSON.stringify(path))!;
-  function boundaryExists(kind: 'eo' | 'oe', boundary: ConversionBoundary) {
-    return components.get(scopeId(boundary.instancePath))?.transfers?.some(transfer =>
-      transfer.kind === kind && transfer.fromPortId === boundary.fromPortId && transfer.toPortId === boundary.toPortId);
-  }
   const namedLinks = project.namedLinks?.map(link => {
     const clearEndpoint = (label: string, endpoint?: EndpointRef) => {
       if (!endpoint || endpoint.portId !== portId || scopeId(endpoint.instancePath) !== definitionId) return endpoint;
@@ -170,14 +165,6 @@ export function planPortDeletion(project: Project, definitionId: string, portId:
         if (removed) report('链路端点', `${link.id} / 试算光源`, definitionId, endpoint.instancePath);
         return !removed;
       }) } }),
-      conversionBindings: link.conversionBindings?.filter(binding => {
-        const invalid = (['eo', 'oe'] as const).filter(kind => !boundaryExists(kind, binding[kind]));
-        for (const kind of invalid) {
-          const { instancePath } = binding[kind];
-          report('标定绑定', `${link.id} / ${binding.id} (${kind.toUpperCase()})`, scopeId(instancePath), instancePath);
-        }
-        return invalid.length === 0;
-      }),
     };
   });
   return { impacts, project: { ...project, componentDefinitions, moduleDefinitions, namedLinks } };

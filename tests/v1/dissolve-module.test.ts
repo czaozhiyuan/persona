@@ -45,9 +45,9 @@ test('dissolving a shared slot lifts its children, preserves the original budget
   assert.deepEqual(full(after), full(base));
   assert.equal(store.resolveInstance(['TX_B', 'mzm'])?.instance?.name, 'B 机箱调制器');
   assert.deepEqual(after.layout?.physical, base.layout?.physical);
-  assert.deepEqual(store.resolveInstance(['TX_A', 'mzm'])?.parameters.get('operatingPointLoss')?.value, { kind: 'fixed', value: 2 });
+  assert.deepEqual(store.resolveInstance(['TX_A', 'mzm'])?.parameters.get('insertionLoss')?.value, { kind: 'fixed', value: 3 });
   assert.deepEqual(createLinkBudget(after).calculateNamedLink(full(after), full(after).trial!).powerDbm,
-    { availability: 'available', value: -42, unit: 'dBm' });
+    createLinkBudget(base).calculateNamedLink(full(base), full(base).trial!).powerDbm);
   store.undo();
   assert.equal(store.getSnapshot().project, before.project);
   assert.equal(store.getSnapshot().canUndo, false);

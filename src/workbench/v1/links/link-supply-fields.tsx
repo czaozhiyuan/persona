@@ -16,18 +16,18 @@ export function LinkSupplyFields({ options, sources, onChange }: {
   const [error, setError] = useState('');
   const labels = new Map(options.map(option => [option.key, option.label]));
   return <details>
-    <summary>供光查询{sources.length ? ` · ${sources.length} 项` : ''}</summary>
+    <summary>供光选择与临时覆盖{sources.length ? ` · ${sources.length} 项` : ''}</summary>
     {sources.length > 0 && <ul className="v1-supply-list">
       {sources.map((source, index) => <li key={sourceKey(source)}>
         <span>{labels.get(signalPortKey(source.endpoint)) ?? `${showPath(source.endpoint.instancePath)} · ${source.endpoint.portId}`} · <b>{source.channelId}</b></span>
-        <label>光源功率 (dBm)<input type="number" step="any" value={source.powerDbm ?? ''} placeholder="未知"
+        <label>光源功率 (dBm)<input type="number" step="any" value={source.powerDbm ?? ''} placeholder="使用器件值"
           onChange={event => {
             const value = event.currentTarget.valueAsNumber;
             onChange(sources.map((item, at) => at === index ? {
               ...item, powerDbm: Number.isFinite(value) ? value : undefined,
             } : item));
           }} /></label>
-        <button type="button" onClick={() => { setError(''); onChange(sources.filter((_, at) => at !== index)); }}>移除供光</button>
+        <button type="button" onClick={() => { setError(''); onChange(sources.filter((_, at) => at !== index)); }}>清除选择与覆盖</button>
       </li>)}
     </ul>}
     <form onSubmit={event => {
@@ -54,7 +54,7 @@ export function LinkSupplyFields({ options, sources, onChange }: {
           {options.map(option => <option key={option.key} value={option.key}>{option.label}</option>)}
         </select></label>
         <ChannelField name="supplyChannel" label="供光通道" required />
-        <label>光源功率 (dBm，可选)<input name="supplyPower" type="number" step="any" placeholder="未知" /></label>
+        <label>光源功率 (dBm，可选)<input name="supplyPower" type="number" step="any" placeholder="使用器件值" /></label>
       </div>
       <button type="submit" disabled={!options.length}>添加供光</button>
       {error && <p className="error" role="alert">{error}</p>}

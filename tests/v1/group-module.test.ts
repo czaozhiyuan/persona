@@ -57,7 +57,7 @@ test('grouping shared siblings moves internal wires and forwards boundary ports,
   for (const tx of ['TX_A', 'TX_B']) {
     assert.equal(store.resolveInstance([tx, 'subtx', 'optical-switch'])?.instance?.switchStateId, 'pass');
     const mzm = store.resolveInstance([tx, 'subtx', 'mzm']);
-    assert.deepEqual(mzm?.parameters.get('operatingPointLoss')?.value, { kind: 'fixed', value: 2 });
+    assert.deepEqual(mzm?.parameters.get('insertionLoss')?.value, { kind: 'fixed', value: 3 });
   }
 
   assert.equal(store.resolveInstance(['TX_B', 'subtx', 'optical-switch'])?.instance?.name, 'B 开关');
@@ -76,7 +76,7 @@ test('grouping shared siblings moves internal wires and forwards boundary ports,
   }
 });
 
-test('grouping scoped required wires, bindings and saved sources keeps the published budget through a JSON round trip', () => {
+test('grouping scoped required wires and saved sources keeps the published budget through a JSON round trip', () => {
   const base = example();
   const trial = { frequencyGHz: 1, inputPowerDbm: -20, opticalSources: [
     { endpoint: { instancePath: child('laser'), portId: 'OUT' }, channelId: 'DWDM_CH28' as const, powerDbm: 0 },
@@ -87,12 +87,13 @@ test('grouping scoped required wires, bindings and saved sources keeps the publi
   const link = restored.namedLinks!.find(item => item.id === 'full')!;
   assert.deepEqual(link.from?.instancePath, ['TX_A', 'inner', 'source']);
   assert.deepEqual(link.via?.[0], { scopePath: ['TX_A', 'inner'], connectionId: 'rf-feed' });
-  assert.deepEqual(link.conversionBindings?.[0].eo.instancePath, ['TX_A', 'inner', 'mzm']);
   assert.deepEqual(link.trial?.opticalSources?.[0].endpoint.instancePath, ['TX_A', 'inner', 'laser']);
   const result = createLinkBudget(restored).calculateNamedLink(link, link.trial!);
   assert.equal(result.kind, 'conversion');
-  assert.deepEqual(result.gainDb, { availability: 'available', value: -22, unit: 'dB' });
-  assert.deepEqual(result.powerDbm, { availability: 'available', value: -42, unit: 'dBm' });
+  const original = createLinkBudget(before).calculateNamedLink(before.namedLinks!.find(item => item.id === 'full')!, trial);
+  assert.equal(original.powerDbm.availability, 'available');
+  assert.deepEqual(result.gainDb, original.gainDb);
+  assert.deepEqual(result.powerDbm, original.powerDbm);
 });
 
 test('whole MPO cables can move, crossing ones retain core IDs, and mixed internal bundles reject without history', () => {

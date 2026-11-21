@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { resolveOpticalChannel } from '../../src/model/v1/channels';
 import { deviceExample } from '../../src/model/v1/device-example';
-import { DEFAULT_CONVERSION_K } from '../../src/model/v1/device';
 import type { ComponentDefinition, ModuleDefinition, Project } from '../../src/model/v1/types';
 import { validateProject } from '../../src/model/v1/validate';
 
@@ -97,7 +96,7 @@ test('ratings and empirical values are optional, and explicit zero remains a fin
 test('a module forwards only compatible parameters exposed by direct children', () => {
   validateProject(deviceExample);
   const bypass = editModule('board', module => ({
-    ...module, parameterMappings: [{ parameterId: 'modulatorGain', target: { instanceId: 'mzm', parameterId: 'modulatorGain' } }],
+    ...module, parameterMappings: [{ parameterId: 'modulatorLoss', target: { instanceId: 'mzm', parameterId: 'modulatorLoss' } }],
   }));
   assert.throws(() => validateProject(bypass), /直接子实例/);
   const hidden = editModule('tx30', module => ({
@@ -115,20 +114,7 @@ test('a module forwards only compatible parameters exposed by direct children', 
   assert.throws(() => validateProject(invalidEnum), /枚举值无效/);
   const invalidOverride = editModule('system', module => ({
     ...module, instances: module.instances.map(instance => instance.id === 'board'
-      ? { ...instance, parameterOverrides: { modulatorGain: { kind: 'fixed', value: 10 } } } : instance),
+      ? { ...instance, parameterOverrides: { modulatorLoss: { kind: 'fixed', value: -1 } } } : instance),
   }));
   assert.throws(() => validateProject(invalidOverride), /指定范围内/);
-});
-
-test('profiles retain a fixed PD reference, a declared K default and an optional RF curve', () => {
-  const [profile] = deviceExample.conversionProfiles;
-  assert.deepEqual(profile.rfGainRefDb, { kind: 'fixed', value: -22 });
-  assert.equal(profile.pdPowerRefDbm, -2);
-  assert.equal(DEFAULT_CONVERSION_K, 2);
-  validateProject({
-    ...deviceExample, conversionProfiles: [{ ...profile, k: 1.8, rfGainRefDb: { kind: 'rfCurve', points: [[0, -22], [67, -25]] } }],
-  });
-  assert.throws(() => validateProject({
-    ...deviceExample, conversionProfiles: [{ ...profile, pdPowerRefDbm: NaN }],
-  }), /参考功率和指定的经验系数 K 必须为有限数值/);
 });

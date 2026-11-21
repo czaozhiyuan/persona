@@ -1,9 +1,9 @@
 {
   "format": "persona-project",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "project": {
     "id": "v1-example",
-    "name": "V1 光电系统与布局",
+    "name": "V1 光电系统与布局（示例参数）",
     "rootModuleDefinitionId": "system",
     "componentDefinitions": [
       {
@@ -53,19 +53,34 @@
         ],
         "parameters": [
           {
-            "id": "operatingPointLoss",
-            "name": "控制点附加损耗",
+            "id": "insertionLoss",
+            "name": "最大透过状态光插损",
             "kind": "numeric",
             "unit": "dB",
-            "valueKind": "fixed",
+            "valueKind": "opticalValue",
             "range": {
               "min": 0
             },
             "defaultValue": {
               "kind": "fixed",
-              "value": 2
+              "value": 3
             },
             "overridable": true
+          },
+          {
+            "id": "vPi",
+            "name": "RF 半波电压 Vπ",
+            "kind": "numeric",
+            "unit": "V",
+            "valueKind": "rfValue",
+            "defaultValue": {
+              "kind": "fixed",
+              "value": 5
+            },
+            "overridable": true,
+            "range": {
+              "min": 5e-324
+            }
           }
         ],
         "transfers": [
@@ -74,15 +89,13 @@
             "fromPortId": "RF_IN",
             "toPortId": "OUT",
             "supplyPortId": "SUPPLY",
-            "opticalLoss": {
-              "intrinsicLossDb": {
-                "kind": "fixed",
-                "value": 3
-              },
-              "operatingPointLossDb": {
-                "kind": "parameter",
-                "parameterId": "operatingPointLoss"
-              }
+            "insertionLossDb": {
+              "kind": "parameter",
+              "parameterId": "insertionLoss"
+            },
+            "vPi": {
+              "kind": "parameter",
+              "parameterId": "vPi"
             }
           }
         ]
@@ -113,7 +126,29 @@
           {
             "kind": "oe",
             "fromPortId": "IN",
-            "toPortId": "RF_OUT"
+            "toPortId": "RF_OUT",
+            "receiver": "external50",
+            "responsivity": {
+              "kind": "parameter",
+              "parameterId": "responsivity"
+            }
+          }
+        ],
+        "parameters": [
+          {
+            "id": "responsivity",
+            "name": "响应度",
+            "kind": "numeric",
+            "unit": "A/W",
+            "valueKind": "opticalValue",
+            "defaultValue": {
+              "kind": "fixed",
+              "value": 0.8
+            },
+            "overridable": true,
+            "range": {
+              "min": 0
+            }
           }
         ]
       },
@@ -133,7 +168,10 @@
       {
         "kind": "component",
         "id": "deviceDemo-rf-pcb",
-        "physicalFootprint": { "widthMm": 80, "depthMm": 55 },
+        "physicalFootprint": {
+          "widthMm": 80,
+          "depthMm": 55
+        },
         "name": "射频电路板",
         "ports": [
           {
@@ -212,18 +250,18 @@
         ],
         "parameters": [
           {
-            "id": "modulatorGain",
-            "name": "调制器增益",
+            "id": "modulatorLoss",
+            "name": "最大透过状态光插损",
             "kind": "numeric",
             "unit": "dB",
             "valueKind": "fixed",
             "range": {
-              "min": -20,
-              "max": 0
+              "min": 0,
+              "max": 20
             },
             "defaultValue": {
               "kind": "fixed",
-              "value": -3
+              "value": 3
             },
             "overridable": true
           }
@@ -237,9 +275,9 @@
             "channelIds": [
               "DWDM_CH30"
             ],
-            "gainDb": {
+            "insertionLossDb": {
               "kind": "parameter",
-              "parameterId": "modulatorGain"
+              "parameterId": "modulatorLoss"
             }
           }
         ]
@@ -480,7 +518,27 @@
             "channelIds": [
               "DWDM_CH28",
               "DWDM_CH30"
-            ]
+            ],
+            "opticalEmitter": {
+              "powerDbm": {
+                "kind": "parameter",
+                "parameterId": "power"
+              }
+            }
+          }
+        ],
+        "parameters": [
+          {
+            "id": "power",
+            "name": "信号光输出功率",
+            "kind": "numeric",
+            "unit": "dBm",
+            "valueKind": "opticalValue",
+            "defaultValue": {
+              "kind": "fixed",
+              "value": 8.0102999566
+            },
+            "overridable": true
           }
         ]
       },
@@ -512,7 +570,7 @@
                 "toPortId": "OUT",
                 "gainDb": {
                   "kind": "fixed",
-                  "value": 0
+                  "value": -2
                 }
               }
             ]
@@ -933,17 +991,17 @@
         ],
         "parameters": [
           {
-            "id": "operatingPointLoss",
-            "name": "控制点附加损耗",
+            "id": "insertionLoss",
+            "name": "最大透过状态光插损",
             "kind": "numeric",
             "unit": "dB",
-            "valueKind": "fixed",
+            "valueKind": "opticalValue",
             "range": {
               "min": 0
             },
             "defaultValue": {
               "kind": "fixed",
-              "value": 2
+              "value": 3
             },
             "overridable": true
           },
@@ -965,10 +1023,10 @@
         ],
         "parameterMappings": [
           {
-            "parameterId": "operatingPointLoss",
+            "parameterId": "insertionLoss",
             "target": {
               "instanceId": "mzm",
-              "parameterId": "operatingPointLoss"
+              "parameterId": "insertionLoss"
             }
           },
           {
@@ -1298,9 +1356,9 @@
             "name": "收发电路板",
             "definitionId": "deviceDemo-board",
             "parameterOverrides": {
-              "modulatorGain": {
+              "modulatorLoss": {
                 "kind": "fixed",
-                "value": -4
+                "value": 4
               },
               "mode": "normal"
             }
@@ -1360,18 +1418,18 @@
         ],
         "parameters": [
           {
-            "id": "modulatorGain",
-            "name": "调制器增益",
+            "id": "modulatorLoss",
+            "name": "最大透过状态光插损",
             "kind": "numeric",
             "unit": "dB",
             "valueKind": "fixed",
             "range": {
-              "min": -20,
-              "max": 0
+              "min": 0,
+              "max": 20
             },
             "defaultValue": {
               "kind": "fixed",
-              "value": -3
+              "value": 3
             },
             "overridable": true
           },
@@ -1417,10 +1475,10 @@
         ],
         "parameterMappings": [
           {
-            "parameterId": "modulatorGain",
+            "parameterId": "modulatorLoss",
             "target": {
               "instanceId": "TX_CH30",
-              "parameterId": "modulatorGain"
+              "parameterId": "modulatorLoss"
             }
           }
         ]
@@ -1442,18 +1500,18 @@
         ],
         "parameters": [
           {
-            "id": "modulatorGain",
-            "name": "调制器增益",
+            "id": "modulatorLoss",
+            "name": "最大透过状态光插损",
             "kind": "numeric",
             "unit": "dB",
             "valueKind": "fixed",
             "range": {
-              "min": -20,
-              "max": 0
+              "min": 0,
+              "max": 20
             },
             "defaultValue": {
               "kind": "fixed",
-              "value": -3
+              "value": 3
             },
             "overridable": true
           }
@@ -1476,10 +1534,10 @@
         ],
         "parameterMappings": [
           {
-            "parameterId": "modulatorGain",
+            "parameterId": "modulatorLoss",
             "target": {
               "instanceId": "mzm",
-              "parameterId": "modulatorGain"
+              "parameterId": "modulatorLoss"
             }
           }
         ]
@@ -1517,34 +1575,21 @@
         ]
       }
     ],
-    "conversionProfiles": [
-      {
-        "id": "reference",
-        "name": "CH28 端到端标定",
-        "rfGainRefDb": {
-          "kind": "rfCurve",
-          "points": [
-            [
-              1,
-              -22
-            ],
-            [
-              67,
-              -16
-            ]
-          ]
-        },
-        "pdPowerRefDbm": -5,
-        "applicability": {
-          "channelIds": [
-            "DWDM_CH28"
-          ]
-        }
-      }
-    ],
     "instanceSettings": [
-      { "instancePath": ["TX_A", "optical-switch"], "switchStateId": "pass" },
-      { "instancePath": ["TX_B", "optical-switch"], "switchStateId": "pass" }
+      {
+        "instancePath": [
+          "TX_A",
+          "optical-switch"
+        ],
+        "switchStateId": "pass"
+      },
+      {
+        "instancePath": [
+          "TX_B",
+          "optical-switch"
+        ],
+        "switchStateId": "pass"
+      }
     ],
     "namedLinks": [
       {
@@ -1592,28 +1637,10 @@
             "coreId": "wdm"
           }
         ],
-        "conversionBindings": [
-          {
-            "id": "span-1",
-            "profileId": "reference",
-            "eo": {
-              "instancePath": [
-                "TX_A",
-                "mzm"
-              ],
-              "fromPortId": "RF_IN",
-              "toPortId": "OUT"
-            },
-            "oe": {
-              "instancePath": [
-                "RX_A",
-                "pd"
-              ],
-              "fromPortId": "IN",
-              "toPortId": "RF_OUT"
-            }
-          }
-        ]
+        "trial": {
+          "frequencyGHz": 2,
+          "inputPowerDbm": 0
+        }
       },
       {
         "id": "wdm30",
