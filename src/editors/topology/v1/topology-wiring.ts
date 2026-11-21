@@ -1,7 +1,7 @@
 import type { Edge } from '@xyflow/react';
-import { mediaLabels, portDisplayName } from '../../../workbench/v1/labels';
+import { portDisplayName } from '../../../workbench/v1/labels';
 import type { LocalEndpointRef } from '../../../model/v1/topology';
-import type { InstancePath, ModuleDefinition } from '../../../model/v1/types';
+import type { InstancePath, ModuleDefinition, PortType } from '../../../model/v1/types';
 import type { WiringSelection } from '../../../state/v1/remove-topology-object';
 import type { projectTopology, TopologyItem } from './topology-projection';
 import { hierarchyKey } from './hierarchy-view';
@@ -14,7 +14,28 @@ export const nodeId = (key: string) => encodeURIComponent(key);
 export const handleId = (id: string, inner = false) => encodeURIComponent(JSON.stringify([id, inner]));
 export const portKey = (node: string, handle?: string | null) => JSON.stringify([node, handle]);
 type ScopedPort = CanvasPort & { module: ModuleDefinition; scope: InstancePath };
-export type WiringEdge = Edge<WiringSelection & { scope: InstancePath }>;
+export type WiringEdge = Edge<WiringSelection & {
+  scope: InstancePath;
+  portType: PortType;
+  fan?: { x: number; y: number };
+}, 'signal'>;
+
+function fanOffsets(edges: readonly WiringEdge[], keyFor: (edge: WiringEdge) => string) {
+  const groups = new Map<string, string[]>();
+  for (const edge of edges) {
+    const key = keyFor(edge);
+    const ids = groups.get(key) ?? [];
+    if (!groups.has(key)) groups.set(key, ids);
+    ids.push(edge.id);
+  }
+  const result = new Map<string, number>();
+  for (const ids of groups.values()) {
+    if (ids.length < 2) continue;
+    const step = Math.min(14, 36 / (ids.length - 1));
+    ids.sort().forEach((id, index) => result.set(id, (index - (ids.length - 1) / 2) * step));
+  }
+  return result;
+}
 
 export function scopedWiringProblem(a?: ScopedPort, b?: ScopedPort): string | undefined {
   if (!a || !b) return '请选择两个不同的端口。';
@@ -28,6 +49,16 @@ export function projectWiring(projection: ReturnType<typeof projectTopology>,
   const edges: WiringEdge[] = [];
   for (const [key, { definition, path, members }] of projection.scopes) {
     append(definition, path, key, members, !!projection.nodeByKey.get(key)?.frame);
+  }
+
+  const pairs = fanOffsets(edges, edge => JSON.stringify([edge.source, edge.target].sort()));
+  const sources = fanOffsets(edges, edge => portKey(edge.source, edge.sourceHandle));
+  const targets = fanOffsets(edges, edge => portKey(edge.target, edge.targetHandle));
+  for (const edge of edges) {
+    const lane = pairs.get(edge.id);
+    const x = lane ?? sources.get(edge.id) ?? 0;
+    const y = lane ?? targets.get(edge.id) ?? 0;
+    if (edge.data && (x || y)) edge.data.fan = { x, y };
   }
 
   function append(module: ModuleDefinition, scope: InstancePath, key: string, members: readonly TopologyItem[], hasFrame: boolean) {
@@ -51,19 +82,17 @@ export function projectWiring(projection: ReturnType<typeof projectTopology>,
       }
     }
 
-    function edge(localId: string, selection: WiringSelection, details: Omit<WiringEdge, 'id' | 'data'>) {
+    function edge(localId: string, selection: WiringSelection, portType: PortType, details: Omit<WiringEdge, 'id' | 'data' | 'type'>) {
       const active = highlighted?.has(localId);
-      edges.push({ ...details, id: JSON.stringify([scope, localId]), data: { ...selection, scope },
-        zIndex: active ? 1 : 0, className: active ? 'v1-path-edge' : undefined,
-        style: active ? { ...details.style, stroke: '#a85618', strokeWidth: 3 } : details.style });
+      edges.push({ ...details, id: JSON.stringify([scope, localId]), type: 'signal', data: { ...selection, scope, portType },
+        zIndex: active ? 1 : 0, className: active ? 'v1-path-edge' : undefined });
     }
 
     for (const item of module.connections ?? []) {
-      edge(canvasEdgeKey('connection', item.id), { kind: 'connection', id: item.id }, {
+      edge(canvasEdgeKey('connection', item.id), { kind: 'connection', id: item.id }, childPort(item.from).type, {
         source: child(item.from.instanceId), target: child(item.to.instanceId),
         sourceHandle: handleId(item.from.portId), targetHandle: handleId(item.to.portId),
         ariaLabel: `连线：${portDisplayName(childPort(item.from))} → ${portDisplayName(childPort(item.to))}`,
-        label: item.mediaKind && mediaLabels[item.mediaKind],
       });
     }
     for (const mapping of module.portMappings ?? []) {
@@ -72,22 +101,21 @@ export function projectWiring(projection: ReturnType<typeof projectTopology>,
       const inner = { id: child(mapping.target.instanceId), handle: handleId(mapping.target.portId) };
       const outer = { id: boundary, handle: handleId(mapping.portId, true) };
       const [from, to] = outward ? [inner, outer] : [outer, inner];
-      edge(canvasEdgeKey('mapping', mapping.portId), { kind: 'mapping', id: mapping.portId }, {
+      edge(canvasEdgeKey('mapping', mapping.portId), { kind: 'mapping', id: mapping.portId }, port.type, {
         source: from.id, target: to.id, sourceHandle: from.handle, targetHandle: to.handle,
-        ariaLabel: `连接到内部端口：${portDisplayName(port)} · ${portDisplayName(childPort(mapping.target))}`, style: { strokeDasharray: '6 4' },
+        ariaLabel: `连接到内部端口：${portDisplayName(port)} · ${portDisplayName(childPort(mapping.target))}`,
       });
     }
     for (const bundle of module.cableBundles ?? []) {
       for (const core of bundle.cores) {
         if (!core.a.endpoint || !core.b.endpoint) continue;
         const a = core.a.endpoint;
-        const aOutput = children.get(a.instanceId)!.item.definition.ports.find(port => port.id === a.portId)?.direction === 'out';
+        const aOutput = childPort(a).direction === 'out';
         const [from, to] = aOutput ? [a, core.b.endpoint] : [core.b.endpoint, a];
-        edge(canvasEdgeKey('core', bundle.id, core.id), { kind: 'core', id: core.id, bundleId: bundle.id }, {
+        edge(canvasEdgeKey('core', bundle.id, core.id), { kind: 'core', id: core.id, bundleId: bundle.id }, childPort(from).type, {
           source: child(from.instanceId), target: child(to.instanceId),
           sourceHandle: handleId(from.portId), targetHandle: handleId(to.portId),
-          ariaLabel: `纤芯：${bundle.id} · ${core.id}`,
-          label: `${bundle.id} · A:${core.a.pin} / B:${core.b.pin}`, style: { stroke: '#7856b7', strokeWidth: 2 },
+          ariaLabel: `纤芯：${bundle.id} · ${core.id} · A:${core.a.pin} / B:${core.b.pin}`,
         });
       }
     }

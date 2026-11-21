@@ -58,7 +58,9 @@
 .v1-port-actions label { display: block; margin-block: .45rem; }
 .v1-port-actions form + form { border-top: 1px solid #ccdad5; margin-top: .8rem; padding-top: .6rem; }
 .v1-block-column .v1-topology-port span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.v1-module-frame { box-sizing: border-box; width: 100%; height: 100%; border: 2px solid #729c88; border-radius: .5rem; background: #e7f4ee; }
+.v1-module-frame { box-sizing: border-box; width: 100%; height: 100%; border: 2px solid transparent; border-radius: .5rem; }
+.v1-frame-surfaces { position: absolute; inset: 0; z-index: -1; pointer-events: none; }
+.v1-frame-surface { position: absolute; border: 2px solid #82948e; border-radius: .5rem; background: var(--v1-frame-fill); }
 .v1-frame-resize { position: absolute; z-index: 2; pointer-events: auto; touch-action: none; }
 .v1-frame-resize:hover { background: #267e7366; }
 .v1-frame-resize-n, .v1-frame-resize-s { left: 10px; right: 10px; height: 10px; cursor: ns-resize; }
@@ -79,7 +81,7 @@
 .react-flow__node.draggable .v1-frame-title {
   width: auto; min-height: 1.8rem; cursor: grab; user-select: none;
 }
-.v1-frame-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.v1-frame-title strong { background: var(--v1-frame-fill); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .v1-block-title strong { flex: 1; min-width: 0; }
 .v1-node-add-port {
   flex: none; padding: 0 .3rem; border: 1px solid #90b6ad; border-radius: .25rem;
@@ -93,13 +95,22 @@
 .v1-module-pins.right { right: 0; text-align: right; }
 .v1-module-pins .v1-topology-port { box-sizing: border-box; height: 28px; padding-inline: .65rem; }
 .v1-module-pins.right .v1-topology-port { justify-content: end; }
+.v1-module-pins .v1-topology-port:not(.is-on-path):not(.is-new-port) .v1-port-label { background: var(--v1-frame-fill); }
 .v1-module-pins .v1-topology-port span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .v1-module-pins .v1-topology-port .react-flow__handle { transform: translate(-50%, -50%); right: auto; }
 .v1-module-pins.left .v1-frame-inner-handle { left: 3px; }
 .v1-module-pins.left .v1-frame-outer-handle { left: -3px; }
 .v1-module-pins.right .v1-frame-inner-handle { left: calc(100% - 3px); }
 .v1-module-pins.right .v1-frame-outer-handle { left: calc(100% + 3px); }
-.v1-topology-canvas { position: absolute; inset: 0; overflow: hidden; background: #f6faf9; isolation: isolate; }
+.v1-topology-canvas {
+  --v1-signal-OPTICAL: #397f9b;
+  --v1-signal-RF: #ab7449;
+  --v1-signal-DC_POWER: #aa6873;
+  --v1-signal-CONTROL: #578779;
+  --v1-wire-width: 2px;
+  --v1-frame-fill: #edf2f0;
+  position: absolute; inset: 0; overflow: hidden; background: #f6faf9; isolation: isolate;
+}
 .v1-topology-canvas[data-space-pan="true"] .react-flow__viewport * { pointer-events: none; }
 .v1-drop-allowed { outline: 3px solid #168269; outline-offset: 3px; border-radius: .55rem; }
 .v1-drop-blocked { outline: 3px solid #a34e37; outline-offset: 3px; border-radius: .55rem; }
@@ -136,13 +147,18 @@
 }
 .v1-topology-device { width: 11rem; padding: .7rem .8rem; background: #fff; border: 1px solid #8faeab; border-radius: .55rem; box-shadow: 0 2px 8px #173e4014; }
 .v1-topology-device.is-selected { outline: 2px solid #267e73; outline-offset: 2px; }
-.v1-topology-device.has-folded-path { border-color: #a85618; }
-.v1-topology-path-label { display: block; margin-bottom: .2rem; color: #8a4a1d; font-size: .72rem; }
-.v1-topology-port.is-on-path { background: #fff0dc; color: #82400e; border-radius: .25rem; }
-.v1-topology-port[data-wire="origin"] .react-flow__handle, .react-flow__handle[data-wire="origin"] { outline: 2px solid #a85618; }
+.v1-topology-device.has-folded-path { border-color: #526d69; }
+.v1-topology-path-label { display: block; margin-bottom: .2rem; color: #42605f; font-size: .72rem; }
+.v1-topology-port.is-on-path { background: #e2ece9; color: #234643; border-radius: .25rem; }
+.v1-topology-port[data-wire="origin"] .react-flow__handle, .react-flow__handle[data-wire="origin"] { outline: 2px solid #526d69; }
 .v1-topology-port[data-wire="target"] .react-flow__handle, .react-flow__handle[data-wire="target"] { outline: 3px solid #0a8a6c; }
-.v1-topology-canvas .react-flow__edge.selected .react-flow__edge-path { stroke: #137d6c; stroke-width: 3; }
-.v1-topology-port.is-on-path .react-flow__handle { outline: 2px solid #a85618; }
+.v1-signal-wire path { fill: none; }
+.v1-signal-wire .v1-wire-main { stroke-width: var(--v1-wire-width); pointer-events: none; }
+.v1-wire-casing { stroke: #fff; stroke-width: 4px; pointer-events: none; }
+.v1-wire-halo { stroke: #334d4d; stroke-width: 7px; opacity: 0; pointer-events: none; }
+.react-flow__edge:is(.selected, .v1-path-edge, :hover, :focus-visible) .v1-wire-halo { opacity: .32; }
+.v1-signal-wire .react-flow__edge-interaction { stroke-dasharray: none; }
+.v1-topology-port.is-on-path .react-flow__handle { outline: 2px solid #526d69; }
 .v1-topology-port.is-new-port { background: #dff4ea; color: #145946; border-radius: .25rem; }
 .v1-topology-port.is-new-port .react-flow__handle { outline: 2px solid #208167; }
 .v1-topology-device strong { display: block; overflow-wrap: anywhere; margin-bottom: .25rem; }
@@ -150,9 +166,6 @@
 .v1-topology-port .react-flow__handle { width: .65rem; height: .65rem; background: #526865; border-color: #fff; }
 .v1-topology-port .react-flow__handle-left { left: -.83rem; }
 .v1-topology-port .react-flow__handle-right { right: -.83rem; }
-.v1-topology-port .OPTICAL { background: #7856b7; }
-.v1-topology-port .RF { background: #2076ad; }
-.v1-topology-port .DC_POWER { background: #ad5420; }
 .v1-topology-tools {
   position: relative; z-index: 3; flex: none; padding: .25rem .65rem;
   display: flex; flex-wrap: wrap; align-items: center; gap: .45rem;
