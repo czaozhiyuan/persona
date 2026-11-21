@@ -19,8 +19,10 @@ export function frameInsets(ports: readonly PortDefinition[]) {
   };
 }
 
-export function ModuleFrame({ id, name, ports, highlighted, newPortId, handleId, editable = false, outerHandles = false, selected = false, wireState, controls, openPort }: {
+export function ModuleFrame({ id, width, height, name, ports, highlighted, newPortId, handleId, editable = false, outerHandles = false, selected = false, wireState, controls, openPort }: {
   id: string;
+  width?: number;
+  height?: number;
   name: string;
   ports: readonly PortDefinition[];
   newPortId?: string;
@@ -34,7 +36,7 @@ export function ModuleFrame({ id, name, ports, highlighted, newPortId, handleId,
   openPort?: (id: string) => void;
 }) {
   const updateInternals = useUpdateNodeInternals();
-  useEffect(() => updateInternals(id), [id, ports, outerHandles, updateInternals]);
+  useEffect(() => updateInternals(id), [id, width, height, ports, outerHandles, updateInternals]);
 
   return <div className={`v1-module-frame${selected ? ' is-selected' : ''}`}>
     <div className="v1-frame-title">

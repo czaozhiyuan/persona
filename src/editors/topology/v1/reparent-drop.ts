@@ -35,11 +35,16 @@ export function reparentDropTarget(source: TopologyItem, nodes: readonly Topolog
   if (!parentBounds || contains(parentBounds, point, edgeMargin)) {
     const siblings = nodes.filter(node => node.key !== source.key && node.item.definition.kind === 'module'
       && node.item.instancePath.length === path.length && inHierarchy(parentPath, node.item.instancePath));
-    for (const node of siblings.reverse()) {
+    let nearby: DropTarget | undefined;
+    // Collapsed blocks sit above expanded frames. Prefer exact hits before the edge margin.
+    for (const node of siblings.reverse().sort((a, b) => Number(!!a.frame) - Number(!!b.frame))) {
       const bounds = boundsOf(node);
-      if (bounds && contains(moduleBody(node, bounds), point)) return { kind: 'in', node, destination: node.item.instancePath };
+      if (!bounds) continue;
+      const target = { kind: 'in' as const, node, destination: node.item.instancePath };
+      if (contains(bounds, point)) return target;
+      if (!nearby && contains(bounds, point, edgeMargin)) nearby = target;
     }
-    return;
+    return nearby;
   }
   if (parentPath.length <= rootPath.length) {
     return { kind: 'up', node: parent, destination: parentPath, problem: parentPath.length ? '请使用「移到上一级」，或在上一级展开模块后拖出。' : '请在顶层模块边框内放置。' };
