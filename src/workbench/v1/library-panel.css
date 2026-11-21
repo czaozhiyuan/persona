@@ -4,3 +4,6 @@
 .v1-library-diff li { margin: .7rem 0; overflow-wrap: anywhere; }
 .v1-library-diff-values { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: .5rem; }
 .v1-library-diff-values pre { margin: .2rem 0; padding: .35rem; background: #f2f6f5; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.v1-library-dimensions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .3rem; }
+.v1-library-dimensions input { padding-inline: .2rem; }

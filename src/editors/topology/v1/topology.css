@@ -36,7 +36,7 @@
 .v1-topology-message { bottom: 54px; background: #fff1ef; border: 1px solid #ebc0bb; font-size: .85rem; }
 .v1-module-copy-notice { background: #f1faf6; border-color: #bdd5cd; color: #214d46; pointer-events: none; }
 .v1-canvas-zoom.react-flow__panel {
-  display: flex; align-items: center; gap: .15rem; margin: 14px; padding: .15rem; color: #375951; z-index: 5; max-width: calc(100% - 20px);
+  display: flex; align-items: center; gap: .15rem; margin: 10px; padding: .15rem; color: #375951; z-index: 5; max-width: calc(100% - 20px); flex-wrap: wrap; justify-content: flex-end;
 }
 .v1-canvas-zoom button { min-height: 1.75rem; width: 1.75rem; border: 0; padding: 0; background: transparent; }
 .v1-canvas-zoom output { min-width: 2.7rem; text-align: center; font-size: .73rem; }
@@ -158,29 +158,15 @@
 .v1-topology-port .react-flow__handle { width: .65rem; height: .65rem; background: #526865; border-color: #fff; }
 .v1-topology-port .react-flow__handle-left { left: -.83rem; }
 .v1-topology-port .react-flow__handle-right { right: -.83rem; }
-.v1-topology-tools {
-  position: relative; z-index: 3; flex: none; padding: .25rem .65rem;
-  display: flex; flex-wrap: wrap; align-items: center; gap: .45rem;
-  border-top: 1px solid #cbdad5; background: #f9fbfa;
-}
-.v1-group-count { color: #42605f; font-size: .8rem; }
-.v1-topology-tools summary {
-  width: fit-content; min-height: 1.9rem; padding: .25rem .65rem;
-  border: 1px solid #c9d9d3; border-radius: .35rem; background: #fff; font-size: .82rem; cursor: pointer;
-}
-.v1-topology-tools details[open] > summary { background: #deefe9; border-color: #70a99e; }
-.v1-topology-tool-list {
-  position: absolute; bottom: calc(100% + .4rem); left: .65rem;
-  width: min(25rem, calc(100% - 1.3rem)); max-height: min(36rem, calc(100dvh - 8rem)); overflow: auto;
-  display: grid; gap: .35rem; padding: .65rem;
-  border: 1px solid #c9d9d3; border-radius: .5rem; background: #fbfdfc; box-shadow: 0 .3rem 1rem #203d3929;
-}
-.v1-topology-popup { padding: .1rem .2rem .35rem; }
-.v1-topology-tools form { margin-top: .65rem; }
-.v1-topology-tools label { display: block; margin-top: .5rem; font-size: .85rem; }
-.v1-topology-tools input, .v1-topology-tools select { display: block; min-width: 0; width: 100%; margin-top: .22rem; min-height: 2rem; border: 1px solid #becfce; border-radius: .3rem; padding-inline: .35rem; }
-.v1-topology-tools button { margin: .5rem .25rem 0 0; }
-.v1-topology-dimensions { display: grid; gap: .3rem; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.v1-module-tools { padding: .65rem .8rem; border-top: 1px solid #dbe5e0; overflow-wrap: anywhere; }
+.v1-module-tools summary { cursor: pointer; font-size: .85rem; font-weight: 600; }
+.v1-module-tools details details { margin-top: .55rem; }
+.v1-module-tools .v1-topology-popup { padding: .1rem 0 .35rem; }
+.v1-module-tools form { margin-top: .45rem; }
+.v1-module-tools label { display: block; margin-top: .45rem; font-size: .85rem; }
+.v1-module-tools input, .v1-module-tools select { display: block; min-width: 0; width: 100%; margin-top: .22rem; min-height: 2rem; border: 1px solid #becfce; border-radius: .3rem; padding-inline: .35rem; }
+.v1-module-tools button { max-width: 100%; margin-top: .35rem; overflow-wrap: anywhere; }
+.v1-module-tools fieldset { min-width: 0; }
 .v1-topology-dialog { width: min(42rem, 92vw); max-height: 80vh; overflow: auto; padding: 1.25rem; border: 1px solid #8faeab; border-radius: .7rem; color: #183039; }
 .v1-topology-dialog::backdrop { background: #172d3b55; }
 .v1-topology-dialog h3 { margin-top: 0; }

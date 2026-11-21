@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { Background, ConnectionMode, ReactFlow, ReactFlowProvider, useKeyPress, useStoreApi, useUpdateNodeInternals, ViewportPortal } from '@xyflow/react';
 import type { Connection as FlowConnection, CoordinateExtent, Node, NodeProps, OnConnectStartParams, ReactFlowInstance, Rect, Viewport, XYPosition } from '@xyflow/react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -131,6 +132,8 @@ type Props = {
   reparent: (base: Project, plan: ApprovedMove, layout?: ReparentLayout) => void;
   focusMoved?: InstancePath;
   depth: ExpansionDepth;
+  viewHost: HTMLDivElement | null;
+  topologyActive: boolean;
   fullPage: boolean;
   toggleFullPage: (view: CanvasView) => void;
   restoreView?: CanvasView;
@@ -158,7 +161,7 @@ export function TopologyCanvas(props: Props) {
 function EditableTopologyCanvas({ project, instances, modulePath, selectedInstance, selectedPaths, pathResult, budgetHighlight, expanded,
   toggleModule, selectObject, selectObjects, enterModule, reparent, focusMoved, move, resize, connect, mapPort, add, placingModule, cancelPlacement,
   deleteInstance, deleteWiring, rename, copyModule, pasteModule, report, undo, redo, openPort, onAddPort, newPort,
-  depth, fullPage, toggleFullPage, restoreView }: Props) {
+  depth, fullPage, toggleFullPage, restoreView, viewHost, topologyActive }: Props) {
   const flowStore = useStoreApi<CanvasNode, WiringEdge>();
   const boxSelection = useRef<readonly InstancePath[] | undefined>(undefined);
   const panWithSpace = useKeyPress('Space', { actInsideInputWithModifier: false });
@@ -592,6 +595,10 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     return () => window.removeEventListener('keydown', keyboard);
   });
 
+  function switchFullPage() {
+    if (flow.current) toggleFullPage({ viewport: flow.current.getViewport(), edgeId: selectedWiring ? selectedWiring.id : undefined });
+  }
+
   return <div ref={canvas} className="v1-topology-canvas" aria-label="逻辑拓扑画布" tabIndex={-1}
     data-space-pan={panWithSpace}
     onPointerDownCapture={event => { if (panWithSpace) event.currentTarget.focus({ preventScroll: true }); }}
@@ -710,10 +717,9 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
       <ViewportPortal><div className="v1-frame-surfaces" aria-hidden="true">{frameSurfaces}</div></ViewportPortal>
       <CanvasControls depth={depth} fullPage={fullPage} canLocate={!!locateIds.length} locate={() => {
         if (locateIds.length) void flow.current?.fitView({ ...canvasFitOptions, nodes: locateIds.map(id => ({ id })), maxZoom: 1.2 });
-      }} toggleFullPage={() => {
-        if (flow.current) toggleFullPage({ viewport: flow.current.getViewport(), edgeId: selectedWiring ? selectedWiring.id : undefined });
-      }} />
+      }} toggleFullPage={switchFullPage} />
     </ReactFlow>
+    {topologyActive && viewHost && !fullPage && createPortal(<button type="button" onClick={switchFullPage}>全页展示</button>, viewHost)}
     {dropPreview && <>
       {!dropPreview.node && <div className="v1-drop-canvas" aria-hidden="true" />}
       <p className="v1-drop-label" role="status" data-blocked={!!dropPreview.error}>

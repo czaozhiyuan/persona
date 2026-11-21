@@ -6,6 +6,7 @@ import { builtInDefinitions, isBlankTemplate } from '../../library/v1/built-in';
 import { libraryDragType } from '../../library/v1/insert-library-item';
 import type { LibraryItem } from '../../library/v1/insert-library-item';
 import { previewTemplateUpdate } from '../../library/v1/project-snapshots';
+import { editModule } from '../../state/v1/topology-edits';
 import type { DragEvent } from 'react';
 import type { TemplateChanges } from '../../library/v1/project-snapshots';
 import type { ModuleDefinition, Project } from '../../model/v1/types';
@@ -34,7 +35,7 @@ function matchingTemplates(query: string) {
 export function LibraryPanel({ store, state, module }: Props) {
   const { project, selection } = state;
   const [query, setQuery] = useState('');
-  const [projectId, setProjectId] = useState('');
+  const [definitionKey, setDefinitionKey] = useState('');
   const [updateId, setUpdateId] = useState('');
   const [preview, setPreview] = useState<Preview>();
   const [unlink, setUnlink] = useState<string>();
@@ -80,9 +81,14 @@ export function LibraryPanel({ store, state, module }: Props) {
   }
   const matches = matchingTemplates(query);
   const search = query.trim().toLowerCase();
-  const reusable = project.moduleDefinitions.filter(candidate => !unavailable.has(candidate.id)
+  const reusable = [...definitions.values()].filter(candidate => !unavailable.has(candidate.id)
     && candidate.id !== project.rootModuleDefinitionId && candidate.name.toLowerCase().includes(search));
-  const reusableModule = reusable.find(item => item.id === projectId) ?? reusable[0];
+  const namedOptions = [
+    ...reusable.map(item => ({ key: 'project:' + item.id, item, source: 'project' as const })),
+    ...matches.filter(item => isBlankTemplate(item.id) || !definitions.has(item.id))
+      .map(item => ({ key: 'template:' + item.id, item, source: 'template' as const })),
+  ];
+  const namedOption = namedOptions.find(option => option.key === definitionKey) ?? namedOptions[0];
 
   function selectedItem(form: HTMLFormElement, source: LibraryItem['source'], id: string): LibraryItem {
     return { source, id, name: String(new FormData(form).get('instanceName') ?? '').trim() };
@@ -163,21 +169,58 @@ export function LibraryPanel({ store, state, module }: Props) {
         setUnlink(undefined);
         if (store.getSnapshot().project !== preview?.base) setPreview(undefined);
       }} />}
-    {reusableModule && <details><summary>放入已有模块</summary>
-      <label>工程模块<select value={reusableModule.id} onChange={event => setProjectId(event.target.value)}>
-        {reusable.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+    {namedOption && <details><summary>按名称添加器件或模块</summary>
+      <label>定义<select value={namedOption.key} onChange={event => setDefinitionKey(event.target.value)}>
+        {namedOptions.map(({ key, item, source }) => <option key={key} value={key}>
+          {item.name} · {source === 'project' ? '工程' : '器件库'}
+        </option>)}
       </select></label>
-      <form key={reusableModule.id} onSubmit={event => {
+      <form key={namedOption.key} onSubmit={event => {
         event.preventDefault();
-        add(selectedItem(event.currentTarget, 'project', reusableModule.id));
+        add(selectedItem(event.currentTarget, namedOption.source, namedOption.item.id));
       }}>
-        <label>名称<input name="instanceName" defaultValue={reusableModule.name} required /></label>
+        <label>名称<input name="instanceName" defaultValue={namedOption.item.name} required /></label>
         <button type="submit" draggable title="点击放入，或拖入框图" onDragStart={event => {
           const form = event.currentTarget.form;
-          if (form) drag(event, selectedItem(form, 'project', reusableModule.id));
-        }}>放入已有模块</button>
+          if (form) drag(event, selectedItem(form, namedOption.source, namedOption.item.id));
+        }}>添加实例</button>
       </form>
     </details>}
+    <details><summary>新建空机箱</summary>
+      <form onSubmit={event => {
+        event.preventDefault();
+        const form = event.currentTarget;
+        const data = new FormData(form);
+        const name = String(data.get('name') ?? '').trim();
+        if (!name) { setFeedback({ error: true, text: '名称不能为空。' }); return; }
+        const id = crypto.randomUUID();
+        const enclosure: ModuleDefinition = {
+          kind: 'module', id, name, ports: [], instances: [],
+          physicalEnclosure: { widthMm: Number(data.get('width')), depthMm: Number(data.get('depth')), heightMm: Number(data.get('height')) },
+        };
+        const result = store.commit(draft => {
+          const updated = editModule(draft, module.id, current => ({
+            ...current, instances: [...current.instances, { id, name, definitionId: id }],
+          }));
+          return { ...updated, moduleDefinitions: [...updated.moduleDefinitions, enclosure] };
+        });
+        if (result.ok) {
+          form.reset();
+          store.selectInstance([...selection.modulePath, id]);
+        }
+        setPreview(undefined);
+        setFeedback(result.ok ? { text: '已添加「' + name + '」。', snapshot: store.getSnapshot().project }
+          : { error: true, text: result.message });
+      }}>
+        <label>机箱名称<input name="name" required /></label>
+        <div className="v1-library-dimensions">
+          <label>宽（mm）<input name="width" type="number" min=".001" step="any" defaultValue={440} required /></label>
+          <label>深（mm）<input name="depth" type="number" min=".001" step="any" defaultValue={350} required /></label>
+          <label>高（mm）<input name="height" type="number" min=".001" step="any" defaultValue={44.45} required /></label>
+        </div>
+        <button type="submit">新建空机箱</button>
+      </form>
+    </details>
     {feedback && (!feedback.snapshot || feedback.snapshot === project) &&
       <p role={feedback.error ? 'alert' : 'status'} className={feedback.error ? 'error' : 'v1-property-effective'}>{feedback.text}</p>}
   </section>;

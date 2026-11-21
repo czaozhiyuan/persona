@@ -21,19 +21,23 @@ export function CanvasControls({ locate, canLocate, depth, fullPage, toggleFullP
 }) {
   const { zoomIn, zoomOut, fitView } = useReactFlow();
   const { zoom } = useViewport();
-  const displayLabel = fullPage ? '退出全页展示' : '全页展示';
   return <Panel position="bottom-right" className="v1-canvas-zoom nopan nowheel" aria-label="框图视图控件">
-    <div className="v1-hierarchy-depth">
-      <button type="button" disabled={depth.max === 1} onClick={() => depth.set(1)}>收起</button>
-      <input type="range" min={1} max={depth.max} value={depth.value} disabled={depth.max === 1}
-        aria-label="模块展开深度" onChange={event => depth.set(Number(event.currentTarget.value))} />
-      <button type="button" disabled={depth.max === 1} onClick={() => depth.set(depth.max)}>展开</button>
-    </div>
+    {fullPage && <DepthControl depth={depth} />}
     <button type="button" aria-label="缩小" title="缩小" onClick={() => void zoomOut()}>−</button>
     <output aria-label="缩放比例">{Math.round(zoom * 100)}%</output>
     <button type="button" aria-label="放大" title="放大" onClick={() => void zoomIn()}>+</button>
     <button type="button" aria-label="定位选中" title="定位选中" disabled={!canLocate} onClick={locate}>◎</button>
     <button type="button" aria-label="适应画布" title="适应画布" onClick={() => void fitView(canvasFitOptions)}>⛶</button>
-    <button type="button" className="v1-full-page-toggle" aria-pressed={fullPage} onClick={toggleFullPage}>{displayLabel}</button>
+    {fullPage && <button type="button" className="v1-full-page-toggle" onClick={toggleFullPage}>退出全页展示</button>}
   </Panel>;
+}
+
+export function DepthControl({ depth, showValue = false }: { depth: ExpansionDepth; showValue?: boolean }) {
+  return <div className="v1-hierarchy-depth">
+    <button type="button" disabled={depth.max === 1} onClick={() => depth.set(1)}>收起</button>
+    <input type="range" min={1} max={depth.max} value={depth.value} disabled={depth.max === 1}
+      aria-label="模块展开深度" onChange={event => depth.set(Number(event.currentTarget.value))} />
+    <button type="button" disabled={depth.max === 1} onClick={() => depth.set(depth.max)}>展开</button>
+    {showValue && <output aria-label="当前展开深度">{depth.value} / {depth.max}</output>}
+  </div>;
 }

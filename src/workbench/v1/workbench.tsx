@@ -79,6 +79,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const [dissolve, setDissolve] = useState<{ base: Project; plan: ReturnType<typeof planDissolveModule>; destination: string; error?: string }>();
   const [moveUp, setMoveUp] = useState<{ base: Project; plan: ReturnType<typeof planInstanceMove>; destination: string; error?: string }>();
   const [page, setPage] = useState<Page>('canvas');
+  const topologyActive = page === 'canvas' && selection.view === 'topology';
   const [savedProject, setSavedProject] = useState(project);
   const modified = project !== savedProject;
   const [dock, setDock] = useState<BudgetPage>();
@@ -95,6 +96,10 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const [presentation, setPresentation] = useState<Presentation>();
   const [restoredView, setRestoredView] = useState<{ scope: string; view: CanvasView }>();
   const currentScope = hierarchyKey(selection.modulePath);
+  const [placingModule, setPlacingModule] = useState(false);
+  const [toolsHost, setToolsHost] = useState<HTMLDivElement | null>(null);
+  const [viewHost, setViewHost] = useState<HTMLDivElement | null>(null);
+  useEffect(() => { setPlacingModule(false); }, [currentScope, topologyActive, projectSession]);
   useEffect(() => {
     if (restoredView && restoredView.scope !== currentScope) setRestoredView(undefined);
   }, [currentScope, restoredView]);
@@ -180,6 +185,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   }, [selection.modulePath, selection.instancePath, selection.instancePaths]);
 
   function toggleFullPage(view: CanvasView) {
+    closeWorkbenchMenu();
     if (!presentation) {
       setRestoredView(undefined);
       setPresentation({
@@ -214,7 +220,6 @@ export function Workbench({ store, loadExample, newProject }: Props) {
 
   function selectObjects(paths: readonly InstancePath[]) {
     store.selectInstances(paths);
-    if (paths.length) setPropertiesOpen(true);
   }
 
   function selectObject(path: InstancePath, extend: boolean) {
@@ -568,30 +573,26 @@ export function Workbench({ store, loadExample, newProject }: Props) {
             <div className="v1-menu-items">
               <button type="button" onClick={() => openProject(newProject)}>新建空工程</button>
               <button type="button" onClick={() => openProject(loadExample)}>加载示例</button>
-                <button type="button" onClick={() => { closeWorkbenchMenu(); fileInput.current?.click(); }}>打开工程 JSON</button>
-                <button type="button" onClick={downloadProject}>保存工程 JSON</button>
+              <button type="button" onClick={() => { closeWorkbenchMenu(); fileInput.current?.click(); }}>打开工程 JSON</button>
+              <button type="button" onClick={downloadProject}>保存工程 JSON</button>
               <button type="button" onClick={() => openPage('project')}>工程状态</button>
             </div>
           </details>
-          <details name="workbench-menu" data-workbench-popup><summary>计算</summary>
-            <div className="v1-menu-items">
-              <button type="button" onClick={showLinks}>查看链路预算</button>
-              <button type="button" onClick={() => { setOpticalTarget(undefined); openBudget('optical'); }}>局部光功率</button>
-              <button type="button" onClick={() => showDc()}>直流供电预算</button>
-              <button type="button" onClick={() => openPage('profiles')}>工程标定方案</button>
-            </div>
-          </details>
         </nav>
-        <span className="divider" />
-        <div className="actions">
-          <button type="button" aria-label="撤销" title="撤销" disabled={!canUndo} onClick={() => { store.undo(); setError(''); }}>↶</button>
-          <button type="button" aria-label="重做" title="重做" disabled={!canRedo} onClick={() => { store.redo(); setError(''); }}>↷</button>
-        </div>
         <div className="v1-project-heading">
           <button className="v1-project-name" type="button" onClick={() => openPage('project')}
             title={project.name}>{project.name}</button>
           <span className="v1-project-status" role="status" data-modified={modified}>{modified ? '未保存' : '无未保存修改'}</span>
         </div>
+        <span className="divider" />
+        <div className="actions">
+          <button type="button" aria-label="撤销" title="撤销" disabled={!canUndo} onClick={() => { store.undo(); setError(''); }}>↶</button>
+          <button type="button" aria-label="重做" title="重做" disabled={!canRedo} onClick={() => { store.redo(); setError(''); }}>↷</button>
+        </div>
+        <button className="v1-new-module" type="button" disabled={!topologyActive}
+          aria-pressed={placingModule && topologyActive} onClick={() => setPlacingModule(active => !active)}>
+          {placingModule && topologyActive ? '取消放置' : '＋ 新建模块'}
+        </button>
         <div className="view-switch" role="group" aria-label="视图选择">
           <button type="button" aria-pressed={page === 'canvas' && selection.view === 'topology'} onClick={showTopology}>框图</button>
           <button type="button" aria-pressed={page === 'canvas' && selection.view === 'physical'}
@@ -601,6 +602,24 @@ export function Workbench({ store, loadExample, newProject }: Props) {
               openPage('canvas');
             }}>机箱布局</button>
         </div>
+        <nav className="v1-main-menu v1-view-menus" aria-label="计算与视图菜单">
+          <details name="workbench-menu" data-workbench-popup><summary>计算</summary>
+            <div className="v1-menu-items">
+              <button type="button" onClick={showLinks}>查看链路预算</button>
+              <button type="button" onClick={() => { setOpticalTarget(undefined); openBudget('optical'); }}>局部光功率</button>
+              <button type="button" onClick={() => showDc()}>直流供电预算</button>
+              <button type="button" onClick={() => openPage('profiles')}>工程标定方案</button>
+            </div>
+          </details>
+          <details name="workbench-menu" data-workbench-popup><summary>视图</summary>
+            <div className="v1-menu-items v1-view-items">
+              <button type="button" aria-pressed={leftTab === 'structure'} onClick={() => setLeftTab(tab => tab === 'structure' ? undefined : 'structure')}>结构</button>
+              <button type="button" aria-pressed={leftTab === 'library'} onClick={() => setLeftTab(tab => tab === 'library' ? undefined : 'library')}>器件库</button>
+              <button type="button" aria-pressed={propertiesOpen} onClick={() => setPropertiesOpen(open => !open)}>属性</button>
+              <div ref={setViewHost} className="v1-view-canvas-settings" />
+            </div>
+          </details>
+        </nav>
       </header>
       <input ref={fileInput} type="file" accept=".json,application/json" hidden aria-label="工程 JSON 文件"
         onChange={event => {
@@ -641,8 +660,9 @@ export function Workbench({ store, loadExample, newProject }: Props) {
                 fullPage={!!presentation} toggleFullPage={toggleFullPage}
                 restoreView={restoredView?.scope === currentScope ? restoredView.view : undefined}
                 focusMoved={focusMoved?.centerCanvas ? focusMoved.path : undefined}
-                moveAcrossLevels={(base, plan, layout) => moveAcrossLevels(base, plan, layout, false)} requestMoveUp={requestMoveUp}
-                onAddInside={path => { enterModule(path); setLeftTab('library'); }} />}
+                moveAcrossLevels={(base, plan, layout) => moveAcrossLevels(base, plan, layout, false)}
+                placingModule={topologyActive && placingModule} setPlacingModule={setPlacingModule}
+                toolsHost={toolsHost} viewHost={viewHost} topologyActive={topologyActive} />}
           </div>
           <div className="v1-canvas-page v1-layout-scroll" inert={page !== 'canvas' || selection.view !== 'physical'}
             aria-hidden={page !== 'canvas' || selection.view !== 'physical'}>
@@ -735,13 +755,19 @@ export function Workbench({ store, loadExample, newProject }: Props) {
             <button type="button" aria-expanded={propertiesOpen} aria-controls="workbench-properties"
               onClick={() => setPropertiesOpen(open => !open)}>属性</button>
           </div>
-          <div id="workbench-properties" className="v1-side-scroll" hidden={!propertiesOpen}>
-            {selection.instancePaths && <p className="panel" role="status">已选中 {selection.instancePaths.length} 个对象。选中单个对象可编辑属性。</p>}
-            {properties && <PropertiesPanel key={JSON.stringify([projectSession, properties.instancePath])}
-              store={store} occurrence={properties} occurrences={linkOptions.graph.instances} jumpToParameter={jumpToParameter} onAddPort={setPortTarget}
-              onCopyModule={path => copyModuleTo(store.getSnapshot().project, path, path.slice(0, -1))}
-              onMoveUp={selection.view === 'topology' && selected && selected.instancePath.length > 1 ? requestMoveUp : undefined}
-              onDissolve={selection.view === 'topology' && selected?.instance && selected.definition.kind === 'module' ? requestDissolve : undefined} />}
+          <div id="workbench-properties" className="v1-right-content" hidden={!propertiesOpen}>
+            <div className="v1-side-scroll v1-object-properties">
+              {selection.instancePaths && !topologyActive && <p className="panel" role="status">已选中 {selection.instancePaths.length} 个对象。选中单个对象可编辑属性。</p>}
+              {properties && <PropertiesPanel key={JSON.stringify([projectSession, properties.instancePath])}
+                store={store} occurrence={properties} occurrences={linkOptions.graph.instances} jumpToParameter={jumpToParameter} onAddPort={setPortTarget}
+                onCopyModule={path => copyModuleTo(store.getSnapshot().project, path, path.slice(0, -1))}
+                onAddInside={topologyActive && selected?.instance && selected.definition.kind === 'module'
+                  ? path => { enterModule(path); setLeftTab('library'); } : undefined}
+                onDcBudget={topologyActive && properties.definition.kind === 'module' && properties.definition.physicalEnclosure ? showDc : undefined}
+                onMoveUp={selection.view === 'topology' && selected && selected.instancePath.length > 1 ? requestMoveUp : undefined}
+                onDissolve={selection.view === 'topology' && selected?.instance && selected.definition.kind === 'module' ? requestDissolve : undefined} />}
+            </div>
+            <div className="v1-scope-tools" ref={setToolsHost} />
           </div>
         </aside>
       </div>
