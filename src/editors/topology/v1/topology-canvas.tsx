@@ -16,6 +16,7 @@ import { structureScope } from '../../../workbench/v1/structure-scope';
 import { BlockPorts } from './block-ports';
 import { frameHeader, frameInsets, ModuleFrame } from './module-frame';
 import { keepNodeInside, moduleExtent } from './frame-geometry';
+import { ModulePlacement } from './module-placement';
 import { FrameResizeHandles } from './frame-resize-handles';
 import { keepGraphVisible } from './viewport';
 import { CanvasControls, canvasFitOptions, flowAriaLabels } from './canvas-controls';
@@ -441,6 +442,14 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     flowStore.setState({ userSelectionActive: false, userSelectionRect: null, nodesSelectionActive: false });
   }
 
+  function placementFits(position: XYPosition, ports: readonly PortDefinition[]) {
+    const scope = nodeByKey.get(rootKey);
+    if (!scope?.frame?.saved) return true;
+    const extent = moduleExtent(scope.frame.base, frameInsets(scope.item.definition.ports));
+    const { x, y } = keepNodeInside({ ...position, ...estimatedBlockSize(ports) }, extent);
+    return x === position.x && y === position.y;
+  }
+
   function placeAt(item: LibraryItem, screen: XYPosition) {
     if (!flow.current) return;
     const position = flow.current.screenToFlowPosition(screen);
@@ -450,9 +459,7 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
       const template = item.source === 'template' ? builtInDefinitions.find(entry => entry.id === item.id) : undefined;
       const definition = template && isBlankTemplate(item.id) ? template : saved ?? template;
       if (!definition) return;
-      const extent = moduleExtent(scope.frame.base, frameInsets(scope.item.definition.ports));
-      const { x, y } = keepNodeInside({ ...position, ...estimatedBlockSize(definition.ports) }, extent);
-      if (x !== position.x || y !== position.y) {
+      if (!placementFits(position, definition.ports)) {
         report('此处无法完整放入当前模块，请选择框内其他位置或先调整模块边框。');
         return;
       }
@@ -528,9 +535,12 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
       const item = readLibraryItem(event.dataTransfer);
       if (item) placeAt(item, { x: event.clientX, y: event.clientY });
     }}>
-    {placingModule && !panWithSpace && <div className="v1-module-placement" onClick={event => {
-      placeAt({ source: 'template', id: blankModuleId, name: '新建模块' }, { x: event.clientX, y: event.clientY });
-    }} />}
+    {placingModule && !panWithSpace && <ModulePlacement
+      previewAt={screen => {
+        const instance = flow.current;
+        if (instance) return { zoom: instance.getZoom(), allowed: placementFits(instance.screenToFlowPosition(screen), []) };
+      }}
+      place={screen => placeAt({ source: 'template', id: blankModuleId, name: '新建模块' }, screen)} />}
     <ReactFlow<CanvasNode, WiringEdge> nodes={nodes} edges={edges.map(edge => ({ ...edge, selected: selectedWiring === edge }))}
       nodeTypes={nodeTypes} ariaLabelConfig={flowAriaLabels} fitView fitViewOptions={canvasFitOptions}
       viewport={viewport} onViewportChange={changeViewport} onInit={instance => { flow.current = instance; }}
