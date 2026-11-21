@@ -50,8 +50,8 @@ export function moveParametersDown(parent: ModuleDefinition, container: ModuleDe
 }
 
 export function unrestrictedAlias(boundary: PortDefinition, target: PortDefinition): boolean {
-  // Removing a boundary must not broaden the channels carried by the old route.
-  return !boundary.inputRating && (!boundary.channelIds
+  // Removing a boundary must not change the voltage, ratings, or channels of the old route.
+  return !boundary.inputRating && !boundary.outputVoltageV && (!boundary.channelIds
     || !!target.channelIds?.every(channel => boundary.channelIds!.includes(channel)));
 }
 

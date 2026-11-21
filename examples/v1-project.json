@@ -601,15 +601,15 @@
             "id": "OUT",
             "name": "输出",
             "type": "DC_POWER",
-            "direction": "out"
+            "direction": "out",
+            "outputVoltageV": {
+              "kind": "fixed",
+              "value": 10
+            }
           }
         ],
         "dcSupply": {
           "portId": "OUT",
-          "voltageV": {
-            "kind": "fixed",
-            "value": 10
-          },
           "capacity": {
             "unit": "W",
             "value": {
@@ -634,7 +634,11 @@
             "id": "OUT",
             "name": "输出",
             "type": "DC_POWER",
-            "direction": "out"
+            "direction": "out",
+            "outputVoltageV": {
+              "kind": "fixed",
+              "value": 5
+            }
           }
         ],
         "transfers": [
@@ -642,10 +646,6 @@
             "kind": "dc",
             "fromPortId": "IN",
             "toPortId": "OUT",
-            "outputVoltageV": {
-              "kind": "fixed",
-              "value": 5
-            },
             "efficiency": {
               "kind": "fixed",
               "value": 0.8

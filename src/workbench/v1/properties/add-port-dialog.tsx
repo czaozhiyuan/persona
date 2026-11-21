@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { PortDefinition, PortDirection, PortType } from '../../../model/v1/types';
 import { portTypeLabels } from '../labels';
+import { OutputVoltageField, readOutputVoltage } from './output-voltage-field';
 
 export function AddPortDialog({ name, locations, add, close }: {
   name: string;
@@ -9,6 +10,9 @@ export function AddPortDialog({ name, locations, add, close }: {
   close: () => void;
 }) {
   const [error, setError] = useState('');
+  const [type, setType] = useState<PortType>('RF');
+  const [direction, setDirection] = useState<PortDirection>('in');
+  const dcOutput = type === 'DC_POWER' && direction === 'out';
   return <dialog ref={dialog => { if (dialog && !dialog.open) dialog.showModal(); }}
     className="v1-topology-dialog v1-add-port-dialog" aria-labelledby="add-port-title" onCancel={close}>
     <h3 id="add-port-title">添加端口 · {name}</h3>
@@ -17,7 +21,7 @@ export function AddPortDialog({ name, locations, add, close }: {
       event.preventDefault();
       const data = new FormData(event.currentTarget);
       const result = add({ id: crypto.randomUUID(), name: String(data.get('name')),
-        type: data.get('type') as PortType, direction: data.get('direction') as PortDirection });
+        type, direction, outputVoltageV: dcOutput ? readOutputVoltage(data) : undefined });
       if (result) setError(result);
       else close();
     }}>
@@ -25,16 +29,17 @@ export function AddPortDialog({ name, locations, add, close }: {
       <div className="v1-port-choices">
         <fieldset>
           <legend>类型</legend>
-          {Object.entries(portTypeLabels).map(([type, label]) => <label key={type}>
-            <input type="radio" name="type" value={type} defaultChecked={type === 'RF'} />{type} · {label}
+          {Object.entries(portTypeLabels).map(([value, label]) => <label key={value}>
+            <input type="radio" name="type" value={value} checked={type === value} onChange={() => setType(value as PortType)} />{value} · {label}
           </label>)}
         </fieldset>
         <fieldset>
           <legend>方向</legend>
-          <label><input type="radio" name="direction" value="in" defaultChecked />输入</label>
-          <label><input type="radio" name="direction" value="out" />输出</label>
+          <label><input type="radio" name="direction" value="in" checked={direction === 'in'} onChange={() => setDirection('in')} />输入</label>
+          <label><input type="radio" name="direction" value="out" checked={direction === 'out'} onChange={() => setDirection('out')} />输出</label>
         </fieldset>
       </div>
+      {dcOutput && <OutputVoltageField />}
       {error && <p className="error" role="alert">{error}</p>}
       <div className="actions">
         <button type="submit">添加端口</button>

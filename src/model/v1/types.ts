@@ -1,5 +1,5 @@
 import type { OpticalChannelId } from './channels';
-import type { ConversionProfile, DcLoad, DcSupply, InputRating, SwitchState, Transfer } from './device';
+import type { ConversionProfile, DcLoad, DcSupply, DcValue, InputRating, SwitchState, Transfer } from './device';
 import type { ParameterDefinition, ParameterMapping, ParameterValue } from './parameters';
 import type { CableBundle, Connection, LocalEndpointRef, NamedLink } from './topology';
 
@@ -27,6 +27,8 @@ export type PortDefinition = {
   direction: PortDirection;
   channelIds?: readonly OpticalChannelId[];
   inputRating?: InputRating;
+  /** Declared voltage on a DC output. Supply and conversion roles are defined separately. */
+  outputVoltageV?: DcValue;
 };
 
 type DefinitionIdentity = {

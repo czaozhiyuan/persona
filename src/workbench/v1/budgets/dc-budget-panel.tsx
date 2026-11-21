@@ -10,7 +10,7 @@ type Output = DcBudget['supplies'][number];
 
 const diagnosticLabels = {
   open_input: '尚未连接', ambiguous_input: '多条供电路径', feedback: '反馈回路',
-  missing_parameter: '缺少参数', unknown_load: '负载未知',
+  missing_parameter: '缺少参数', unknown_load: '负载未知', voltage_conflict: '电压不一致',
 };
 
 function OutputColumns({ output }: { output: Output }) {

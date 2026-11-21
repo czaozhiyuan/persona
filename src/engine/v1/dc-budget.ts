@@ -8,7 +8,7 @@ import { buildSignalGraph, signalPortKey } from './signal-graph';
 import type { SignalPort } from './signal-graph';
 
 type Diagnostic = {
-  code: 'open_input' | 'ambiguous_input' | 'feedback' | 'missing_parameter' | 'unknown_load';
+  code: 'open_input' | 'ambiguous_input' | 'feedback' | 'missing_parameter' | 'unknown_load' | 'voltage_conflict';
   endpoint: EndpointRef;
   reason: string;
 };
@@ -88,7 +88,7 @@ export function calculateDcBudget(project: Project): DcBudget {
     if (instance.definition.kind !== 'component') continue;
     const { dcSupply, dcLoad } = instance.definition;
     if (dcSupply?.portId === port.ref.portId) {
-      node.supply = { voltageV: evaluate(node, 'V', dcSupply.voltageV, '供电电压'), capacity: dcSupply.capacity };
+      node.supply = { voltageV: evaluate(node, 'V', port.definition.outputVoltageV, '供电电压'), capacity: dcSupply.capacity };
     }
     if (dcLoad?.portId === port.ref.portId) {
       node.load = evaluate(node, 'W', dcLoad.powerW, '负载需求');
@@ -102,10 +102,10 @@ export function calculateDcBudget(project: Project): DcBudget {
     if (!from || !to) continue;
     let arc: Arc = { from, to };
     if (edge.source.kind === 'transfer' && edge.source.transfer.kind === 'dc') {
-      const { efficiency, outputVoltageV, capacity } = edge.source.transfer;
+      const { efficiency, capacity } = edge.source.transfer;
       const converter = { from, to, conversion: {
         efficiency: evaluate(from, 'ratio', efficiency, '直流变换效率'),
-        voltageV: evaluate(to, 'V', outputVoltageV, '直流变换器输出电压'), capacity,
+        voltageV: evaluate(to, 'V', to.port.definition.outputVoltageV, '直流变换器输出电压'), capacity,
       } };
       arc = converter;
       converters.push(converter);
@@ -125,7 +125,21 @@ export function calculateDcBudget(project: Project): DcBudget {
       const feed = node.incoming[0];
       node.feed = feed.from.feed;
       node.voltageV = feed.from.voltageV;
-      if (feed.from.voltageV.availability === 'available' && feed.conversion) node.voltageV = feed.conversion.voltageV;
+      if (feed.conversion) {
+        if (node.voltageV.availability === 'available') node.voltageV = feed.conversion.voltageV;
+      } else if (node.feed === 'known' && node.port.definition.outputVoltageV !== undefined) {
+        // A passive output can declare the voltage of an existing feed, but cannot change a known upstream voltage.
+        const declared = evaluate(node, 'V', node.port.definition.outputVoltageV, '输出电压');
+        if (node.voltageV.availability === 'available' && declared.availability === 'available'
+          && node.voltageV.value !== declared.value) {
+          const reason = `端口声明 ${declared.value} V，与上游供电 ${node.voltageV.value} V 不一致。`;
+          node.feed = 'ambiguous';
+          node.voltageV = unavailable('V', reason);
+          report(node, 'voltage_conflict', reason);
+        } else {
+          node.voltageV = declared;
+        }
+      }
     } else if (node.incoming.length > 1) {
       const reason = '该端口存在多路直流供电，无法确定负载分配。';
       node.feed = 'ambiguous';

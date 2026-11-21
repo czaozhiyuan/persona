@@ -9,7 +9,7 @@ type ChannelFilter = { channelIds?: readonly OpticalChannelId[] };
 
 export type DcValue = Quantity<FixedValue>;
 export type DcCapacity = { unit: 'W' | 'A'; value: DcValue };
-export type DcSupply = { portId: string; voltageV?: DcValue; capacity?: DcCapacity };
+export type DcSupply = { portId: string; capacity?: DcCapacity };
 export type DcLoad = { portId: string; powerW?: DcValue };
 
 export type OpticalRoute = PortPair & ChannelFilter & { gainDb?: Quantity<OpticalValue> };
@@ -38,7 +38,7 @@ export type Transfer =
     gainDb?: Quantity<OpticalValue>;
   })
   | (PortPair & ChannelFilter & { kind: 'oe' })
-  | (PortPair & { kind: 'dc'; outputVoltageV?: DcValue; efficiency?: DcValue; capacity?: DcCapacity });
+  | (PortPair & { kind: 'dc'; efficiency?: DcValue; capacity?: DcCapacity });
 
 export type SwitchState = {
   id: string;
