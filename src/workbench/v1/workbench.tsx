@@ -9,6 +9,7 @@ import { createOpticalBudgetForGraph } from '../../engine/v1/optical-budget';
 import type { LinkTrial, NamedLink } from '../../model/v1/topology';
 import { signalPortKey } from '../../engine/v1/signal-graph';
 import type { EndpointRef, InstancePath, PortDefinition, Project } from '../../model/v1/types';
+import { planDissolveModule } from '../../state/v1/dissolve-module';
 import { planInstanceMove } from '../../state/v1/reparent-instance';
 import { moveTopologyNode } from '../../state/v1/topology-edits';
 import type { ProjectStore } from '../../state/v1/project-store';
@@ -57,6 +58,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const [portTarget, setPortTarget] = useState<InstancePath>();
   const [newPort, setNewPort] = useState<EndpointRef>();
   const [focusMoved, setFocusMoved] = useState<InstancePath>();
+  const [dissolve, setDissolve] = useState<{ base: Project; plan: ReturnType<typeof planDissolveModule>; destination: string; error?: string }>();
   const [moveUp, setMoveUp] = useState<{ base: Project; plan: ReturnType<typeof planInstanceMove>; destination: string; error?: string }>();
   const [page, setPage] = useState<Page>('canvas');
   const [savedProject, setSavedProject] = useState(project);
@@ -192,20 +194,20 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     openPage('canvas');
   }
 
-  function revealReparented({ instancePath, affected }: ApprovedMove) {
+  function revealStructureChange(instancePath: InstancePath, remap: (path: InstancePath) => InstancePath | undefined) {
     function remapExpansion(previous: ReadonlySet<string>) {
       const next = new Set<string>();
       for (const key of previous) {
         const path = JSON.parse(key) as InstancePath;
-        const moved = affected.find(item => inHierarchy(item.from, path));
-        next.add(moved ? hierarchyKey([...moved.to, ...path.slice(moved.from.length)]) : key);
+        const mapped = remap(path);
+        if (mapped) next.add(hierarchyKey(mapped));
       }
       for (let depth = 0; depth < instancePath.length; depth++) next.add(hierarchyKey(instancePath.slice(0, depth)));
       return next;
     }
     setExpandedCanvas(remapExpansion);
     setExpandedHierarchy(remapExpansion);
-    if (!inHierarchy(selection.modulePath, instancePath)) store.selectModule(instancePath.slice(0, -1));
+    if (!inHierarchy(store.getSnapshot().selection.modulePath, instancePath)) store.selectModule(instancePath.slice(0, -1));
     selectObjects([instancePath]);
     setFocusMoved(instancePath);
   }
@@ -214,7 +216,10 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     if (store.getSnapshot().project !== base) return '工程已变化，请重新拖动或选择对象。';
     const result = store.commit(() => position ? moveTopologyNode(plan.project, plan.instancePath, position) : plan.project);
     if (!result.ok) return result.message;
-    revealReparented(plan);
+    revealStructureChange(plan.instancePath, path => {
+      const moved = plan.affected.find(item => inHierarchy(item.from, path));
+      return moved ? [...moved.to, ...path.slice(moved.from.length)] : path;
+    });
     store.setView('topology');
     openPage('canvas');
   }
@@ -224,6 +229,33 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     const owner = store.resolveInstance(destination);
     const plan = planInstanceMove(project, source, destination);
     setMoveUp({ base: project, plan, destination: owner?.instance?.name ?? owner?.definition.name ?? '上一级模块' });
+  }
+
+  function requestDissolve(path: InstancePath) {
+    const target = store.resolveInstance(path.slice(0, -1));
+    setDissolve({ base: project, plan: planDissolveModule(project, path),
+      destination: target?.instance?.name ?? target?.definition.name ?? '上一级模块' });
+  }
+
+  function confirmDissolve() {
+    if (!dissolve?.plan.ok) return;
+    const plan = dissolve.plan;
+    if (store.getSnapshot().project !== dissolve.base) {
+      setDissolve({ ...dissolve, error: '工程已变化，请关闭预览后重新解散。' });
+      return;
+    }
+    const result = store.commit(() => plan.project);
+    if (!result.ok) {
+      setDissolve({ ...dissolve, error: result.message });
+      return;
+    }
+    revealStructureChange(plan.children[0] ?? plan.parentPath, path => {
+      const removed = plan.affected.find(prefix => inHierarchy(prefix, path));
+      if (!removed) return path;
+      if (removed.length < path.length) return [...removed.slice(0, -1), ...path.slice(removed.length)];
+    });
+    openPage('canvas');
+    setDissolve(undefined);
   }
 
   function enterModule(path: InstancePath) {
@@ -248,6 +280,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
       setNewPort(undefined);
       setFocusMoved(undefined);
       setMoveUp(undefined);
+      setDissolve(undefined);
       setLinkInputs(new Map());
       setLocalOptical({ sources: [] });
       setExpandedHierarchy(new Set(['[]']));
@@ -602,10 +635,28 @@ export function Workbench({ store, loadExample, newProject }: Props) {
             {selection.instancePaths && <p className="panel" role="status">已选中 {selection.instancePaths.length} 个对象。选中单个对象可编辑属性。</p>}
             {properties && <PropertiesPanel key={JSON.stringify([projectSession, properties.instancePath])}
               store={store} occurrence={properties} occurrences={linkOptions.graph.instances} jumpToParameter={jumpToParameter} onAddPort={setPortTarget}
-              onMoveUp={selection.view === 'topology' && selected && selected.instancePath.length > 1 ? requestMoveUp : undefined} />}
+              onMoveUp={selection.view === 'topology' && selected && selected.instancePath.length > 1 ? requestMoveUp : undefined}
+              onDissolve={selection.view === 'topology' && selected?.instance && selected.definition.kind === 'module' ? requestDissolve : undefined} />}
           </div>
         </aside>
       </div>
+      {dissolve && <dialog className="v1-topology-dialog" aria-labelledby="dissolve-title"
+        ref={dialog => { if (dialog && !dialog.open) dialog.showModal(); }} onCancel={() => setDissolve(undefined)}>
+        <h3 id="dissolve-title">解散模块（保留内部对象）</h3>
+        {dissolve.plan.ok ? <>
+          <p>将 {dissolve.plan.children.length} 个直接子对象移到「{dissolve.destination}」，移除原容器。</p>
+          <p>调整 {dissolve.plan.adjustedPorts.length} 个边界端口、{dissolve.plan.outsideWires} 条上层连接和 {dissolve.plan.outsideCores} 条上层纤芯，
+            提升 {dissolve.plan.insideWires} 条内部连接和 {dissolve.plan.insideBundles} 个内部线束。</p>
+          {dissolve.plan.affected.length > 1 && <p>共享结构影响范围：{
+            structureLocations(linkOptions.graph.instances, dissolve.plan.affected).join('、')
+          }</p>}
+        </> : <p className="error" role="alert">{dissolve.plan.message}</p>}
+        {dissolve.error && <p className="error" role="alert">{dissolve.error}</p>}
+        <div className="actions">
+          {dissolve.plan.ok && <button type="button" className="primary" onClick={confirmDissolve}>确认解散</button>}
+          <button type="button" onClick={() => setDissolve(undefined)}>取消</button>
+        </div>
+      </dialog>}
       {moveUp && <dialog className="v1-topology-dialog" aria-labelledby="move-up-title"
         ref={dialog => { if (dialog && !dialog.open) dialog.showModal(); }} onCancel={() => setMoveUp(undefined)}>
         <h3 id="move-up-title">移到上一级：{moveUp.destination}</h3>
