@@ -54,6 +54,26 @@ test('drag coordinates are local to their immediate module and moving a parent l
   assert.deepEqual(reopened.nodeByKey.get(hierarchyKey(['TX_B']))?.position, { x: 300, y: 80 });
 });
 
+test('resizing an inline frame from the upper-left holds its descendants in place', () => {
+  const instances = [...resolveHierarchy(exampleProject).walkInstances()];
+  const frameKey = hierarchyKey(['TX_A']);
+  const childKey = hierarchyKey(['TX_A', 'TX_SLOT']);
+  const view = (resize?: Parameters<typeof projectTopology>[5]) =>
+    projectTopology(exampleProject, instances, [], paths(['TX_A']), new Map(), resize);
+  const initial = view();
+  const parent = initial.nodeByKey.get(frameKey)!;
+  const frame = parent.frame!.display;
+  const changed = view({ key: frameKey, frame: { ...frame, x: frame.x - 20, y: frame.y - 10, width: frame.width + 20, height: frame.height + 10 } });
+  const absoluteChild = (projection: typeof initial) => {
+    const parent = projection.nodeByKey.get(frameKey)!;
+    const child = projection.nodeByKey.get(childKey)!;
+    return toLocalPosition(child.position, parent.position);
+  };
+  assert.deepEqual(changed.nodeByKey.get(frameKey)?.position, { x: parent.position.x - 20, y: parent.position.y - 10 });
+  assert.deepEqual(absoluteChild(changed), absoluteChild(initial));
+  assert.deepEqual(changed.nodeByKey.get(hierarchyKey(['TX_B']))?.position, initial.nodeByKey.get(hierarchyKey(['TX_B']))?.position);
+});
+
 test('expanded boundaries separate internal mappings from external wiring and scope highlights by occurrence', () => {
   const project = parseProjectJson(readFileSync(new URL('../../examples/v1-project.json', import.meta.url), 'utf8'));
   const instances = [...resolveHierarchy(project).walkInstances()];

@@ -213,7 +213,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
           return frame ? resizeTopologyFrame(placed, frame) : placed;
         })}
         resize={(frame, adjustments) => commit(draft =>
-          resizeTopologyFrame(moveTopologyNodes(draft, adjustments), { modulePath: scope, ...frame }))}
+          resizeTopologyFrame(moveTopologyNodes(draft, adjustments), frame))}
         connect={(path, connection) => editScope(path, current => ({
           ...current, connections: [...(current.connections ?? []), { ...connection, id: crypto.randomUUID() }],
         }))}

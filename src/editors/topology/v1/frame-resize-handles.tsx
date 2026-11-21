@@ -11,12 +11,13 @@ const sides = {
   nw: '左上角', ne: '右上角', sw: '左下角', se: '右下角',
 } satisfies Record<ResizeDirection, string>;
 
-export function FrameResizeHandles({ frame, childrenBounds, insets, preview, finish }: {
+export function FrameResizeHandles({ frame, childrenBounds, insets, originLimit, preview, finish }: {
   frame: Rect;
   childrenBounds: readonly Rect[];
   insets: ReturnType<typeof frameInsets>;
+  originLimit?: Pick<Rect, 'x' | 'y'>;
   preview: (frame?: Rect) => void;
-  finish: (frame: Rect) => void;
+  finish: (frame: Rect, original: Rect) => void;
 }) {
   const { getZoom } = useReactFlow();
   const gesture = useRef<{
@@ -36,7 +37,7 @@ export function FrameResizeHandles({ frame, childrenBounds, insets, preview, fin
       rectangle: next => dragFrame(frame, direction, {
         x: (next.clientX - clientX) / zoom,
         y: (next.clientY - clientY) / zoom,
-      }, childrenBounds, insets),
+      }, childrenBounds, insets, originLimit),
     };
   }
   function cancel(event: PointerEvent<HTMLDivElement>) {
@@ -58,7 +59,7 @@ export function FrameResizeHandles({ frame, childrenBounds, insets, preview, fin
       cancel(event);
       const next = active.rectangle(event);
       const before = active.original;
-      if (next.x !== before.x || next.y !== before.y || next.width !== before.width || next.height !== before.height) finish(next);
+      if (next.x !== before.x || next.y !== before.y || next.width !== before.width || next.height !== before.height) finish(next, before);
     }}
     onPointerCancel={cancel} onLostPointerCapture={cancel}
     onClick={event => event.stopPropagation()}

@@ -76,7 +76,9 @@
 .v1-module-frame.is-selected { outline: 3px solid #267e73; }
 .v1-frame-title, .v1-block-title { display: flex; align-items: start; gap: .35rem; }
 .v1-frame-title { position: relative; z-index: 1; margin: .6rem 1rem; width: fit-content; max-width: calc(100% - 2rem); pointer-events: auto; }
-.react-flow__node.draggable .v1-frame-title { cursor: grab; }
+.react-flow__node.draggable .v1-frame-title {
+  width: auto; min-height: 1.8rem; cursor: grab; user-select: none;
+}
 .v1-frame-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .v1-block-title strong { flex: 1; min-width: 0; }
 .v1-node-add-port {

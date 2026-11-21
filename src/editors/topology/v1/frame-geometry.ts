@@ -38,11 +38,12 @@ export function keepNodeInside(node: Rect, extent: CoordinateExtent): XYPosition
   };
 }
 
-export function dragFrame(frame: Rect, direction: ResizeDirection, delta: XYPosition, children: readonly Rect[], insets: Insets): Rect {
+export function dragFrame(frame: Rect, direction: ResizeDirection, delta: XYPosition, children: readonly Rect[], insets: Insets,
+  originLimit?: XYPosition): Rect {
   const { width, height } = minimumFrame(children, insets);
-  const left = direction.includes('w') ? Math.min(frame.x + delta.x, right(frame) - width,
+  const left = direction.includes('w') ? Math.min(Math.max(frame.x + delta.x, originLimit?.x ?? -Infinity), right(frame) - width,
     ...children.map(child => child.x - insets.left)) : frame.x;
-  const top = direction.includes('n') ? Math.min(frame.y + delta.y, bottom(frame) - height,
+  const top = direction.includes('n') ? Math.min(Math.max(frame.y + delta.y, originLimit?.y ?? -Infinity), bottom(frame) - height,
     ...children.map(child => child.y - frameHeader)) : frame.y;
   const east = direction.includes('e') ? Math.max(right(frame) + delta.x, frame.x + width,
     ...children.map(child => right(child) + insets.right)) : right(frame);

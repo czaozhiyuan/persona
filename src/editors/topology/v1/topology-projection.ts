@@ -11,6 +11,7 @@ type Size = { width: number; height: number };
 export const estimatedBlockSize = (ports: readonly PortDefinition[]): Size =>
   ({ width: 202, height: 48 + blockPortRows(ports) * 24 });
 
+export type FrameResizePreview = { key: string; frame: Rect };
 type Frame = { base: Rect; display: Rect; saved: boolean };
 export type TopologyItem = {
   item: ResolvedInstance;
@@ -27,7 +28,7 @@ export const toLocalPosition = (position: XYPosition, offset: XYPosition): XYPos
   ({ x: position.x + offset.x, y: position.y + offset.y });
 
 export function projectTopology(project: Project, instances: readonly ResolvedInstance[], scope: InstancePath,
-  expanded: ReadonlySet<string>, measured: ReadonlyMap<string, Size>, resizePreview?: Rect) {
+  expanded: ReadonlySet<string>, measured: ReadonlyMap<string, Size>, resizePreview?: FrameResizePreview) {
   const rootKey = hierarchyKey(scope);
   const root = instances.find(item => hierarchyKey(item.instancePath) === rootKey)!;
   const children = hierarchyChildren(instances);
@@ -63,10 +64,17 @@ export function projectTopology(project: Project, instances: readonly ResolvedIn
       const base = saved
         ? { x: saved.x, y: saved.y, width: Math.max(saved.width, min.width), height: Math.max(saved.height, min.height) }
         : fitModuleFrame(compact, insets);
-      const display = { ...(isRoot && resizePreview ? resizePreview : base) };
+      const preview = resizePreview?.key === key ? resizePreview.frame : undefined;
+      const display = { ...(preview ?? base) };
       const frame = { base, display, saved: !!saved };
-      if (current) current.frame = frame;
-      else {
+      if (current) {
+        current.frame = frame;
+        if (preview) {
+          const dx = preview.x - base.x, dy = preview.y - base.y;
+          current.bounds = { ...current.bounds, x: current.bounds.x + dx, y: current.bounds.y + dy };
+          current.position = { x: current.position.x + dx, y: current.position.y + dy };
+        }
+      } else {
         const boundary = { item, key, bounds: base, preferred: base, position: display, offset: { x: 0, y: 0 }, frame };
         nodes.push(boundary);
         nodeByKey.set(key, boundary);

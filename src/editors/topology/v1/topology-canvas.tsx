@@ -23,7 +23,7 @@ import { hierarchyKey, sharedParent } from './hierarchy-view';
 import { projectPathHighlight } from './path-highlight';
 import type { BudgetHighlight } from './path-highlight';
 import { estimatedBlockSize, projectTopology } from './topology-projection';
-import type { TopologyItem } from './topology-projection';
+import type { FrameResizePreview, TopologyItem } from './topology-projection';
 import { reparentDropTarget } from './reparent-drop';
 import type { ApprovedMove } from './reparent-drop';
 import { handleId, nodeId, portKey, projectWiring, scopedWiringProblem } from './topology-wiring';
@@ -88,9 +88,9 @@ function Device({ id, data, selected }: NodeProps<DeviceNode>) {
   </div>;
 }
 
-function Frame({ id, data, selected }: NodeProps<FrameNode>) {
+function Frame({ id, data, selected, width, height }: NodeProps<FrameNode>) {
   return <>
-    <ModuleFrame id={id} name={data.name} ports={data.ports} highlighted={data.pathPorts} newPortId={data.newPortId} handleId={handleId}
+    <ModuleFrame id={id} width={width} height={height} name={data.name} ports={data.ports} highlighted={data.pathPorts} newPortId={data.newPortId} handleId={handleId}
       editable outerHandles={data.outerHandles} selected={selected} wireState={data.wireState} openPort={data.openPort}
       controls={<>
         {data.locations.length > 0 && <span className="v1-inline-shared" title={data.locations.join('、')}
@@ -123,7 +123,7 @@ type Props = {
   reparent: (base: Project, plan: ApprovedMove, position?: XYPosition) => void;
   focusMoved?: InstancePath;
   move: (placements: readonly TopologyPlacement[], frame?: TopologyFrame) => void;
-  resize: (frame: Rect, placementAdjustments: readonly TopologyPlacement[]) => void;
+  resize: (frame: TopologyFrame, placementAdjustments: readonly TopologyPlacement[]) => void;
   connect: (scope: InstancePath, connection: Omit<Connection, 'id'>) => void;
   mapPort: (scope: InstancePath, mapping: PortMapping) => void;
   placingModule: boolean;
@@ -152,7 +152,7 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
   const cancelled = useRef(false);
   const connected = useRef(false);
   const [viewport, setViewport] = useState<Viewport>();
-  const [resizePreview, setResizePreview] = useState<Rect>();
+  const [resizePreview, setResizePreview] = useState<FrameResizePreview>();
   const [measured, setMeasured] = useState<ReadonlyMap<string, { width: number; height: number }>>(new Map());
   const dragSession = useRef<DragSession | undefined>(undefined);
   const [dropPreview, setDropPreview] = useState<DropPreview>();
@@ -277,19 +277,31 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     if (!frame) return { ...placement, type: 'device', measured: measured.get(key),
       zIndex: 2 + (deepest - path.length) * 2 + Number(path[modulePath.length] === selectedBranch), data };
     const direct = scopes.get(key)?.members ?? [];
+    const outer = parentKey && nodeByKey.get(parentKey);
+    const origin = outer && outer.frame ? moduleExtent(outer.frame.base, frameInsets(outer.item.definition.ports))[0] : undefined;
+    const originLimit = origin ? {
+      x: frame.display.x + origin[0] - node.bounds.x,
+      y: frame.display.y + origin[1] - node.bounds.y,
+    } : undefined;
     return { ...placement, type: 'moduleFrame', dragHandle: '.v1-frame-title',
       selectable: !boundary, focusable: !boundary, zIndex: path.length - deepest - 2,
       measured: { width: frame.display.width, height: frame.display.height },
       style: { width: frame.display.width, height: frame.display.height, pointerEvents: 'none' },
       data: { ...data, outerHandles: !boundary, locations: boundary ? [] : structureScope(instances, definition.id),
-        resize: boundary ? {
-          frame: frame.display, insets: frameInsets(definition.ports), preview: setResizePreview,
+        resize: {
+          frame: frame.display, insets: frameInsets(definition.ports), originLimit,
+          preview: next => setResizePreview(next && { key, frame: next }),
           childrenBounds: direct.map(child => child.frame ? { ...child.bounds,
             width: child.frame.display.width, height: child.frame.display.height } : child.bounds),
-          finish: next => resize(next, direct.filter(child =>
-            child.preferred.x !== child.bounds.x || child.preferred.y !== child.bounds.y)
-            .map(child => ({ instancePath: child.item.instancePath, x: child.bounds.x, y: child.bounds.y }))),
-        } : undefined,
+          finish: (next, original) => {
+            const adjustments = direct.filter(child => child.preferred.x !== child.bounds.x || child.preferred.y !== child.bounds.y)
+              .map(child => ({ instancePath: child.item.instancePath, x: child.bounds.x, y: child.bounds.y }));
+            if (!boundary && (next.x !== original.x || next.y !== original.y)) {
+              adjustments.push({ instancePath: path, x: node.bounds.x + next.x - frame.display.x, y: node.bounds.y + next.y - frame.display.y });
+            }
+            resize({ modulePath: path, ...next }, adjustments);
+          },
+        },
       },
     };
   });
