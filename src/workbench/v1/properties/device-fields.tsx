@@ -2,32 +2,54 @@ import { portDisplayName, portTypeLabels } from '../labels';
 import { useState } from 'react';
 import type { ComponentDefinition, PortDefinition, PortDirection, PortType } from '../../../model/v1/types';
 import type { InputRating, Transfer } from '../../../model/v1/device';
+import { AutosaveForm } from './autosave-form';
 import { ChannelField } from './channel-field';
 import { channelId, channelList, choice, numberField, opticalKinds, QuantityField, readQuantity, rfKinds } from './value-fields';
 
 export function PortFields({ port, save, remove }: {
-  port: PortDefinition; save: (read: () => PortDefinition) => void; remove: () => void;
+  port: PortDefinition; save: (port: PortDefinition) => boolean; remove: () => void;
 }) {
+  const version = JSON.stringify(port);
+  return <AutosaveForm version={version} save={data => {
+    const type = choice(data, 'type') as PortType;
+    const direction = choice(data, 'direction') as PortDirection;
+    const ratings = ratingUnits(type, direction);
+    const unit = ratings.find(candidate => candidate === choice(data, 'ratingUnit')) ?? ratings[0];
+    const min = numberField(data, 'minimum');
+    const max = numberField(data, 'maximum');
+    const channels = type === 'OPTICAL' ? channelList(data, 'channels') : undefined;
+    const previousChannels = port.channelIds;
+    const channelIds = channels?.length === previousChannels?.length
+      && channels?.every(channel => previousChannels?.includes(channel)) ? previousChannels : channels;
+    const previousRating = port.inputRating;
+    const inputRating = unit === previousRating?.unit && min === previousRating?.min && max === previousRating?.max
+      ? previousRating
+      : unit !== undefined && (min !== undefined || max !== undefined) ? { unit, min, max } : undefined;
+    const next: PortDefinition = {
+      ...port, name: choice(data, 'name').trim() || undefined, type, direction, channelIds, inputRating,
+    };
+    const nextVersion = JSON.stringify(next);
+    if (nextVersion !== version && save(next)) return nextVersion;
+  }}>
+    <PortControls port={port} remove={remove} />
+  </AutosaveForm>;
+}
+
+function ratingUnits(type: PortType, direction: PortDirection): readonly InputRating['unit'][] {
+  if (direction !== 'in' || type === 'CONTROL') return [];
+  return type === 'DC_POWER' ? ['V', 'A', 'W'] : ['dBm'];
+}
+
+function PortControls({ port, remove }: { port: PortDefinition; remove: () => void }) {
   const [type, setType] = useState(port.type);
   const [direction, setDirection] = useState(port.direction);
-  const ratings: readonly InputRating['unit'][] = direction !== 'in' || type === 'CONTROL' ? []
-    : type === 'DC_POWER' ? ['V', 'A', 'W'] : ['dBm'];
-  return <form onSubmit={event => {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    save(() => {
-      const min = numberField(data, 'minimum');
-      const max = numberField(data, 'maximum');
-      const unit = ratings.find(candidate => candidate === choice(data, 'ratingUnit'));
-      return { ...port, name: choice(data, 'name').trim() || undefined, type, direction, channelIds: type === 'OPTICAL' ? channelList(data, 'channels') : undefined,
-        inputRating: unit !== undefined && (min !== undefined || max !== undefined) ? { unit, min, max } : undefined };
-    });
-  }}>
+  const ratings = ratingUnits(type, direction);
+  return <>
     <label>显示名称<input name="name" defaultValue={port.name} placeholder={port.id} /></label>
-    <label>端口类型<select value={type} onChange={event => setType(event.target.value as PortType)}>
+    <label>端口类型<select name="type" value={type} onChange={event => setType(event.target.value as PortType)}>
       {Object.entries(portTypeLabels).map(([type, label]) => <option key={type} value={type}>{label}</option>)}
     </select></label>
-    <label>方向<select value={direction} onChange={event => setDirection(event.target.value as PortDirection)}>
+    <label>方向<select name="direction" value={direction} onChange={event => setDirection(event.target.value as PortDirection)}>
       <option value="in">输入</option><option value="out">输出</option>
     </select></label>
     {type === 'OPTICAL' && <ChannelField name="channels" label="适用通道（未选择表示不限）" value={port.channelIds} multiple />}
@@ -43,10 +65,9 @@ export function PortFields({ port, save, remove }: {
       </div>
     </fieldset>}
     <div className="actions">
-      <button type="submit">保存端口属性</button>
       <button type="button" onClick={remove}>预览删除端口</button>
     </div>
-  </form>;
+  </>;
 }
 
 function readTransfer(data: FormData, transfer: Transfer): Transfer {
