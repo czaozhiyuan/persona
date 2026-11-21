@@ -25,10 +25,11 @@ function readDefault(data: FormData, parameter: ParameterDefinition): ParameterD
     range: min === undefined && max === undefined ? undefined : { min, max } };
 }
 
-export function PropertiesPanel({ store, occurrence, occurrences, jumpToParameter, onAddPort, onMoveUp }: {
+export function PropertiesPanel({ store, occurrence, occurrences, jumpToParameter, onAddPort, onMoveUp, onDissolve }: {
   store: ProjectStore; occurrence: ResolvedInstance; occurrences: readonly ResolvedInstance[];
   onAddPort: (path: InstancePath) => void;
   onMoveUp?: (path: InstancePath) => void;
+  onDissolve?: (path: InstancePath) => void;
   jumpToParameter: (path: InstancePath, parameterId: string) => void;
 }) {
   const { definition, instance, instancePath, parameters, settings } = occurrence;
@@ -157,6 +158,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, jumpToParamete
       </div>}
       {instance && definition.kind === 'module' && <section>
         <h3>模块操作</h3>
+        {onDissolve && <button type="button" onClick={() => onDissolve(instancePath)}>解散模块（保留内部对象）</button>}
         {parentLocations.length > 0 && <p className="v1-property-effective">在上级模块添加后，以下位置都会新增此对象：{parentLocations.join('、')}。</p>}
         <button type="button" onClick={() => addModule('reuse')}>再次使用此模块</button>
         <button type="button" onClick={() => addModule('copy')}>复制为独立模块</button>

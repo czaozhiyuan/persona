@@ -2,6 +2,7 @@ import { resolveHierarchy } from '../../engine/v1/hierarchy';
 import type { LocalEndpointRef } from '../../model/v1/topology';
 import type { InstancePath, ModuleDefinition, Project, TopologyPlacement } from '../../model/v1/types';
 import { validateProjectSnapshot } from '../../storage/v1/project-json';
+import { remapLinkReferences } from './remap-link-references';
 import { wireMoveDown, wireMoveUp } from './reparent-wiring';
 
 type OccurrenceMove = { from: InstancePath; to: InstancePath };
@@ -102,22 +103,13 @@ function applyMove(project: Project, source: InstancePath, destination: Instance
     moduleDefinitions: project.moduleDefinitions.map(module =>
       module.id === outer.id ? outer : module.id === inner.id ? inner : module),
     instanceSettings: project.instanceSettings?.map(atInstance),
-    namedLinks: project.namedLinks?.map(link => ({
-      ...link, from: link.from && atPort(link.from), to: link.to && atPort(link.to),
-      via: link.via?.map(ref => {
-        if ('connectionId' in ref) {
-          const scopePath = containerScopes.get(key(ref.scopePath));
-          const connectionId = scopePath && relocated.get(ref.connectionId);
-          if (connectionId !== undefined && scopePath) return { scopePath, connectionId };
-        }
-        return { ...ref, scopePath: remap(ref.scopePath) };
-      }),
-      conversionBindings: link.conversionBindings?.map(binding => ({
-        ...binding, eo: atInstance(binding.eo), oe: atInstance(binding.oe),
-      })),
-      ...(link.trial && { trial: { ...link.trial, opticalSources: link.trial.opticalSources?.map(source => ({
-        ...source, endpoint: atPort(source.endpoint),
-      })) } }),
+    namedLinks: project.namedLinks?.map(link => remapLinkReferences(link, remap, atPort, ref => {
+      if ('connectionId' in ref) {
+        const scopePath = containerScopes.get(key(ref.scopePath));
+        const connectionId = scopePath && relocated.get(ref.connectionId);
+        if (connectionId !== undefined && scopePath) return { scopePath, connectionId };
+      }
+      return { ...ref, scopePath: remap(ref.scopePath) };
     })),
     layout: (layout || position) && {
       ...layout,

@@ -2,7 +2,7 @@ import type { ParameterMapping } from '../../model/v1/parameters';
 import type { CableBundle, Connection, LocalEndpointRef } from '../../model/v1/topology';
 import type { Instance, ModuleDefinition, PortDefinition, PortMapping } from '../../model/v1/types';
 
-function availableId(base: string, used: ReadonlySet<string>): string {
+export function availableId(base: string, used: ReadonlySet<string>): string {
   let id = base;
   for (let suffix = 2; used.has(id); suffix++) id = `${base}_${suffix}`;
   return id;
@@ -32,10 +32,10 @@ function boundaryPorts(module: ModuleDefinition, children: ReadonlyMap<string, I
   };
 }
 
-const rewriteConnections = (connections: ModuleDefinition['connections'], rewrite: (ref: LocalEndpointRef) => LocalEndpointRef) =>
+export const rewriteConnections = (connections: ModuleDefinition['connections'], rewrite: (ref: LocalEndpointRef) => LocalEndpointRef) =>
   connections?.map(connection => ({ ...connection, from: rewrite(connection.from), to: rewrite(connection.to) }));
 
-const rewriteBundles = (bundles: readonly CableBundle[] | undefined, rewrite: (ref: LocalEndpointRef) => LocalEndpointRef) =>
+export const rewriteBundles = (bundles: readonly CableBundle[] | undefined, rewrite: (ref: LocalEndpointRef) => LocalEndpointRef) =>
   bundles?.map(bundle => ({ ...bundle, cores: bundle.cores.map(core => ({
     ...core,
     a: core.a.endpoint ? { ...core.a, endpoint: rewrite(core.a.endpoint) } : core.a,
@@ -84,10 +84,21 @@ export function wireMoveDown(parent: ModuleDefinition, container: ModuleDefiniti
   };
 }
 
-function unrestrictedAlias(boundary: PortDefinition, target: PortDefinition): boolean {
+export function unrestrictedAlias(boundary: PortDefinition, target: PortDefinition): boolean {
   // Removing a boundary must not broaden the channels carried by the old route.
   return !boundary.inputRating && (!boundary.channelIds
     || !!target.channelIds?.every(channel => boundary.channelIds!.includes(channel)));
+}
+
+export function forwardedParameterSource(parent: ModuleDefinition, container: ModuleDefinition, slotId: string,
+  parameterId: string, hasContainerOverride: (id: string) => boolean): string {
+  const source = container.parameters!.find(parameter => parameter.id === parameterId)!;
+  const incoming = parent.parameterMappings?.find(item =>
+    item.target.instanceId === slotId && item.target.parameterId === source.id);
+  if (!incoming || source.defaultValue !== undefined || hasContainerOverride(source.id)) {
+    throw new Error(`模块参数「${source.name}」依赖本层默认值、覆盖值或本层来源，无法安全移出其映射目标。`);
+  }
+  return incoming.parameterId;
 }
 
 export function wireMoveUp(parent: ModuleDefinition, container: ModuleDefinition, slotId: string, moved: Instance,
@@ -129,13 +140,8 @@ export function wireMoveUp(parent: ModuleDefinition, container: ModuleDefinition
   const parentParameters = [...(parent.parameterMappings ?? [])];
   const containerParameters = container.parameterMappings?.filter(mapping => {
     if (mapping.target.instanceId !== moved.id) return true;
-    const source = container.parameters!.find(parameter => parameter.id === mapping.parameterId)!;
-    const incoming = parent.parameterMappings?.find(item =>
-      item.target.instanceId === slotId && item.target.parameterId === source.id);
-    if (!incoming || source.defaultValue !== undefined || hasContainerOverride(source.id)) {
-      throw new Error(`模块参数「${source.name}」依赖本层默认值、覆盖值或本层来源，无法安全移出其映射目标。`);
-    }
-    parentParameters.push({ ...mapping, parameterId: incoming.parameterId });
+    const parameterId = forwardedParameterSource(parent, container, slotId, mapping.parameterId, hasContainerOverride);
+    parentParameters.push({ ...mapping, parameterId });
     return false;
   });
   return {
