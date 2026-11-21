@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { buildSignalGraph, signalPortKey } from '../../src/engine/v1/signal-graph';
-import { connectBoundaryPort, exposeModulePort, renamePort } from '../../src/state/v1/module-ports';
+import { addDefinitionPort, connectBoundaryPort, exposeModulePort, renamePort } from '../../src/state/v1/module-ports';
 import { createProjectStore } from '../../src/state/v1/project-store';
 import { editModule, planPortDeletion } from '../../src/state/v1/topology-edits';
 import { parseProjectJson, serializeProjectJson } from '../../src/storage/v1/project-json';
@@ -73,4 +73,34 @@ test('rename and internal disconnect retain the upper wire, stable path referenc
   assert.equal(buildSignalGraph(removed).ports.has(signalPortKey(endpoint)), false);
   assert.ok(!removed.moduleDefinitions.find(module => module.id === removed.rootModuleDefinitionId)?.connections?.some(wire => wire.id === incoming.id));
   assert.deepEqual(removed.namedLinks, wired.namedLinks);
+});
+
+test('declaring a port edits the shared definition and preserves wiring, transfers and stable IDs', () => {
+  const project = sample();
+  const store = createProjectStore(project);
+  const mzm = store.resolveInstance(['TX_A', 'mzm'])?.definition;
+  assert.ok(mzm?.kind === 'component');
+  const port = { id: 'additional-output', name: '  测试光输出  ', type: 'OPTICAL', direction: 'out' } as const;
+  assert.deepEqual(store.commit(draft => addDefinitionPort(draft, mzm.id, port)), { ok: true });
+  const declared = store.getSnapshot().project;
+  const graph = buildSignalGraph(declared);
+  for (const tx of ['TX_A', 'TX_B']) {
+    const ref = { instancePath: [tx, 'mzm'], portId: port.id };
+    const declaredPort = graph.ports.get(signalPortKey(ref));
+    assert.equal(declaredPort?.definition.name, '测试光输出');
+    assert.ok(graph.edges.every(edge => edge.from !== declaredPort && edge.to !== declaredPort));
+  }
+  assert.deepEqual(declared.moduleDefinitions, project.moduleDefinitions);
+  assert.deepEqual(declared.namedLinks, project.namedLinks);
+  assert.throws(() => addDefinitionPort(declared, mzm.id, port), /ID 重复/);
+  store.undo();
+  assert.deepEqual(store.getSnapshot().project, project);
+  const renamed = renamePort(declared, mzm.id, port.id, '辅助光输出');
+  const restored = parseProjectJson(serializeProjectJson(renamed));
+  assert.deepEqual(restored.componentDefinitions.find(item => item.id === mzm.id)?.ports.at(-1),
+    { ...port, name: '辅助光输出' });
+  const module = addDefinitionPort(restored, 'tx', { ...port, id: 'module-output' });
+  assert.equal(buildSignalGraph(module).ports.get(signalPortKey({
+    instancePath: ['TX_A'], portId: 'module-output',
+  }))?.unmapped, true);
 });

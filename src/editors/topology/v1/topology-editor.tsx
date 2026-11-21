@@ -11,7 +11,7 @@ import type { LocalEndpointRef } from '../../../model/v1/topology';
 import { groupModule } from '../../../state/v1/group-module';
 import { connectBoundaryPort, exposeModulePort, renamePort } from '../../../state/v1/module-ports';
 import type { WiringSelection } from '../../../state/v1/remove-topology-object';
-import type { EndpointRef, InstancePath, ModuleDefinition, PortDirection, PortType, Project } from '../../../model/v1/types';
+import type { EndpointRef, InstancePath, ModuleDefinition, Project } from '../../../model/v1/types';
 import type { ProjectStore, ProjectStoreSnapshot } from '../../../state/v1/project-store';
 import { editModule, editModuleWiring, moveTopologyNode, resizeTopologyFrame } from '../../../state/v1/topology-edits';
 import { PortActionsDialog } from './port-actions-dialog';
@@ -25,12 +25,14 @@ import { CableForm, ConnectionForm, MappingForm, TopologyTool, field } from './w
 import type { LocalPort, UpdateWiring } from './wiring-forms';
 import './topology.css';
 
-export function TopologyEditor({ store, state, module, pathResult, graph, rename, expanded, setExpanded, budgetHighlight, onPortBudget, onDcBudget }: {
+export function TopologyEditor({ store, state, module, pathResult, graph, rename, expanded, setExpanded, budgetHighlight, onPortBudget, onDcBudget, onAddPort, newPort }: {
   store: ProjectStore; state: ProjectStoreSnapshot; module: ModuleDefinition; pathResult?: PathResult; graph: SignalGraph; rename: () => void;
   expanded: ReadonlySet<string>; setExpanded: (value: ReadonlySet<string>) => void;
   budgetHighlight?: BudgetHighlight;
   onPortBudget: (action: 'optical' | 'from' | 'to', ref: EndpointRef) => void;
   onDcBudget: (scope: InstancePath) => void;
+  onAddPort: (path: InstancePath) => void;
+  newPort?: EndpointRef;
 }) {
   const { project, selection } = state;
   const scope = selection.modulePath;
@@ -48,7 +50,8 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
   const projectDefinitions = [...definitions.values()].filter(definition =>
     definition.id !== module.id && definition.id !== project.rootModuleDefinitionId);
   const availableTemplates = builtInDefinitions.filter(template => !definitions.has(template.id));
-  const selected = selection.instancePath && store.resolveInstance(selection.instancePath)?.definition;
+  const selectedItem = selection.instancePath && store.resolveInstance(selection.instancePath);
+  const selected = selectedItem?.definition;
   const dcScope = selected?.kind === 'module' && selected.physicalEnclosure ? selection.instancePath
     : module.physicalEnclosure ? scope : undefined;
   const sharedLocations = structureScope(graph.instances, module.id);
@@ -147,7 +150,6 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
     return definition?.kind === 'module' && commit(draft => editModule(draft, definition.id, change));
   }
 
-  const updateModule: UpdateWiring = change => commit(draft => editModule(draft, module.id, change));
   const updateWiring: UpdateWiring = change => commit(draft => editModuleWiring(draft, module.id, change));
 
   function portRemoval(definitionId: string, heading: string) {
@@ -198,6 +200,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
         pathResult={pathResult} budgetHighlight={budgetHighlight} expanded={expanded} toggleModule={toggleModule}
         groupMode={groupMode} groupPaths={groupPaths} changeGroupSelection={changeGroupSelection}
         selectInstance={store.selectInstance} enterModule={store.selectModule}
+        onAddPort={onAddPort} newPort={newPort}
         openPort={(path, portId) => { setMessage(''); setPortAction({ path, portId }); }}
         add={add} deleteSelection={deleteSelection} rename={rename} report={setMessage} undo={store.undo} redo={store.redo}
         move={(path, position, frame) => commit(draft => {
@@ -308,22 +311,9 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
         </form>
       </TopologyTool>
       <TopologyTool title="对外端口">
-        <form onSubmit={event => {
-          event.preventDefault();
-          const form = event.currentTarget;
-          const data = new FormData(form);
-          const name = field(data, 'name');
-          if (updateModule(current => ({ ...current, ports: [...current.ports, {
-            id: crypto.randomUUID(), name, type: field(data, 'type') as PortType, direction: field(data, 'direction') as PortDirection,
-          }] }))) form.reset();
-        }}>
-          <label>显示名称<input name="name" required /></label>
-          <label>端口类型<select name="type" defaultValue="OPTICAL">
-            {Object.entries(portTypeLabels).map(([type, label]) => <option key={type} value={type}>{label}</option>)}
-          </select></label>
-          <label>端口方向<select name="direction"><option value="in">输入</option><option value="out">输出</option></select></label>
-          <button type="submit">添加对外端口</button>
-        </form>
+        <button type="button" onClick={() => onAddPort(selection.instancePath ?? scope)}>
+          ＋ 添加端口 · {selectedItem?.instance?.name ?? selectedItem?.definition.name ?? module.name}
+        </button>
         {portRemoval(module.id, '删除对外端口')}
         {selected && selected.id !== module.id && portRemoval(selected.id, `删除所选实例的定义端口 · ${selected.name}`)}
       </TopologyTool>

@@ -21,13 +21,27 @@ export function exposeModulePort(project: Project, scope: InstancePath, target: 
   }));
 }
 
+function editDefinitionPorts(project: Project, definitionId: string,
+  change: (ports: readonly PortDefinition[]) => readonly PortDefinition[]): Project {
+  const module = project.moduleDefinitions.find(item => item.id === definitionId);
+  if (module) return editModule(project, definitionId, current => ({ ...current, ports: change(current.ports) }));
+  if (!project.componentDefinitions.some(item => item.id === definitionId)) throw new Error('目标定义已不存在。');
+  return { ...project, componentDefinitions: project.componentDefinitions.map(item =>
+    item.id === definitionId ? { ...item, ports: change(item.ports) } : item) };
+}
+
+export function addDefinitionPort(project: Project, definitionId: string, port: PortDefinition): Project {
+  const name = port.name?.trim();
+  if (!name) throw new Error('请输入端口名称。');
+  return editDefinitionPorts(project, definitionId, ports => {
+    if (ports.some(item => item.id === port.id)) throw new Error('端口 ID 重复，请重试。');
+    return [...ports, { ...port, name }];
+  });
+}
+
 export function renamePort(project: Project, definitionId: string, portId: string, name: string): Project {
-  const update = (port: PortDefinition) => port.id === portId ? { ...port, name: name.trim() || undefined } : port;
-  return {
-    ...project,
-    moduleDefinitions: project.moduleDefinitions.map(item => item.id === definitionId ? { ...item, ports: item.ports.map(update) } : item),
-    componentDefinitions: project.componentDefinitions.map(item => item.id === definitionId ? { ...item, ports: item.ports.map(update) } : item),
-  };
+  return editDefinitionPorts(project, definitionId, ports =>
+    ports.map(port => port.id === portId ? { ...port, name: name.trim() || undefined } : port));
 }
 
 export function connectBoundaryPort(project: Project, definitionId: string, portId: string, target?: LocalEndpointRef): Project {
