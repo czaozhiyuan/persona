@@ -600,7 +600,22 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
         else selectObjects([]);
         report('');
       }}
-      onEdgeClick={(_, edge) => { cancelWiring(); selectObjects([]); setSelectedEdgeKey(edge.id); report(''); }}
+      onEdgeClick={(event, edge) => {
+        cancelWiring();
+        report('');
+        // A wire's wider click area can overlap the title of a frame below it.
+        const title = document.elementsFromPoint(event.clientX, event.clientY)
+          .find(element => element.closest('.v1-frame-title'));
+        const id = title?.closest('.react-flow__node')?.getAttribute('data-id');
+        const frame = id ? flow.current?.getNode(id) : undefined;
+        if (frame?.type === 'moduleFrame') {
+          setSelectedEdgeKey(undefined);
+          selectObject(frame.data.path, event.ctrlKey || event.shiftKey || event.metaKey);
+        } else {
+          selectObjects([]);
+          setSelectedEdgeKey(edge.id);
+        }
+      }}
       onNodeClick={(event, node) => {
         if (event.target instanceof Element && event.target.closest('.react-flow__handle')) return;
         cancelWiring();
