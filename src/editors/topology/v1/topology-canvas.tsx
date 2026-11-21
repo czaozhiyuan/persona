@@ -221,11 +221,13 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     const placement = { id, ariaLabel: name, position: drag?.key === key ? drag.position : node.position,
       parentId: parentKey === undefined ? undefined : nodeId(parentKey), selected: (active === key || grouped.has(key)) && !boundary };
     // Keep sibling blocks accessible where an expanded branch overlaps their stored positions.
-    if (!frame) return { ...placement, type: 'device',
+    // React Flow drops internal measurements when a controlled node is replaced.
+    if (!frame) return { ...placement, type: 'device', measured: measured.get(key),
       zIndex: 2 + (deepest - path.length) * 2 + Number(path[modulePath.length] === selectedBranch), data };
     const direct = scopes.get(key)?.members ?? [];
     return { ...placement, type: 'moduleFrame', draggable: !boundary && !groupMode, dragHandle: '.v1-frame-title',
       selectable: !boundary, focusable: !boundary, zIndex: path.length - deepest - 2,
+      measured: { width: frame.display.width, height: frame.display.height },
       style: { width: frame.display.width, height: frame.display.height, pointerEvents: 'none' },
       data: { ...data, outerHandles: !boundary, locations: boundary ? [] : structureScope(instances, definition.id),
         resize: boundary ? {
