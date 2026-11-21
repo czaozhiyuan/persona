@@ -13,10 +13,11 @@ export function PortFields({ port, save, remove }: {
   return <AutosaveForm version={version} save={data => {
     const type = choice(data, 'type') as PortType;
     const direction = choice(data, 'direction') as PortDirection;
-    const ratings = ratingUnits(type, direction);
-    const unit = ratings.find(candidate => candidate === choice(data, 'ratingUnit')) ?? ratings[0];
-    const min = numberField(data, 'minimum');
-    const max = numberField(data, 'maximum');
+    // The form still contains the previous rating controls during a type or direction change.
+    const unit = type === port.type && direction === port.direction
+      ? ratingUnits(type, direction).find(candidate => candidate === choice(data, 'ratingUnit')) : undefined;
+    const min = unit === undefined ? undefined : numberField(data, 'minimum');
+    const max = unit === undefined ? undefined : numberField(data, 'maximum');
     const channels = type === 'OPTICAL' ? channelList(data, 'channels') : undefined;
     const previousChannels = port.channelIds;
     const channelIds = channels?.length === previousChannels?.length
@@ -41,19 +42,18 @@ function ratingUnits(type: PortType, direction: PortDirection): readonly InputRa
 }
 
 function PortControls({ port, remove }: { port: PortDefinition; remove: () => void }) {
-  const [type, setType] = useState(port.type);
-  const [direction, setDirection] = useState(port.direction);
+  const { type, direction } = port;
   const ratings = ratingUnits(type, direction);
   return <>
     <label>显示名称<input name="name" defaultValue={port.name} placeholder={port.id} /></label>
-    <label>端口类型<select name="type" value={type} onChange={event => setType(event.target.value as PortType)}>
+    <label>端口类型<select name="type" value={type} onChange={() => { /* Saved by the form's change handler. */ }}>
       {Object.entries(portTypeLabels).map(([type, label]) => <option key={type} value={type}>{label}</option>)}
     </select></label>
-    <label>方向<select name="direction" value={direction} onChange={event => setDirection(event.target.value as PortDirection)}>
+    <label>方向<select name="direction" value={direction} onChange={() => { /* Saved by the form's change handler. */ }}>
       <option value="in">输入</option><option value="out">输出</option>
     </select></label>
     {type === 'OPTICAL' && <ChannelField name="channels" label="适用通道（未选择表示不限）" value={port.channelIds} multiple />}
-    {ratings.length > 0 && <fieldset key={ratings.join(',')}>
+    {ratings.length > 0 && <fieldset key={type}>
       <legend>输入额定范围（可选）</legend>
       <label>单位<select name="ratingUnit" defaultValue={ratings.includes(port.inputRating?.unit as InputRating['unit'])
         ? port.inputRating?.unit : ratings[0]}>
