@@ -159,3 +159,12 @@ button.primary:hover:not(:disabled) { background: #194f47; }
 @media (max-width: 48rem) {
   .v1-workbench-body { --left-width: 9rem; --right-width: 12rem; }
 }
+
+.v1-workbench[data-full-page="true"] .v1-workbench-body { grid-template-columns: minmax(0, 1fr); }
+.v1-workbench[data-full-page="true"] > .toolbar,
+.v1-workbench[data-full-page="true"] > .v1-workbench-notice,
+.v1-workbench[data-full-page="true"] .v1-side,
+.v1-workbench[data-full-page="true"] .v1-budget-dock,
+.v1-workbench[data-full-page="true"] .v1-topology-path,
+.v1-workbench[data-full-page="true"] .v1-topology-tools { display: none; }
+.v1-workbench[data-full-page="true"] .v1-workbench-main[data-budget] .v1-canvas-page { bottom: 0; }

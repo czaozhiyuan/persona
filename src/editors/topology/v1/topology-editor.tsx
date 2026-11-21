@@ -20,13 +20,14 @@ import type { BindingPreview } from './port-binding-dialog';
 import { PortDeletionDialog } from './port-deletion-dialog';
 import type { BudgetHighlight } from './path-highlight';
 import { insertCanvasItem } from './topology-layout-edits';
+import type { CanvasView } from './canvas-controls';
 import { TopologyCanvas } from './topology-canvas';
 import { displayDepth, hierarchyKey, inHierarchy, sharedParent } from './hierarchy-view';
 import { CableForm, ConnectionForm, MappingForm, TopologyTool, field } from './wiring-forms';
 import type { LocalPort, UpdateWiring } from './wiring-forms';
 import './topology.css';
 
-export function TopologyEditor({ store, state, module, pathResult, graph, rename, expanded, setExpanded, budgetHighlight, onPortBudget, onDcBudget, onAddPort, newPort, onAddInside, onSelectObject, onSelectObjects, moveAcrossLevels, requestMoveUp, focusMoved, copyModule, pasteModule, copyNotice }: {
+export function TopologyEditor({ store, state, module, pathResult, graph, rename, expanded, setExpanded, budgetHighlight, onPortBudget, onDcBudget, onAddPort, newPort, onAddInside, onSelectObject, onSelectObjects, moveAcrossLevels, requestMoveUp, focusMoved, copyModule, pasteModule, copyNotice, fullPage, toggleFullPage, restoreView }: {
   store: ProjectStore; state: ProjectStoreSnapshot; module: ModuleDefinition; pathResult?: PathResult; graph: SignalGraph; rename: () => void;
   expanded: ReadonlySet<string>; setExpanded: (value: ReadonlySet<string>) => void;
   budgetHighlight?: BudgetHighlight;
@@ -41,6 +42,9 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
   copyModule: Parameters<typeof TopologyCanvas>[0]['copyModule'];
   pasteModule: Parameters<typeof TopologyCanvas>[0]['pasteModule'];
   copyNotice: string;
+  fullPage: boolean;
+  toggleFullPage: (view: CanvasView) => void;
+  restoreView?: CanvasView;
   focusMoved?: InstancePath;
   newPort?: EndpointRef;
 }) {
@@ -210,6 +214,8 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
         pathResult={pathResult} budgetHighlight={budgetHighlight} expanded={expanded} toggleModule={toggleModule}
         selectedPaths={selectedPaths} selectObject={onSelectObject} selectObjects={onSelectObjects}
         enterModule={store.selectModule} focusMoved={focusMoved}
+        fullPage={fullPage} toggleFullPage={toggleFullPage} restoreView={restoreView}
+        depth={{ value: visibleDepth, max: maxDepth, set: expandTo }}
         reparent={(base, plan, layout) => setMessage(moveAcrossLevels(base, plan, layout) ?? '')}
         onAddPort={onAddPort} newPort={newPort}
         openPort={(path, portId) => { setMessage(''); setPortAction({ path, portId }); }}
@@ -235,15 +241,6 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
             : <span key={index}><button type="button" onClick={() => store.selectModule(path)}>{name}</button><span aria-hidden="true">›</span></span>;
         })}
       </nav>
-      <div className="v1-hierarchy-depth">
-        <label htmlFor="topology-depth">批量展开深度</label>
-        <button type="button" onClick={() => expandTo(1)}>收起全部</button>
-        <input id="topology-depth" type="range" min={1} max={maxDepth} value={visibleDepth} disabled={maxDepth === 1}
-          aria-orientation="vertical" aria-valuetext={`第 ${visibleDepth} 层，共 ${maxDepth} 层`}
-          onChange={event => expandTo(Number(event.currentTarget.value))} />
-        <button type="button" onClick={() => expandTo(maxDepth + 1)}>展开全部</button>
-        <output htmlFor="topology-depth">{visibleDepth} / {maxDepth}</output>
-      </div>
       {placingModule && <p className="v1-placement-hint" role="status">单击画布放置到「{moduleName}」 · Esc 取消</p>}
       {copyNotice && !message && <p className="v1-topology-message v1-module-copy-notice" role="status">{copyNotice}</p>}
       {message && !preview && !portAction && !bindingPreview && !groupDialog && <p className="v1-topology-message error" role="alert">{message}</p>}

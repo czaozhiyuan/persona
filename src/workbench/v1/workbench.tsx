@@ -4,6 +4,7 @@ import { LayoutEditor } from '../../editors/layout/v1/layout-editor';
 import { HierarchyTree } from '../../editors/topology/v1/hierarchy-tree';
 import { hierarchyKey, inHierarchy } from '../../editors/topology/v1/hierarchy-view';
 import type { ApprovedMove, ReparentLayout } from '../../editors/topology/v1/reparent-drop';
+import type { CanvasView } from '../../editors/topology/v1/canvas-controls';
 import { TopologyEditor } from '../../editors/topology/v1/topology-editor';
 import { createLinkBudget } from '../../engine/v1/link-budget';
 import { createOpticalBudgetForGraph } from '../../engine/v1/optical-budget';
@@ -42,6 +43,19 @@ type Props = {
 
 type Page = 'canvas' | 'project' | 'profiles';
 type BudgetPage = 'links' | 'optical' | 'dc';
+type SideTab = 'structure' | 'library';
+type Presentation = {
+  view: CanvasView;
+  scope: InstancePath;
+  selected: readonly InstancePath[];
+  leftTab?: SideTab;
+  propertiesOpen: boolean;
+  dock?: BudgetPage;
+  collapsed: boolean;
+  enlarged: boolean;
+  expandedCanvas: ReadonlySet<string>;
+  expandedHierarchy: ReadonlySet<string>;
+};
 const budgetTitles = { links: '查看链路预算', optical: '局部光功率', dc: '供电与功耗' };
 const defaultTrial: LinkTrial = { frequencyGHz: 1 };
 
@@ -73,11 +87,17 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const [draftLink, setDraftLink] = useState<NamedLink>();
   const [opticalTarget, setOpticalTarget] = useState<EndpointRef>();
   const [dcScope, setDcScope] = useState<InstancePath>();
-  const [leftTab, setLeftTab] = useState<'structure' | 'library' | undefined>(() =>
+  const [leftTab, setLeftTab] = useState<SideTab | undefined>(() =>
     window.matchMedia('(max-width: 48rem)').matches ? undefined : 'structure');
   const [propertiesOpen, setPropertiesOpen] = useState(() => !window.matchMedia('(max-width: 48rem)').matches);
   const [expandedHierarchy, setExpandedHierarchy] = useState<ReadonlySet<string>>(new Set(['[]']));
   const [expandedCanvas, setExpandedCanvas] = useState<ReadonlySet<string>>(new Set());
+  const [presentation, setPresentation] = useState<Presentation>();
+  const [restoredView, setRestoredView] = useState<{ scope: string; view: CanvasView }>();
+  const currentScope = hierarchyKey(selection.modulePath);
+  useEffect(() => {
+    if (restoredView && restoredView.scope !== currentScope) setRestoredView(undefined);
+  }, [currentScope, restoredView]);
   const [linkInputs, setLinkInputs] = useState<ReadonlyMap<string, LinkTrial>>(new Map());
   const [localOptical, setLocalOptical] = useState<LocalOpticalSettings>({ sources: [] });
   const activeOccurrence = store.resolveInstance(selection.modulePath);
@@ -158,6 +178,29 @@ export function Workbench({ store, loadExample, newProject }: Props) {
       return next.size === current.size ? current : next;
     });
   }, [selection.modulePath, selection.instancePath, selection.instancePaths]);
+
+  function toggleFullPage(view: CanvasView) {
+    if (!presentation) {
+      setRestoredView(undefined);
+      setPresentation({
+        view, scope: selection.modulePath, selected: selectedPaths, leftTab, propertiesOpen, dock,
+        collapsed, enlarged, expandedCanvas, expandedHierarchy,
+      });
+      return;
+    }
+
+    setLeftTab(presentation.leftTab);
+    setPropertiesOpen(presentation.propertiesOpen);
+    setDock(presentation.dock);
+    setCollapsed(presentation.collapsed);
+    setEnlarged(presentation.enlarged);
+    setExpandedCanvas(presentation.expandedCanvas);
+    setExpandedHierarchy(presentation.expandedHierarchy);
+    store.selectModule(presentation.scope);
+    store.selectInstances(presentation.selected);
+    setRestoredView({ scope: hierarchyKey(presentation.scope), view: presentation.view });
+    setPresentation(undefined);
+  }
 
   function toggleBranch(path: InstancePath) {
     setExpandedHierarchy(current => {
@@ -331,6 +374,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
       importAttempt.current++;
       topologyLocation.current = undefined;
       setProjectSession(session => session + 1);
+      setPresentation(undefined);
+      setRestoredView(undefined);
       setPortTarget(undefined);
       setNewPort(undefined);
       setFocusMoved(undefined);
@@ -514,7 +559,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   }
 
   return (
-    <div className="v1-workbench">
+    <div className="v1-workbench" data-full-page={!!presentation}>
       <header className="toolbar">
         <div className="brand">persona <span>V1</span></div>
         <span className="divider" />
@@ -593,6 +638,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
                 onPortBudget={selectBudgetPort} onDcBudget={showDc} onAddPort={setPortTarget} newPort={newPort}
                 onSelectObject={selectObject} onSelectObjects={selectObjects}
                 copyModule={copySelectedModule} pasteModule={pasteSelectedModule} copyNotice={copyNotice}
+                fullPage={!!presentation} toggleFullPage={toggleFullPage}
+                restoreView={restoredView?.scope === currentScope ? restoredView.view : undefined}
                 focusMoved={focusMoved?.centerCanvas ? focusMoved.path : undefined}
                 moveAcrossLevels={(base, plan, layout) => moveAcrossLevels(base, plan, layout, false)} requestMoveUp={requestMoveUp}
                 onAddInside={path => { enterModule(path); setLeftTab('library'); }} />}
