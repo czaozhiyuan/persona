@@ -9,6 +9,8 @@ import { createOpticalBudgetForGraph } from '../../engine/v1/optical-budget';
 import type { LinkTrial, NamedLink } from '../../model/v1/topology';
 import { signalPortKey } from '../../engine/v1/signal-graph';
 import type { EndpointRef, InstancePath, PortDefinition, Project } from '../../model/v1/types';
+import { planInstanceMove } from '../../state/v1/reparent-instance';
+import { moveTopologyNode } from '../../state/v1/topology-edits';
 import type { ProjectStore } from '../../state/v1/project-store';
 import { parseProjectJson, serializeProjectJson } from '../../storage/v1/project-json';
 import type { BudgetHighlight } from '../../editors/topology/v1/path-highlight';
@@ -23,7 +25,7 @@ import { createLinkOptions } from './links/link-options';
 import { ProfilePanel } from './properties/profile-panel';
 import { addDefinitionPort } from '../../state/v1/module-ports';
 import { AddPortDialog } from './properties/add-port-dialog';
-import { structureScope } from './structure-scope';
+import { structureLocations, structureScope } from './structure-scope';
 import { PropertiesPanel } from './properties/properties-panel';
 import { returnToTopology } from './view-navigation';
 import type { TopologyLocation } from './view-navigation';
@@ -54,6 +56,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const [projectSession, setProjectSession] = useState(0);
   const [portTarget, setPortTarget] = useState<InstancePath>();
   const [newPort, setNewPort] = useState<EndpointRef>();
+  const [focusMoved, setFocusMoved] = useState<InstancePath>();
+  const [moveUp, setMoveUp] = useState<{ base: Project; plan: ReturnType<typeof planInstanceMove>; destination: string; error?: string }>();
   const [page, setPage] = useState<Page>('canvas');
   const [savedProject, setSavedProject] = useState(project);
   const modified = project !== savedProject;
@@ -203,6 +207,23 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     setExpandedHierarchy(remapExpansion);
     if (!inHierarchy(selection.modulePath, instancePath)) store.selectModule(instancePath.slice(0, -1));
     selectObjects([instancePath]);
+    setFocusMoved(instancePath);
+  }
+
+  function moveAcrossLevels(base: Project, plan: ApprovedMove, position?: { x: number; y: number }) {
+    if (store.getSnapshot().project !== base) return '工程已变化，请重新拖动或选择对象。';
+    const result = store.commit(() => position ? moveTopologyNode(plan.project, plan.instancePath, position) : plan.project);
+    if (!result.ok) return result.message;
+    revealReparented(plan);
+    store.setView('topology');
+    openPage('canvas');
+  }
+
+  function requestMoveUp(source: InstancePath) {
+    const destination = source.slice(0, -2);
+    const owner = store.resolveInstance(destination);
+    const plan = planInstanceMove(project, source, destination);
+    setMoveUp({ base: project, plan, destination: owner?.instance?.name ?? owner?.definition.name ?? '上一级模块' });
   }
 
   function enterModule(path: InstancePath) {
@@ -225,6 +246,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
       setProjectSession(session => session + 1);
       setPortTarget(undefined);
       setNewPort(undefined);
+      setFocusMoved(undefined);
+      setMoveUp(undefined);
       setLinkInputs(new Map());
       setLocalOptical({ sources: [] });
       setExpandedHierarchy(new Set(['[]']));
@@ -463,7 +486,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
               onClick={() => setLeftTab(current => current === 'library' ? undefined : 'library')}>器件库</button>
           </div>
           <div id="workbench-structure" className="v1-side-scroll" hidden={leftTab !== 'structure'}>
-            <HierarchyTree instances={linkOptions.graph.instances} modulePath={selection.modulePath}
+            <HierarchyTree key={projectSession} project={project} focusMoved={focusMoved} move={moveAcrossLevels}
+              instances={linkOptions.graph.instances} modulePath={selection.modulePath}
               selected={selectedPaths} expanded={expandedHierarchy} toggle={toggleBranch} select={selectTreeObject}
               enter={enterModule} navigatePort={navigatePort} />
           </div>
@@ -479,7 +503,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
                 store={store} state={state} module={active} pathResult={pathResult} graph={linkOptions.graph} rename={renameSelection}
                 expanded={expandedCanvas} setExpanded={setExpandedCanvas} budgetHighlight={budgetHighlight}
                 onPortBudget={selectBudgetPort} onDcBudget={showDc} onAddPort={setPortTarget} newPort={newPort}
-                onSelectObject={selectObject} onSelectObjects={selectObjects} onReparented={revealReparented}
+                onSelectObject={selectObject} onSelectObjects={selectObjects}
+                focusMoved={focusMoved} moveAcrossLevels={moveAcrossLevels} requestMoveUp={requestMoveUp}
                 onAddInside={path => { enterModule(path); setLeftTab('library'); }} />}
           </div>
           <div className="v1-canvas-page v1-layout-scroll" inert={page !== 'canvas' || selection.view !== 'physical'}
@@ -576,10 +601,28 @@ export function Workbench({ store, loadExample, newProject }: Props) {
           <div id="workbench-properties" className="v1-side-scroll" hidden={!propertiesOpen}>
             {selection.instancePaths && <p className="panel" role="status">已选中 {selection.instancePaths.length} 个对象。选中单个对象可编辑属性。</p>}
             {properties && <PropertiesPanel key={JSON.stringify([projectSession, properties.instancePath])}
-              store={store} occurrence={properties} occurrences={linkOptions.graph.instances} jumpToParameter={jumpToParameter} onAddPort={setPortTarget} />}
+              store={store} occurrence={properties} occurrences={linkOptions.graph.instances} jumpToParameter={jumpToParameter} onAddPort={setPortTarget}
+              onMoveUp={selection.view === 'topology' && selected && selected.instancePath.length > 1 ? requestMoveUp : undefined} />}
           </div>
         </aside>
       </div>
+      {moveUp && <dialog className="v1-topology-dialog" aria-labelledby="move-up-title"
+        ref={dialog => { if (dialog && !dialog.open) dialog.showModal(); }} onCancel={() => setMoveUp(undefined)}>
+        <h3 id="move-up-title">移到上一级：{moveUp.destination}</h3>
+        {moveUp.plan.ok && moveUp.plan.affected.length > 1 && <p>共享结构影响范围：{
+          structureLocations(linkOptions.graph.instances, moveUp.plan.affected.map(item => item.from)).join('、')
+        }</p>}
+        {!moveUp.plan.ok && <p className="error" role="alert">{moveUp.plan.message}</p>}
+        {moveUp.error && <p className="error" role="alert">{moveUp.error}</p>}
+        <div className="actions">
+          {moveUp.plan.ok && <button type="button" className="primary" onClick={() => {
+            if (!moveUp.plan.ok) return;
+            const error = moveAcrossLevels(moveUp.base, moveUp.plan);
+            setMoveUp(error ? { ...moveUp, error } : undefined);
+          }}>确认移动</button>}
+          <button type="button" onClick={() => setMoveUp(undefined)}>取消</button>
+        </div>
+      </dialog>}
       {targetPortOwner && <AddPortDialog name={targetPortOwner.instance?.name ?? targetPortOwner.definition.name}
         locations={structureScope(linkOptions.graph.instances, targetPortOwner.definition.id)}
         add={addPort} close={() => setPortTarget(undefined)} />}

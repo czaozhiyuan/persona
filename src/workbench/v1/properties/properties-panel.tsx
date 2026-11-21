@@ -25,9 +25,10 @@ function readDefault(data: FormData, parameter: ParameterDefinition): ParameterD
     range: min === undefined && max === undefined ? undefined : { min, max } };
 }
 
-export function PropertiesPanel({ store, occurrence, occurrences, jumpToParameter, onAddPort }: {
+export function PropertiesPanel({ store, occurrence, occurrences, jumpToParameter, onAddPort, onMoveUp }: {
   store: ProjectStore; occurrence: ResolvedInstance; occurrences: readonly ResolvedInstance[];
   onAddPort: (path: InstancePath) => void;
+  onMoveUp?: (path: InstancePath) => void;
   jumpToParameter: (path: InstancePath, parameterId: string) => void;
 }) {
   const { definition, instance, instancePath, parameters, settings } = occurrence;
@@ -80,6 +81,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, jumpToParamete
 
   return <section className="panel v1-properties" aria-labelledby="v1-properties-heading">
     <h2 id="v1-properties-heading">对象属性 · {instance?.name ?? definition.name}</h2>
+    {onMoveUp && <button type="button" onClick={() => onMoveUp(instancePath)}>移到上一级</button>}
     {error && <p className="error" role="alert">{error}</p>}
     {!instance && <form key={definition.name} onSubmit={event => {
       event.preventDefault();

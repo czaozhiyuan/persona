@@ -7,12 +7,15 @@ function occurrenceName(path: InstancePath, names: ReadonlyMap<string, string>):
 }
 
 export function structureScope(instances: readonly ResolvedInstance[], definitionId: string): readonly string[] {
-  const occurrences = instances.filter(item => item.definition.id === definitionId);
-  if (occurrences.length < 2) return [];
+  const paths = instances.filter(item => item.definition.id === definitionId).map(item => item.instancePath);
+  return paths.length < 2 ? [] : structureLocations(instances, paths);
+}
+
+export function structureLocations(instances: readonly ResolvedInstance[], paths: readonly InstancePath[]): readonly string[] {
   const names = new Map(instances.map(item => [JSON.stringify(item.instancePath), item.instance?.name ?? item.definition.name]));
-  const labels = occurrences.map(item => occurrenceName(item.instancePath, names));
+  const labels = paths.map(path => occurrenceName(path, names));
   const counts = new Map<string, number>();
   for (const label of labels) counts.set(label, (counts.get(label) ?? 0) + 1);
-  return occurrences.map((item, index) => counts.get(labels[index]) === 1 ? labels[index]
-    : `${labels[index]} (${item.instancePath.join(' / ')})`);
+  return paths.map((path, index) => counts.get(labels[index]) === 1 ? labels[index]
+    : `${labels[index]} (${path.join(' / ')})`);
 }
