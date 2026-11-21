@@ -9,6 +9,7 @@ import { editInstanceSettings } from '../../../state/v1/instance-settings';
 import { instantiateModule } from '../../../state/v1/instantiate-module';
 import { structureScope } from '../structure-scope';
 import { editModule } from '../../../state/v1/topology-edits';
+import { AutosaveForm } from './autosave-form';
 import { PortFields, TransferFields } from './device-fields';
 import { choice, formatValue, numberField, ParameterField, readEmpirical, readParameter, textField } from './value-fields';
 
@@ -48,7 +49,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, jumpToParamete
   }
 
   function changeDefinition(read: () => Definition) {
-    commit(draft => {
+    return commit(draft => {
       const next = read();
       return next.kind === 'module' ? editModule(draft, next.id, () => next)
         : { ...draft, componentDefinitions: draft.componentDefinitions.map(item => item.id === next.id ? next : item) };
@@ -56,7 +57,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, jumpToParamete
   }
 
   function changeInstance(change: (current: InstanceSettings) => InstanceSettings) {
-    if (instance) commit(draft => editInstanceSettings(draft, instancePath, change));
+    if (instance) return commit(draft => editInstanceSettings(draft, instancePath, change));
   }
 
   function saveName(input: HTMLInputElement) {
@@ -114,7 +115,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, jumpToParamete
     <h2 id="v1-properties-heading">对象属性 · {name}</h2>
     {onMoveUp && <button type="button" onClick={() => onMoveUp(instancePath)}>移到上一级</button>}
     {error && <p className="error" role="alert">{error}</p>}
-    <p className="v1-property-effective">名称按 Enter 或离开输入框后自动保存。</p>
+    <p className="v1-property-effective">名称、端口和参数自动保存。文本和数值按 Enter 或离开输入框时应用，多行文本离开输入框时应用。</p>
     {!instance && nameField}
     <div className="v1-inspector-fields">
       {instance && <div className="v1-common-properties">
@@ -146,26 +147,29 @@ export function PropertiesPanel({ store, occurrence, occurrences, jumpToParamete
               <p>由上级「{controlling.name}」的「{controlling.parameterName}」设置。</p>
               <button type="button" onClick={() => jumpToParameter(controlling.path, controlling.id)}>转到来源参数</button>
             </div>}
-            {parameter.overridable && !controlling && <form key={JSON.stringify([parameter, current])} onSubmit={event => {
-              event.preventDefault();
-              const data = new FormData(event.currentTarget);
-              if (store.resolveInstance(instancePath)?.parameters.get(parameter.id)?.source.kind === 'mapped') return;
-              changeInstance(item => {
+            {parameter.overridable && !controlling && <AutosaveForm version={JSON.stringify([parameter, current])} save={data => {
+              const owner = store.resolveInstance(instancePath);
+              if (owner?.parameters.get(parameter.id)?.source.kind === 'mapped') return;
+              try {
                 const value = readParameter(data, 'value', parameter);
-                const overrides = { ...item.parameterOverrides };
-                delete overrides[parameter.id];
-                const next = value === undefined ? overrides : { ...overrides, [parameter.id]: value };
-                return { ...item, parameterOverrides: Object.keys(next).length ? next : undefined };
-              });
+                if (JSON.stringify(value) === JSON.stringify(current)) return;
+                if (changeInstance(item => {
+                  const overrides = { ...item.parameterOverrides };
+                  delete overrides[parameter.id];
+                  const next = value === undefined ? overrides : { ...overrides, [parameter.id]: value };
+                  return { ...item, parameterOverrides: Object.keys(next).length ? next : undefined };
+                })) return JSON.stringify([parameter, value]);
+              } catch (error) {
+                setError((error as Error).message);
+              }
             }}>
-              <ParameterField parameter={parameter} value={current} label="当前实例值（留空恢复默认）" />
-              <button type="submit">保存覆盖</button>
-              {current !== undefined && <button type="button" onClick={() => changeInstance(item => {
+              <ParameterField parameter={parameter} value={current} label="当前实例值（留空恢复默认）" autosave />
+              {current !== undefined && <button type="button" data-skip-autosave onClick={() => changeInstance(item => {
                 const overrides = { ...item.parameterOverrides };
                 delete overrides[parameter.id];
                 return { ...item, parameterOverrides: Object.keys(overrides).length ? overrides : undefined };
               })}>恢复继承</button>}
-            </form>}
+            </AutosaveForm>}
           </details>;
         })}
       </div>}
@@ -207,9 +211,9 @@ export function PropertiesPanel({ store, occurrence, occurrences, jumpToParamete
             {portTypeLabels[port.type]} · {port.direction === 'in' ? '输入' : '输出'}
           </span></summary>
           <p className="v1-property-effective">端口属于共享结构。{sharedLocations.length > 0 && ` 影响 ${sharedLocations.join('、')}。`} 端口 ID：{port.id}</p>
-          <PortFields key={JSON.stringify(port)} port={port} remove={() => { setError(''); setDeletion(port.id); }}
-            save={read => changeDefinition(() => ({ ...definition,
-              ports: definition.ports.map(item => item.id === port.id ? read() : item),
+          <PortFields port={port} remove={() => { setError(''); setDeletion(port.id); }}
+            save={next => changeDefinition(() => ({ ...definition,
+              ports: definition.ports.map(item => item.id === port.id ? next : item),
             }))} />
         </details>)}
       </section>
@@ -227,21 +231,25 @@ export function PropertiesPanel({ store, occurrence, occurrences, jumpToParamete
         </form>}
         {definition.parameters?.map(parameter => <details key={parameter.id} data-definition-parameter={parameter.id}>
           <summary>参数定义 · {parameter.name}</summary>
-          <form key={JSON.stringify(parameter)} onSubmit={event => {
-            event.preventDefault();
-            const data = new FormData(event.currentTarget);
-            changeDefinition(() => ({ ...definition,
-              parameters: definition.parameters?.map(item => item.id === parameter.id ? readDefault(data, parameter) : item),
-            }));
+          <AutosaveForm version={JSON.stringify(parameter)} save={data => {
+            try {
+              const next = readDefault(data, parameter);
+              const version = JSON.stringify(next);
+              if (version === JSON.stringify(parameter)) return;
+              if (changeDefinition(() => ({ ...definition,
+                parameters: definition.parameters?.map(item => item.id === parameter.id ? next : item),
+              }))) return version;
+            } catch (error) {
+              setError((error as Error).message);
+            }
           }}>
             <label>参数名称<input name="name" defaultValue={parameter.name} required /></label>
-            <ParameterField parameter={parameter} value={parameter.defaultValue} label="默认值" />
+            <ParameterField parameter={parameter} value={parameter.defaultValue} label="默认值" autosave />
             {parameter.kind === 'numeric' && <div className="v1-property-pair">
               <label>允许下限<input type="number" step="any" name="min" defaultValue={parameter.range?.min} /></label>
               <label>允许上限<input type="number" step="any" name="max" defaultValue={parameter.range?.max} /></label>
             </div>}
-            <button type="submit">保存参数定义</button>
-          </form>
+          </AutosaveForm>
         </details>)}
         {definition.kind === 'component' && definition.transfers?.map((transfer, index) => <details key={index}>
           <summary>传输 · {transferLabels[transfer.kind]} · {portDisplayName(definition.ports.find(port => port.id === transfer.fromPortId)!, true)} → {portDisplayName(definition.ports.find(port => port.id === transfer.toPortId)!, true)}</summary>

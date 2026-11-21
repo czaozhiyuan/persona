@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { flushSync } from 'react-dom';
 import { resolveOpticalChannel } from '../../../model/v1/channels';
 import type { OpticalChannelId } from '../../../model/v1/channels';
 import type { EmpiricalValue, ParameterDefinition, ParameterValue } from '../../../model/v1/parameters';
@@ -79,11 +80,11 @@ export function readParameter(data: FormData, name: string, parameter: Parameter
   return parameter.kind === 'enum' ? choice(data, name) || undefined : readEmpirical(data, name, parameter.valueKind);
 }
 
-export function EmpiricalField({ kind, name, label, value, required }: {
-  kind: ValueKind; name: string; label: string; value?: EmpiricalValue; required?: boolean;
+export function EmpiricalField({ kind, name, label, value, required, autosave }: {
+  kind: ValueKind; name: string; label: string; value?: EmpiricalValue; required?: boolean; autosave?: boolean;
 }) {
   if (kind === 'channelTable') return <ChannelTableField name={name} label={label}
-    values={value?.kind === 'channelTable' ? value.values : undefined} required={required} />;
+    values={value?.kind === 'channelTable' ? value.values : undefined} required={required} autosave={autosave} />;
   const initial = value?.kind === kind ? formatValue(value) : '';
   return <label>{label}
     {kind === 'fixed' ? <input name={name} type="number" step="any" defaultValue={initial} required={required} />
@@ -92,8 +93,8 @@ export function EmpiricalField({ kind, name, label, value, required }: {
   </label>;
 }
 
-function ChannelTableField({ name, label, values, required }: {
-  name: string; label: string; values?: Partial<Record<OpticalChannelId, number>>; required?: boolean;
+function ChannelTableField({ name, label, values, required, autosave }: {
+  name: string; label: string; values?: Partial<Record<OpticalChannelId, number>>; required?: boolean; autosave?: boolean;
 }) {
   const [rows, setRows] = useState<{ key: string; channel?: OpticalChannelId; amount?: number }[]>(() => {
     const entries = Object.entries(values ?? {}).map(([channel, amount], index) => ({
@@ -107,14 +108,23 @@ function ChannelTableField({ name, label, values, required }: {
       <ChannelField name={name + 'Channel'} label="通道" value={row.channel} required />
       <div>
         <label>数值<input name={name + 'Amount'} type="number" step="any" defaultValue={row.amount} required /></label>
-        {(!required || rows.length > 1) && <button type="button" onClick={() => setRows(rows.filter(item => item.key !== row.key))}>移除此行</button>}
+        {(!required || rows.length > 1) && <button type="button" onClick={event => {
+          const remove = () => setRows(previous => previous.filter(item => item.key !== row.key));
+          if (autosave) {
+            const form = event.currentTarget.form;
+            flushSync(remove);
+            form?.requestSubmit();
+          } else {
+            remove();
+          }
+        }}>移除此行</button>}
       </div>
     </div>)}
     <button type="button" onClick={() => setRows([...rows, { key: crypto.randomUUID(), channel: undefined, amount: undefined }])}>添加通道行</button>
   </fieldset>;
 }
 
-export function ParameterField({ parameter, value, label }: { parameter: ParameterDefinition; value?: ParameterValue; label: string }) {
+export function ParameterField({ parameter, value, label, autosave }: { parameter: ParameterDefinition; value?: ParameterValue; label: string; autosave?: boolean }) {
   if (parameter.kind === 'enum') {
     return <label>{label}<select name="value" defaultValue={typeof value === 'string' ? value : ''}>
       <option value="">未设置</option>
@@ -122,7 +132,7 @@ export function ParameterField({ parameter, value, label }: { parameter: Paramet
     </select></label>;
   }
   return <EmpiricalField name="value" kind={parameter.valueKind} label={`${label} (${parameter.unit})`}
-    value={typeof value === 'string' ? undefined : value} />;
+    value={typeof value === 'string' ? undefined : value} autosave={autosave} />;
 }
 
 type Quantity<K extends ValueKind> = Extract<EmpiricalValue, { kind: K }> | { kind: 'parameter'; parameterId: string };
