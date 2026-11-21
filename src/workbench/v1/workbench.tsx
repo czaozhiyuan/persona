@@ -57,7 +57,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const [projectSession, setProjectSession] = useState(0);
   const [portTarget, setPortTarget] = useState<InstancePath>();
   const [newPort, setNewPort] = useState<EndpointRef>();
-  const [focusMoved, setFocusMoved] = useState<InstancePath>();
+  const [focusMoved, setFocusMoved] = useState<{ path: InstancePath; centerCanvas: boolean }>();
   const [dissolve, setDissolve] = useState<{ base: Project; plan: ReturnType<typeof planDissolveModule>; destination: string; error?: string }>();
   const [moveUp, setMoveUp] = useState<{ base: Project; plan: ReturnType<typeof planInstanceMove>; destination: string; error?: string }>();
   const [page, setPage] = useState<Page>('canvas');
@@ -194,7 +194,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     openPage('canvas');
   }
 
-  function revealStructureChange(instancePath: InstancePath, remap: (path: InstancePath) => InstancePath | undefined) {
+  function revealStructureChange(instancePath: InstancePath, remap: (path: InstancePath) => InstancePath | undefined, centerCanvas = true) {
     function remapExpansion(previous: ReadonlySet<string>) {
       const next = new Set<string>();
       for (const key of previous) {
@@ -209,17 +209,17 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     setExpandedHierarchy(remapExpansion);
     if (!inHierarchy(store.getSnapshot().selection.modulePath, instancePath)) store.selectModule(instancePath.slice(0, -1));
     selectObjects([instancePath]);
-    setFocusMoved(instancePath);
+    setFocusMoved({ path: instancePath, centerCanvas });
   }
 
-  function moveAcrossLevels(base: Project, plan: ApprovedMove, position?: { x: number; y: number }) {
+  function moveAcrossLevels(base: Project, plan: ApprovedMove, position?: { x: number; y: number }, centerCanvas = true) {
     if (store.getSnapshot().project !== base) return '工程已变化，请重新拖动或选择对象。';
     const result = store.commit(() => position ? moveTopologyNode(plan.project, plan.instancePath, position) : plan.project);
     if (!result.ok) return result.message;
     revealStructureChange(plan.instancePath, path => {
       const moved = plan.affected.find(item => inHierarchy(item.from, path));
       return moved ? [...moved.to, ...path.slice(moved.from.length)] : path;
-    });
+    }, centerCanvas);
     store.setView('topology');
     openPage('canvas');
   }
@@ -519,7 +519,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
               onClick={() => setLeftTab(current => current === 'library' ? undefined : 'library')}>器件库</button>
           </div>
           <div id="workbench-structure" className="v1-side-scroll" hidden={leftTab !== 'structure'}>
-            <HierarchyTree key={projectSession} project={project} focusMoved={focusMoved} move={moveAcrossLevels}
+            <HierarchyTree key={projectSession} project={project} focusMoved={focusMoved?.path} move={moveAcrossLevels}
               instances={linkOptions.graph.instances} modulePath={selection.modulePath}
               selected={selectedPaths} expanded={expandedHierarchy} toggle={toggleBranch} select={selectTreeObject}
               enter={enterModule} navigatePort={navigatePort} />
@@ -537,7 +537,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
                 expanded={expandedCanvas} setExpanded={setExpandedCanvas} budgetHighlight={budgetHighlight}
                 onPortBudget={selectBudgetPort} onDcBudget={showDc} onAddPort={setPortTarget} newPort={newPort}
                 onSelectObject={selectObject} onSelectObjects={selectObjects}
-                focusMoved={focusMoved} moveAcrossLevels={moveAcrossLevels} requestMoveUp={requestMoveUp}
+                focusMoved={focusMoved?.centerCanvas ? focusMoved.path : undefined}
+                moveAcrossLevels={(base, plan, position) => moveAcrossLevels(base, plan, position, false)} requestMoveUp={requestMoveUp}
                 onAddInside={path => { enterModule(path); setLeftTab('library'); }} />}
           </div>
           <div className="v1-canvas-page v1-layout-scroll" inert={page !== 'canvas' || selection.view !== 'physical'}
