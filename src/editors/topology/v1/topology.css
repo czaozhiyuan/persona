@@ -111,6 +111,7 @@
   display: flex; align-items: center; gap: .45rem;
   border-top: 1px solid #cbdad5; background: #f9fbfa;
 }
+.v1-group-count { color: #42605f; font-size: .8rem; }
 .v1-topology-tools summary {
   width: fit-content; min-height: 1.9rem; padding: .25rem .65rem;
   border: 1px solid #c9d9d3; border-radius: .35rem; background: #fff; font-size: .82rem; cursor: pointer;

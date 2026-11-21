@@ -1,6 +1,7 @@
 import type { Rect, XYPosition } from '@xyflow/react';
 import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
 import type { InstancePath, ModuleDefinition, Project } from '../../../model/v1/types';
+import { defaultTopologyPosition } from '../../../state/v1/topology-position';
 import { blockPortRows } from './block-ports';
 import { fitModuleFrame, keepNodeInside, minimumFrame, moduleExtent } from './frame-geometry';
 import { hierarchyChildren, hierarchyKey } from './hierarchy-view';
@@ -48,7 +49,7 @@ export function projectTopology(project: Project, instances: readonly ResolvedIn
       const childKey = hierarchyKey(child.instancePath);
       const placement = positions.get(childKey);
       const preferred = placement ? { x: placement.x, y: placement.y }
-        : { x: 260 * (index % 3) + (ports.length ? 260 : 25), y: 240 * Math.floor(index / 3) + 25 };
+        : defaultTopologyPosition(index, ports.length);
       const size = measured.get(childKey) ?? { width: 202, height: 48 + blockPortRows(child.definition.ports) * 24 };
       return { item: child, key: childKey, bounds: { ...preferred, ...size }, preferred, position: preferred, offset: { x: 0, y: 0 } };
     });

@@ -8,6 +8,7 @@ import { insertLibraryItem } from '../../../library/v1/insert-library-item';
 import type { LibraryItem } from '../../../library/v1/insert-library-item';
 import { removeTopologyInstance, removeWiring } from '../../../state/v1/remove-topology-object';
 import type { LocalEndpointRef } from '../../../model/v1/topology';
+import { groupModule } from '../../../state/v1/group-module';
 import { connectBoundaryPort, exposeModulePort, renamePort } from '../../../state/v1/module-ports';
 import type { WiringSelection } from '../../../state/v1/remove-topology-object';
 import type { EndpointRef, InstancePath, ModuleDefinition, PortDirection, PortType, Project } from '../../../model/v1/types';
@@ -35,6 +36,9 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
   const scope = selection.modulePath;
   const moduleName = store.resolveInstance(scope)?.instance?.name ?? module.name;
   const [message, setMessage] = useState('');
+  const [groupMode, setGroupMode] = useState(false);
+  const [groupPaths, setGroupPaths] = useState<readonly InstancePath[]>([]);
+  const [groupDialog, setGroupDialog] = useState(false);
   const maxDepth = displayDepth(graph.instances, scope);
   const visibleDepth = displayDepth(graph.instances, scope, expanded);
   const [preview, setPreview] = useState<{ definitionId: string; portId: string }>();
@@ -59,6 +63,25 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
     const result = store.commit(change);
     setMessage(result.ok ? '' : result.message);
     return result.ok;
+  }
+
+  function changeGroupSelection(paths: readonly InstancePath[], active = true) {
+    setGroupMode(active);
+    setGroupPaths(paths);
+    store.selectInstance(undefined);
+    setMessage('');
+  }
+
+  const groupScope = groupPaths[0]?.slice(0, -1);
+  const groupOwner = groupScope && store.resolveInstance(groupScope);
+  const groupLocations = groupOwner ? structureScope(graph.instances, groupOwner.definition.id) : [];
+  function openGroupDialog() {
+    if (!groupScope || groupPaths.some(path => hierarchyKey(path.slice(0, -1)) !== hierarchyKey(groupScope))) {
+      setMessage('请选择同一直接父模块下的对象。');
+      return;
+    }
+    setMessage('');
+    setGroupDialog(true);
   }
 
   function add(item: LibraryItem, position?: { x: number; y: number }) {
@@ -173,6 +196,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
     <div className="v1-hierarchy-workspace">
       <TopologyCanvas project={project} instances={graph.instances} modulePath={scope} selectedInstance={selection.instancePath}
         pathResult={pathResult} budgetHighlight={budgetHighlight} expanded={expanded} toggleModule={toggleModule}
+        groupMode={groupMode} groupPaths={groupPaths} changeGroupSelection={changeGroupSelection}
         selectInstance={store.selectInstance} enterModule={store.selectModule}
         openPort={(path, portId) => { setMessage(''); setPortAction({ path, portId }); }}
         add={add} deleteSelection={deleteSelection} rename={rename} report={setMessage} undo={store.undo} redo={store.redo}
@@ -207,9 +231,17 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
         <button type="button" onClick={() => expandTo(maxDepth + 1)}>展开全部</button>
         <output htmlFor="topology-depth">{visibleDepth} / {maxDepth}</output>
       </div>
-      {message && !preview && !portAction && !bindingPreview && <p className="v1-topology-message error" role="alert">{message}</p>}
+      {message && !preview && !portAction && !bindingPreview && !groupDialog && <p className="v1-topology-message error" role="alert">{message}</p>}
     </div>
     <div className="v1-topology-tools">
+      <button type="button" aria-pressed={groupMode} title="在空白处拖动框选，或逐个点击对象"
+        onClick={() => changeGroupSelection(groupMode || !selection.instancePath ? [] : [selection.instancePath], !groupMode)}>
+        框选 / 多选
+      </button>
+      {groupMode && <>
+        <button type="button" disabled={groupPaths.length < 2} onClick={openGroupDialog}>组成模块</button>
+        <span className="v1-group-count" role="status">已选 {groupPaths.length} 个</span>
+      </>}
       {dcScope && <button type="button" className="v1-dc-entry" onClick={() => onDcBudget(dcScope)}>查看供电/功耗</button>}
       {sharedLocations.length > 0 && <details data-workbench-popup>
         <summary>共享结构 · {sharedLocations.length} 处</summary>
@@ -301,6 +333,29 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
         </div>
       </details>
     </div>
+    {groupDialog && groupScope && <dialog ref={dialog => { if (dialog && !dialog.open) dialog.showModal(); }}
+      className="v1-topology-dialog" aria-labelledby="group-module-title" onCancel={() => { setGroupDialog(false); setMessage(''); }}>
+      <h3 id="group-module-title">组成模块</h3>
+      <p>将在「{groupOwner?.instance?.name ?? groupOwner?.definition.name}」中移动 {groupPaths.length} 个对象，并生成必要的对外端口。</p>
+      {groupLocations.length > 0 && <p>共享结构会同时应用到 {groupLocations.join('、')}。</p>}
+      <form onSubmit={event => {
+        event.preventDefault();
+        const name = field(new FormData(event.currentTarget), 'name');
+        const id = crypto.randomUUID();
+        if (commit(draft => groupModule(draft, groupPaths, name, id, crypto.randomUUID()))) {
+          changeGroupSelection([], false);
+          setGroupDialog(false);
+          store.selectInstance([...groupScope, id]);
+        }
+      }}>
+        <label>新模块名称 <input name="name" required autoFocus /></label>
+        {message && <p className="error" role="alert">{message}</p>}
+        <div className="actions">
+          <button type="submit">创建模块</button>
+          <button type="button" onClick={() => { setGroupDialog(false); setMessage(''); }}>取消</button>
+        </div>
+      </form>
+    </dialog>}
     {portAction && renderPortActions(portAction)}
     {bindingPreview && <PortBindingDialog store={store} preview={bindingPreview}
       locations={structureScope(graph.instances, bindingPreview.module.id)} close={() => setBindingPreview(undefined)} />}
