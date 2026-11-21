@@ -1,12 +1,14 @@
 import { Background, ConnectionMode, getNodesBounds, ReactFlow, ReactFlowProvider, useKeyPress, useStoreApi, useUpdateNodeInternals } from '@xyflow/react';
 import type { Connection as FlowConnection, CoordinateExtent, Node, NodeProps, OnConnectStartParams, ReactFlowInstance, Rect, Viewport, XYPosition } from '@xyflow/react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
 import type { PathResult } from '../../../engine/v1/path-resolver';
 import { signalPortKey } from '../../../engine/v1/signal-graph';
 import { blankModuleId, builtInDefinitions, isBlankTemplate } from '../../../library/v1/built-in';
 import { libraryDragType, readLibraryItem } from '../../../library/v1/insert-library-item';
 import type { LibraryItem } from '../../../library/v1/insert-library-item';
+import { planInstanceMove } from '../../../state/v1/reparent-instance';
+import { defaultTopologyPosition } from '../../../state/v1/topology-position';
 import type { WiringSelection } from '../../../state/v1/remove-topology-object';
 import type { Connection } from '../../../model/v1/topology';
 import type { EndpointRef, InstancePath, PortDefinition, PortMapping, Project, TopologyFrame, TopologyPlacement } from '../../../model/v1/types';
@@ -22,6 +24,8 @@ import { projectPathHighlight } from './path-highlight';
 import type { BudgetHighlight } from './path-highlight';
 import { estimatedBlockSize, projectTopology } from './topology-projection';
 import type { TopologyItem } from './topology-projection';
+import { reparentDropTarget } from './reparent-drop';
+import type { ApprovedMove } from './reparent-drop';
 import { handleId, nodeId, portKey, projectWiring, scopedWiringProblem } from './topology-wiring';
 import type { WiringEdge } from './topology-wiring';
 import '@xyflow/react/dist/style.css';
@@ -46,7 +50,14 @@ type FrameNode = Node<NodeData & {
   resize?: Parameters<typeof FrameResizeHandles>[0];
 }, 'moduleFrame'>;
 type CanvasNode = DeviceNode | FrameNode;
+type DropPreview = NonNullable<ReturnType<typeof reparentDropTarget>> & {
+  plan?: ApprovedMove;
+  error?: string;
+  label: string;
+};
 type DragSession = {
+  base: Project;
+  preview?: DropPreview;
   anchor: TopologyItem;
   members: readonly TopologyItem[];
   constraint?: { bounds: Rect; extent: CoordinateExtent };
@@ -109,6 +120,8 @@ type Props = {
   toggleModule: (path: InstancePath) => void;
   openPort: (path: InstancePath, portId: string) => void;
   enterModule: (path: InstancePath) => void;
+  reparent: (base: Project, plan: ApprovedMove, position?: XYPosition) => void;
+  focusMoved?: InstancePath;
   move: (placements: readonly TopologyPlacement[], frame?: TopologyFrame) => void;
   resize: (frame: Rect, placementAdjustments: readonly TopologyPlacement[]) => void;
   connect: (scope: InstancePath, connection: Omit<Connection, 'id'>) => void;
@@ -128,7 +141,7 @@ export function TopologyCanvas(props: Props) {
 }
 
 function EditableTopologyCanvas({ project, instances, modulePath, selectedInstance, selectedPaths, pathResult, budgetHighlight, expanded,
-  toggleModule, selectObject, selectObjects, enterModule, move, resize, connect, mapPort, add, placingModule, cancelPlacement,
+  toggleModule, selectObject, selectObjects, enterModule, reparent, focusMoved, move, resize, connect, mapPort, add, placingModule, cancelPlacement,
   deleteSelection, rename, report, undo, redo, openPort, onAddPort, newPort }: Props) {
   const flowStore = useStoreApi<CanvasNode, WiringEdge>();
   const boxSelection = useRef<readonly InstancePath[] | undefined>(undefined);
@@ -142,6 +155,9 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
   const [resizePreview, setResizePreview] = useState<Rect>();
   const [measured, setMeasured] = useState<ReadonlyMap<string, { width: number; height: number }>>(new Map());
   const dragSession = useRef<DragSession | undefined>(undefined);
+  const [dropPreview, setDropPreview] = useState<DropPreview>();
+  const renderedPreview = useRef<DropPreview | undefined>(undefined);
+  useLayoutEffect(() => { renderedPreview.current = dropPreview; }, [dropPreview]);
   const [drag, setDrag] = useState<ReadonlyMap<string, XYPosition>>();
   const [selectedEdgeKey, setSelectedEdgeKey] = useState<string>();
   const canvas = useRef<HTMLDivElement>(null);
@@ -150,6 +166,14 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
   const projection = useMemo(() => projectTopology(project, instances, modulePath, expanded, measured, resizePreview),
     [project, instances, modulePath, expanded, measured, resizePreview]);
   const { nodes: items, rootKey, nodeByKey, scopes } = projection;
+  useEffect(() => {
+    if (!focusMoved) return;
+    const id = nodeId(hierarchyKey(focusMoved));
+    const frame = requestAnimationFrame(() => {
+      if (flow.current?.getNode(id)) void flow.current.fitView({ ...canvasFitOptions, nodes: [{ id }], maxZoom: 1.2 });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [focusMoved]);
   const highlights = useMemo(() => new Map([...scopes].map(([key, { path }]) =>
     [key, projectPathHighlight(pathResult, path, budgetHighlight)])), [scopes, pathResult, budgetHighlight]);
   const { ports, edges } = useMemo(() => projectWiring(projection, highlights), [projection, highlights]);
@@ -244,7 +268,8 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
         toggleModule(path);
       } : undefined,
     };
-    const placement = { id, ariaLabel: name, position: drag?.get(key) ?? node.position,
+    const className = dropPreview?.node?.key === key ? (dropPreview.error ? 'v1-drop-blocked' : 'v1-drop-allowed') : undefined;
+    const placement = { id, className, ariaLabel: name, position: drag?.get(key) ?? node.position,
       parentId: parentKey === undefined ? undefined : nodeId(parentKey), selected: selectedKeys.has(key),
       draggable: !boundary && !panWithSpace && !(mixedSelection && selectedKeys.has(key)) };
     // Keep sibling blocks accessible where an expanded branch overlaps their stored positions.
@@ -279,7 +304,8 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     const parentPath = node.data.path.slice(0, -1);
     const parent = nodeByKey.get(hierarchyKey(parentPath));
     const frame = parent?.frame;
-    dragSession.current = { anchor, members,
+    report('');
+    dragSession.current = { base: project, anchor, members,
       constraint: parent && frame ? {
         bounds: getNodesBounds(members.map(item => ({ id: item.key, position: item.bounds, measured: item.bounds, data: {} }))),
         extent: moduleExtent(frame.base, frameInsets(parent.item.definition.ports)),
@@ -298,9 +324,43 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     return { x: clamped.x - bounds.x, y: clamped.y - bounds.y };
   }
 
-  function previewDrag(node: CanvasNode) {
+  function boundsOf(item: TopologyItem): Rect | undefined {
+    const internal = flow.current?.getInternalNode(nodeId(item.key));
+    const width = internal?.measured.width, height = internal?.measured.height;
+    if (internal && width && height) return { ...internal.internals.positionAbsolute, width, height };
+  }
+
+  function pointerOnCanvas(event: MouseEvent | TouchEvent) {
+    if (!flow.current || !canvas.current) return;
+    const contact = 'clientX' in event ? event : event.touches[0] ?? event.changedTouches[0];
+    if (!contact) return;
+    const screen = { x: contact.clientX, y: contact.clientY };
+    const hit = document.elementFromPoint(screen.x, screen.y);
+    if (!hit || !canvas.current.contains(hit) || hit.closest('.v1-canvas-zoom, .react-flow__attribution')) return;
+    return flow.current.screenToFlowPosition(screen);
+  }
+
+  function targetAt(session: DragSession, point: XYPosition) {
+    return reparentDropTarget(session.anchor, items, modulePath, boundsOf, point, 6 / (flow.current?.getZoom() ?? 1));
+  }
+
+  function previewDrag(event: MouseEvent | TouchEvent, node: CanvasNode) {
     const session = dragSession.current;
     if (!session) return;
+    const point = session.members.length === 1 ? pointerOnCanvas(event) : undefined;
+    const target = point && targetAt(session, point);
+    if (!target) {
+      if (session.preview) { session.preview = undefined; setDropPreview(undefined); }
+    } else if (session.preview?.kind !== target.kind
+      || hierarchyKey(session.preview.destination) !== hierarchyKey(target.destination) || session.preview.problem !== target.problem) {
+      const checked = target.problem ? undefined : planInstanceMove(session.base, session.anchor.item.instancePath, target.destination);
+      const owner = target.node?.item ?? instances.find(item => hierarchyKey(item.instancePath) === hierarchyKey(target.destination));
+      const name = owner?.instance?.name ?? owner?.definition.name ?? '当前模块';
+      session.preview = { ...target, plan: checked?.ok ? checked : undefined,
+        error: target.problem ?? (checked?.ok === false ? checked.message : undefined),
+        label: `${target.kind === 'in' ? '移入' : '移到上一级'}：${name}` };
+      setDropPreview(session.preview);
+    }
     const { x, y } = dragDelta(session, node.position);
     setDrag(new Map(session.members.map(item => [item.key, { x: item.position.x + x, y: item.position.y + y }])));
   }
@@ -308,12 +368,41 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
   function cancelDrag() {
     dragSession.current = undefined;
     setDrag(undefined);
+    setDropPreview(undefined);
   }
 
-  function finishDrag(node: CanvasNode) {
+  function finishDrag(event: MouseEvent | TouchEvent, node: CanvasNode) {
     const session = dragSession.current;
+    const preview = renderedPreview.current;
     cancelDrag();
     if (!session) return;
+    const point = session.members.length === 1 ? pointerOnCanvas(event) : undefined;
+    if (session.members.length === 1 && !point) {
+      report('请在框图的有效区域松手。');
+      return;
+    }
+    const target = point && targetAt(session, point);
+    if (target && point) {
+      if (!preview || preview.kind !== target.kind || hierarchyKey(preview.destination) !== hierarchyKey(target.destination)) {
+        report(target.problem ?? '请等目标显示移动预览后再松手。');
+        return;
+      }
+      if (!preview.plan || target.problem) {
+        report(target.problem ?? preview.error ?? '无法移动到该模块。');
+        return;
+      }
+      const frame = target.node?.frame;
+      const bounds = target.node && boundsOf(target.node);
+      const definition = target.node?.item.definition;
+      const position = frame && bounds ? {
+        x: point.x - bounds.x + frame.display.x - session.anchor.bounds.width / 2,
+        y: point.y - bounds.y + frame.display.y - session.anchor.bounds.height / 2,
+      } : target.kind === 'up' ? {
+        x: point.x - session.anchor.bounds.width / 2, y: point.y - session.anchor.bounds.height / 2,
+      } : definition?.kind === 'module' ? defaultTopologyPosition(definition.instances.length, definition.ports.length) : undefined;
+      reparent(session.base, preview.plan, position);
+      return;
+    }
     const { x, y } = dragDelta(session, node.position);
     if (x || y) move(session.members.map(item => ({
       instancePath: item.item.instancePath, x: item.bounds.x + x, y: item.bounds.y + y,
@@ -378,9 +467,10 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
       } else if (event.key === 'Escape') {
         event.preventDefault();
         cancelBoxSelection();
+        const dragging = !!dragSession.current;
         cancelDrag();
         setSelectedEdgeKey(undefined);
-        selectObjects([]);
+        if (!dragging) selectObjects([]);
         report('');
       } else if (event.key === 'Enter' && event.target instanceof HTMLElement && event.target.matches('.react-flow__node')) {
         const node = flow.current?.getNode(event.target.dataset.id ?? '');
@@ -498,14 +588,21 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
         });
       }}
       onNodeDragStart={(_, node, moving) => startDrag(node, moving)}
-      onNodeDrag={(_, node) => previewDrag(node)}
-      onNodeDragStop={(_, node) => finishDrag(node)}>
+      onNodeDrag={previewDrag}
+      onNodeDragStop={finishDrag}>
       <Background />
       <CanvasControls canLocate={!!(selectedNode || selectedWiring)} locate={() => {
         const ids = selectedNode ? [nodeId(selectedNode.key)] : selectedWiring ? [selectedWiring.source, selectedWiring.target] : [];
         if (ids.length) void flow.current?.fitView({ ...canvasFitOptions, maxZoom: 1.2, nodes: ids.map(id => ({ id })) });
       }} />
     </ReactFlow>
+    {dropPreview && <>
+      {!dropPreview.node && <div className="v1-drop-canvas" aria-hidden="true" />}
+      <p className="v1-drop-label" role="status" data-blocked={!!dropPreview.error}>
+        {dropPreview.error ?? dropPreview.label}
+        {dropPreview.plan && dropPreview.plan.affected.length > 1 && ` · 影响 ${dropPreview.plan.affected.length} 处实例`}
+      </p>
+    </>}
     {!scopes.get(rootKey)?.members.length && <span className="v1-topology-empty">从器件库添加器件，或声明对外端口。</span>}
   </div>;
 }
