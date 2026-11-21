@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
 import type { PathResult } from '../../../engine/v1/path-resolver';
 import { signalPortKey } from '../../../engine/v1/signal-graph';
-import { blankModuleId, builtInDefinitions, isBlankTemplate } from '../../../library/v1/built-in';
+import { blankModuleId } from '../../../library/v1/built-in';
 import { libraryDragType, readLibraryItem } from '../../../library/v1/insert-library-item';
 import type { LibraryItem } from '../../../library/v1/insert-library-item';
 import { moveWiringSummary, planInstanceMoves } from '../../../state/v1/reparent-instance';
@@ -29,6 +29,7 @@ import { groupDragBounds, groupDragExtent, groupDropDelta, placeDropGroup, repar
 import type { ApprovedMove, ReparentLayout } from './reparent-drop';
 import { handleId, nodeId, portKey, projectWiring, scopedWiringProblem } from './topology-wiring';
 import type { WiringEdge } from './topology-wiring';
+import { preserveDeletionLayout } from './topology-layout-edits';
 import { SignalWire, signalColor } from './signal-wire';
 import '@xyflow/react/dist/style.css';
 
@@ -135,7 +136,8 @@ type Props = {
   placingModule: boolean;
   cancelPlacement: () => void;
   add: (item: LibraryItem, position: XYPosition) => boolean;
-  deleteSelection: (path: InstancePath, instanceId?: string, wire?: WiringSelection) => boolean;
+  deleteInstance: (path: InstancePath, preserve: (project: Project, parentId: string) => Project) => void;
+  deleteWiring: (path: InstancePath, wire: WiringSelection) => boolean;
   rename: () => void;
   copyModule: () => boolean;
   pasteModule: (placement: (ports: readonly PortDefinition[]) => XYPosition | undefined) => boolean;
@@ -150,7 +152,7 @@ export function TopologyCanvas(props: Props) {
 
 function EditableTopologyCanvas({ project, instances, modulePath, selectedInstance, selectedPaths, pathResult, budgetHighlight, expanded,
   toggleModule, selectObject, selectObjects, enterModule, reparent, focusMoved, move, resize, connect, mapPort, add, placingModule, cancelPlacement,
-  deleteSelection, rename, copyModule, pasteModule, report, undo, redo, openPort, onAddPort, newPort }: Props) {
+  deleteInstance, deleteWiring, rename, copyModule, pasteModule, report, undo, redo, openPort, onAddPort, newPort }: Props) {
   const flowStore = useStoreApi<CanvasNode, WiringEdge>();
   const boxSelection = useRef<readonly InstancePath[] | undefined>(undefined);
   const panWithSpace = useKeyPress('Space', { actInsideInputWithModifier: false });
@@ -481,31 +483,11 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     flowStore.setState({ userSelectionActive: false, userSelectionRect: null, nodesSelectionActive: false });
   }
 
-  function placementFits(position: XYPosition, ports: readonly PortDefinition[]) {
-    const scope = nodeByKey.get(rootKey);
-    if (!scope?.frame?.saved) return true;
-    const extent = moduleExtent(scope.frame.base, frameInsets(scope.item.definition.ports));
-    const { x, y } = keepNodeInside({ ...position, ...estimatedBlockSize(ports) }, extent);
-    return x === position.x && y === position.y;
-  }
-
   function placeAt(item: LibraryItem, screen: XYPosition) {
     if (!flow.current) return;
-    const position = flow.current.screenToFlowPosition(screen);
-    const scope = nodeByKey.get(rootKey);
-    if (scope?.frame?.saved) {
-      const saved = [...project.moduleDefinitions, ...project.componentDefinitions].find(entry => entry.id === item.id);
-      const template = item.source === 'template' ? builtInDefinitions.find(entry => entry.id === item.id) : undefined;
-      const definition = template && isBlankTemplate(item.id) ? template : saved ?? template;
-      if (!definition) return;
-      if (!placementFits(position, definition.ports)) {
-        report('此处无法完整放入当前模块，请选择框内其他位置或先调整模块边框。');
-        return;
-      }
-    }
     cancelWiring();
     setSelectedEdgeKey(undefined);
-    add(item, position);
+    add(item, flow.current.screenToFlowPosition(screen));
   }
 
   function pastePosition(ports: readonly PortDefinition[]) {
@@ -571,10 +553,10 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
         if (selectedNode && selectedNode.key !== rootKey) {
           event.preventDefault();
           const path = selectedNode.item.instancePath;
-          deleteSelection(path.slice(0, -1), path.at(-1));
+          deleteInstance(path, (next, parentId) => preserveDeletionLayout(next, parentId, projection, modulePath, expanded, measured));
         } else if (selectedWiring && selectedWiring.data) {
           event.preventDefault();
-          if (deleteSelection(selectedWiring.data.scope, undefined, selectedWiring.data)) setSelectedEdgeKey(undefined);
+          if (deleteWiring(selectedWiring.data.scope, selectedWiring.data)) setSelectedEdgeKey(undefined);
         }
       } else if (event.ctrlKey || event.metaKey) {
         const key = event.key.toLowerCase();
@@ -611,10 +593,7 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
       if (item) placeAt(item, { x: event.clientX, y: event.clientY });
     }}>
     {placingModule && !panWithSpace && <ModulePlacement
-      previewAt={screen => {
-        const instance = flow.current;
-        if (instance) return { zoom: instance.getZoom(), allowed: placementFits(instance.screenToFlowPosition(screen), []) };
-      }}
+      zoom={() => flow.current?.getZoom()}
       place={screen => placeAt({ source: 'template', id: blankModuleId, name: '新建模块' }, screen)} />}
     <ReactFlow<CanvasNode, WiringEdge> nodes={nodes} edges={edges.map(edge => ({ ...edge, selected: selectedWiring === edge }))}
       nodeTypes={nodeTypes} edgeTypes={edgeTypes} ariaLabelConfig={flowAriaLabels} fitView fitViewOptions={canvasFitOptions}
