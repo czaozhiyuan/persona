@@ -10,22 +10,26 @@ import { removeTopologyInstance, removeWiring } from '../../../state/v1/remove-t
 import type { LocalEndpointRef } from '../../../model/v1/topology';
 import { connectBoundaryPort, exposeModulePort, renamePort } from '../../../state/v1/module-ports';
 import type { WiringSelection } from '../../../state/v1/remove-topology-object';
-import type { InstancePath, ModuleDefinition, PortDirection, PortType, Project } from '../../../model/v1/types';
+import type { EndpointRef, InstancePath, ModuleDefinition, PortDirection, PortType, Project } from '../../../model/v1/types';
 import type { ProjectStore, ProjectStoreSnapshot } from '../../../state/v1/project-store';
 import { editModule, editModuleWiring, moveTopologyNode, resizeTopologyFrame } from '../../../state/v1/topology-edits';
 import { PortActionsDialog } from './port-actions-dialog';
 import { PortBindingDialog } from './port-binding-dialog';
 import type { BindingPreview } from './port-binding-dialog';
 import { PortDeletionDialog } from './port-deletion-dialog';
+import type { BudgetHighlight } from './path-highlight';
 import { TopologyCanvas } from './topology-canvas';
 import { displayDepth, hierarchyKey, inHierarchy } from './hierarchy-view';
 import { CableForm, ConnectionForm, MappingForm, TopologyTool, field } from './wiring-forms';
 import type { LocalPort, UpdateWiring } from './wiring-forms';
 import './topology.css';
 
-export function TopologyEditor({ store, state, module, pathResult, graph, rename, expanded, setExpanded }: {
+export function TopologyEditor({ store, state, module, pathResult, graph, rename, expanded, setExpanded, budgetHighlight, onPortBudget, onDcBudget }: {
   store: ProjectStore; state: ProjectStoreSnapshot; module: ModuleDefinition; pathResult?: PathResult; graph: SignalGraph; rename: () => void;
   expanded: ReadonlySet<string>; setExpanded: (value: ReadonlySet<string>) => void;
+  budgetHighlight?: BudgetHighlight;
+  onPortBudget: (action: 'optical' | 'from' | 'to', ref: EndpointRef) => void;
+  onDcBudget: (scope: InstancePath) => void;
 }) {
   const { project, selection } = state;
   const scope = selection.modulePath;
@@ -41,6 +45,8 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
     definition.id !== module.id && definition.id !== project.rootModuleDefinitionId);
   const availableTemplates = builtInDefinitions.filter(template => !definitions.has(template.id));
   const selected = selection.instancePath && store.resolveInstance(selection.instancePath)?.definition;
+  const dcScope = selected?.kind === 'module' && selected.physicalEnclosure ? selection.instancePath
+    : module.physicalEnclosure ? scope : undefined;
   const sharedLocations = structureScope(graph.instances, module.id);
   const ports: LocalPort[] = module.instances.flatMap(instance => {
     const name = store.resolveInstance([...scope, instance.id])?.instance?.name ?? instance.name;
@@ -152,6 +158,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
     } : undefined;
     return <PortActionsDialog port={port} name={instance?.name ?? definition.name} exposure={exposure}
       locations={structureScope(graph.instances, definition.id)} error={message}
+      budget={action => { setPortAction(undefined); onPortBudget(action, { instancePath: path, portId }); }}
       rename={name => {
         if (name === (port.name ?? '') || commit(draft => renamePort(draft, definition.id, portId, name))) setPortAction(undefined);
       }}
@@ -165,7 +172,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
   return <section className="v1-topology" aria-label={`框图 · ${moduleName}`}>
     <div className="v1-hierarchy-workspace">
       <TopologyCanvas project={project} instances={graph.instances} modulePath={scope} selectedInstance={selection.instancePath}
-        pathResult={pathResult} expanded={expanded} toggleModule={toggleModule}
+        pathResult={pathResult} budgetHighlight={budgetHighlight} expanded={expanded} toggleModule={toggleModule}
         selectInstance={store.selectInstance} enterModule={store.selectModule}
         openPort={(path, portId) => { setMessage(''); setPortAction({ path, portId }); }}
         add={add} deleteSelection={deleteSelection} rename={rename} report={setMessage} undo={store.undo} redo={store.redo}
@@ -203,6 +210,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
       {message && !preview && !portAction && !bindingPreview && <p className="v1-topology-message error" role="alert">{message}</p>}
     </div>
     <div className="v1-topology-tools">
+      {dcScope && <button type="button" className="v1-dc-entry" onClick={() => onDcBudget(dcScope)}>查看供电/功耗</button>}
       {sharedLocations.length > 0 && <details data-workbench-popup>
         <summary>共享结构 · {sharedLocations.length} 处</summary>
         <div className="v1-topology-tool-list">

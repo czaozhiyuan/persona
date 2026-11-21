@@ -11,13 +11,20 @@ type PortActions = {
   exposure?: { moduleName: string; locations: readonly string[]; create: (name: string) => void };
   disconnect?: () => void;
   close: () => void;
+  budget?: (action: 'optical' | 'from' | 'to') => void;
 };
 
-export function PortActionsDialog({ port, name, rename, locations, exposure, disconnect, close, error }: PortActions) {
+export function PortActionsDialog({ port, name, rename, locations, exposure, disconnect, close, error, budget }: PortActions) {
   return <dialog ref={dialog => { if (dialog && !dialog.open) dialog.showModal(); }}
     className="v1-topology-dialog v1-port-actions" aria-labelledby="port-actions-title" onCancel={close}>
     <h3 id="port-actions-title">{name} · {portDisplayName(port)}</h3>
     <p>{portTypeLabels[port.type]} · {port.direction === 'in' ? '输入' : '输出'}</p>
+    {budget && (port.type === 'RF' || port.type === 'OPTICAL') && <div className="actions v1-port-budget-actions">
+      {port.type === 'OPTICAL' && port.direction === 'out' &&
+        <button type="button" onClick={() => budget('optical')}>查看此处光功率</button>}
+      <button type="button" onClick={() => budget('from')}>设为链路起点</button>
+      <button type="button" onClick={() => budget('to')}>设为链路终点</button>
+    </div>}
     {exposure && <form onSubmit={event => {
       event.preventDefault();
       exposure.create(field(new FormData(event.currentTarget), 'name'));

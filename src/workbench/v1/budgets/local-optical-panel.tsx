@@ -1,12 +1,13 @@
-import { useMemo, useState } from 'react';
-import { createOpticalBudgetForGraph } from '../../../engine/v1/optical-budget';
-import type { LocalOpticalRequest, OpticalSource } from '../../../engine/v1/optical-budget';
+import { useState } from 'react';
+import type { LocalOpticalRequest, OpticalBudget, OpticalSource } from '../../../engine/v1/optical-budget';
 import { signalPortKey } from '../../../engine/v1/signal-graph';
 import { resolveOpticalChannel } from '../../../model/v1/channels';
 import { conversionKey } from '../links/link-options';
 import type { LinkOptions, Option } from '../links/link-options';
 import { LinkSupplyFields } from '../links/link-supply-fields';
 import { ChannelField } from '../properties/channel-field';
+import type { EndpointRef } from '../../../model/v1/types';
+import { EndpointLocation } from './budget-dock';
 import { Metric, Rating } from './budget-values';
 
 type OpticalQuery = Extract<LocalOpticalRequest, { source: OpticalSource }>
@@ -25,25 +26,26 @@ function PortSelect({ name, label, options, value }: {
   </select></label>;
 }
 
-export function LocalOpticalPanel({ options, settings, onChange }: {
+export function LocalOpticalPanel({ options, settings, onChange, target, result, locate }: {
   options: LinkOptions; settings: LocalOpticalSettings; onChange: (settings: LocalOpticalSettings) => void;
+  target?: EndpointRef; result?: OpticalBudget; locate: (endpoint: EndpointRef) => void;
 }) {
   const { query, sources } = settings;
-  const { showEndpoint } = options;
+  const targetKey = target && signalPortKey(target);
   const [mode, setMode] = useState<'direct' | 'eo'>(query && 'eo' in query ? 'eo' : 'direct');
-  const budget = useMemo(() => createOpticalBudgetForGraph(options.graph), [options.graph]);
-  const result = useMemo(() => query && budget.calculateLocal('eo' in query ? { ...query, sources } : query),
-    [budget, query, sources]);
   const direct = query && 'source' in query ? query.source : undefined;
   const eo = query && 'eo' in query ? query : undefined;
-  const lossColumns = result?.stages.some(stage => stage.incoming?.opticalLoss !== undefined);
+  const chosenSource = options.opticalSources.find(item => item.key === targetKey);
+  const targetPort = targetKey ? options.graph.ports.get(targetKey)?.definition : undefined;
 
   return <section className="panel v1-budget-report" aria-labelledby="v1-optical-heading">
     <h2 id="v1-optical-heading">局部光功率</h2>
+    <p>光源与功率输入用于本次会话的试算。</p>
     <label>计算方式<select name="opticalMode" value={mode} onChange={event => setMode(event.currentTarget.value === 'eo' ? 'eo' : 'direct')}>
       <option value="direct">纯光路径</option>
       <option value="eo">外部供光的电光路径</option>
     </select></label>
+    {!query && target && <p role="status">目标为 {options.showEndpoint(target)}。请选择供光来源和光通道，并填写已知的光源功率。</p>}
     {!options.opticalEndpoints.length && <p className="empty">当前工程没有可查询的光端口。</p>}
     {mode === 'eo' && <LinkSupplyFields options={options.opticalSources} sources={sources}
       onChange={next => onChange({ ...settings, sources: next })} />}
@@ -66,11 +68,11 @@ export function LocalOpticalPanel({ options, settings, onChange }: {
     }}>
       <div className="v1-link-fields">
         {mode === 'direct' ? <PortSelect name="opticalSource" label="光源端口" options={options.opticalSources}
-          value={direct && signalPortKey(direct.endpoint)} /> : <PortSelect name="opticalEo" label="电光转换边界" options={options.eo}
+          value={direct ? signalPortKey(direct.endpoint) : chosenSource?.key} /> : <PortSelect name="opticalEo" label="电光转换边界" options={options.eo}
           value={eo && conversionKey(eo.eo)} />}
-        <PortSelect name="opticalTarget" label="目标光端口" options={options.opticalEndpoints} value={query && signalPortKey(query.to)} />
+        <PortSelect name="opticalTarget" label="目标光端口" options={options.opticalEndpoints} value={query ? signalPortKey(query.to) : targetKey} />
         <ChannelField name="opticalChannel" label={mode === 'eo' ? '电光转换输出通道' : '光源通道'}
-          value={mode === 'eo' ? eo?.channelId : direct?.channelId} required />
+          value={mode === 'eo' ? eo?.channelId : direct?.channelId ?? targetPort?.channelIds?.[0]} required />
         {mode === 'direct' && <label>光源功率 (dBm，可选)
           <input name="opticalPower" type="number" step="any" placeholder="未知" defaultValue={direct?.powerDbm} />
         </label>}
@@ -79,8 +81,17 @@ export function LocalOpticalPanel({ options, settings, onChange }: {
         计算局部光功率
       </button>
     </form>
-    {result && query && (('eo' in query) === (mode === 'eo')) && <div className="v1-local-optical-result" data-budget-status={result.status}>
-      <h3>{showEndpoint(query.to)} · {statusLabels[result.status]}</h3>
+    {result && query && (('eo' in query) === (mode === 'eo')) &&
+      <OpticalResult result={result} target={query.to} showEndpoint={options.showEndpoint} locate={locate} />}
+  </section>;
+}
+
+export function OpticalResult({ result, target, showEndpoint, locate }: {
+  result: OpticalBudget; target: EndpointRef; showEndpoint: LinkOptions['showEndpoint']; locate?: (endpoint: EndpointRef) => void;
+}) {
+  const lossColumns = result.stages.some(stage => stage.incoming?.opticalLoss !== undefined);
+  return <div className="v1-local-optical-result" data-budget-status={result.status}>
+      <h3>{showEndpoint(target)} · {statusLabels[result.status]}</h3>
       <dl className="v1-budget-metrics">
         <div><dt>目标光功率</dt><dd data-metric="optical-power"><Metric metric={result.powerDbm} /></dd></div>
         <div><dt>累计光增益</dt><dd data-metric="optical-gain"><Metric metric={result.gainDb} /></dd></div>
@@ -93,12 +104,11 @@ export function LocalOpticalPanel({ options, settings, onChange }: {
         {lossColumns && <><th>固有插损</th><th>控制点附加损耗</th></>}
         <th>输入额定</th>
       </tr></thead><tbody>{result.stages.map((stage, index) => <tr key={index}>
-        <th scope="row">{showEndpoint(stage.endpoint)}</th><td>{stage.channelId}</td>
+        <th scope="row"><EndpointLocation endpoint={stage.endpoint} label={showEndpoint(stage.endpoint)} locate={locate} /></th><td>{stage.channelId}</td>
         <td><Metric metric={stage.powerDbm} /></td><td><Metric metric={stage.incoming?.gainDb} /></td>
         {lossColumns && <><td><Metric metric={stage.incoming?.opticalLoss?.intrinsicLossDb} /></td>
           <td><Metric metric={stage.incoming?.opticalLoss?.operatingPointLossDb} /></td></>}
         <td><Rating check={stage.rating} /></td>
       </tr>)}</tbody></table></div>}
-    </div>}
-  </section>;
+    </div>;
 }

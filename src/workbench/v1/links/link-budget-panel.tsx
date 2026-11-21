@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { createLinkBudget, LinkBudgetConditions, LinkBudgetPoint, RfScanRange } from '../../../engine/v1/link-budget';
+import type { EndpointRef } from '../../../model/v1/types';
+import { EndpointLocation } from '../budgets/budget-dock';
 import type { NamedLink } from '../../../model/v1/topology';
 import { RfScanPlot, scanMetrics } from './rf-scan-plot';
 import type { ScanMetric } from './rf-scan-plot';
@@ -10,7 +12,9 @@ const statusLabels = { valid: '可计算', partial: '部分可计算', error: '�
 
 type PortLabels = Pick<LinkOptions, 'showEndpoint' | 'showPort'>;
 
-function PointDetails({ point, labels: { showEndpoint, showPort } }: { point: LinkBudgetPoint; labels: PortLabels }) {
+function PointDetails({ point, labels: { showEndpoint, showPort }, locate }: {
+  point: LinkBudgetPoint; labels: PortLabels; locate: (endpoint: EndpointRef) => void;
+}) {
   const issue = point.kind !== 'conversion' ? point.pathIssue : undefined;
   return <div className="v1-point-details" data-budget-status={point.status}>
     <h4>{Number.isFinite(point.frequencyGHz) ? `${point.frequencyGHz} GHz` : '频率未设'} · {statusLabels[point.status]}</h4>
@@ -25,7 +29,7 @@ function PointDetails({ point, labels: { showEndpoint, showPort } }: { point: Li
       <div className="v1-budget-table"><table><thead><tr>
         <th>端口</th><th>射频功率</th><th>本级增益</th><th>累计增益</th><th>累计噪声系数</th><th>输入额定</th>
       </tr></thead><tbody>{point.stages.map(stage => <tr key={JSON.stringify(stage.endpoint)}>
-        <th scope="row">{showEndpoint(stage.endpoint)}</th>
+        <th scope="row"><EndpointLocation endpoint={stage.endpoint} label={showEndpoint(stage.endpoint)} locate={locate} /></th>
         <td><Metric metric={stage.powerDbm} /></td><td><Metric metric={stage.incoming?.device?.gainDb} /></td>
         <td><Metric metric={stage.cumulativeGainDb} /></td><td><Metric metric={stage.cumulativeNfDb} /></td>
         <td><Rating check={stage.rating} /></td>
@@ -33,6 +37,7 @@ function PointDetails({ point, labels: { showEndpoint, showPort } }: { point: Li
     </details>}
     {point.kind === 'conversion' && <>
       {point.diagnostics.length > 0 && <ul className="v1-budget-reasons">{point.diagnostics.map((item, index) => <li key={index}>
+        {item.code === 'missing_binding' || item.code === 'missing_gain' ? '缺少参数 · ' : ''}
         {item.reason}{item.endpoint && ` · ${showEndpoint(item.endpoint)}`}{item.bindingId && ` · ${item.bindingId}`}
       </li>)}</ul>}
       {point.segments.map(segment => <details key={segment.eoEdgeIndex}>
@@ -45,7 +50,7 @@ function PointDetails({ point, labels: { showEndpoint, showPort } }: { point: Li
         {segment.optical?.stages.length ? <div className="v1-budget-table"><table><thead><tr>
           <th>光端口</th><th>通道</th><th>光功率</th><th>本级增益</th><th>输入额定</th>
         </tr></thead><tbody>{segment.optical.stages.map((stage, index) => <tr key={index}>
-          <th scope="row">{showEndpoint(stage.endpoint)}</th><td>{stage.channelId}</td>
+          <th scope="row"><EndpointLocation endpoint={stage.endpoint} label={showEndpoint(stage.endpoint)} locate={locate} /></th><td>{stage.channelId}</td>
           <td><Metric metric={stage.powerDbm} /></td><td><Metric metric={stage.incoming?.gainDb} /></td>
           <td><Rating check={stage.rating} /></td>
         </tr>)}</tbody></table></div> : null}
@@ -55,7 +60,7 @@ function PointDetails({ point, labels: { showEndpoint, showPort } }: { point: Li
         <div className="v1-budget-table"><table><thead><tr>
           <th>端口</th><th>本级增益</th><th>本级噪声系数</th><th>输出功率</th><th>输入额定</th>
         </tr></thead><tbody>{point.rfStages.map(stage => <tr key={stage.edgeIndex}>
-          <th scope="row">{showEndpoint(stage.input)} → {showPort(stage.output)}</th>
+          <th scope="row"><EndpointLocation endpoint={stage.input} label={showEndpoint(stage.input)} locate={locate} /> → {showPort(stage.output)}</th>
           <td><Metric metric={stage.gainDb} /></td><td><Metric metric={stage.nfDb} /></td>
           <td><Metric metric={stage.powerDbm} /></td><td><Rating check={stage.rating} /></td>
         </tr>)}</tbody></table></div>
@@ -64,14 +69,16 @@ function PointDetails({ point, labels: { showEndpoint, showPort } }: { point: Li
   </div>;
 }
 
-export function LinkBudgetPanel({ link, budget, conditions, setInputPower, labels }: {
+export function LinkBudgetPanel({ link, budget, conditions, frequency, setFrequency, setInputPower, labels, locate }: {
   link: NamedLink;
   labels: PortLabels;
   budget: ReturnType<typeof createLinkBudget>;
   conditions: LinkBudgetConditions;
+  frequency: number;
+  setFrequency: (frequency: number) => void;
   setInputPower: (power: number | undefined) => void;
+  locate: (endpoint: EndpointRef) => void;
 }) {
-  const [frequency, setFrequency] = useState(1);
   const [range, setRange] = useState<RfScanRange>();
   const [scanFrequency, setScanFrequency] = useState<number>();
   const [metric, setMetric] = useState<ScanMetric>('gainDb');
@@ -92,7 +99,7 @@ export function LinkBudgetPanel({ link, budget, conditions, setInputPower, label
           setInputPower(Number.isFinite(value) ? value : undefined);
         }} /></label>
     </div>
-    <div className="v1-single-point"><PointDetails point={single} labels={labels} /></div>
+    <div className="v1-single-point"><PointDetails point={single} labels={labels} locate={locate} /></div>
     <details>
       <summary>射频扫描 · 1 GHz 步长</summary>
       <form onSubmit={event => {
@@ -122,7 +129,7 @@ export function LinkBudgetPanel({ link, budget, conditions, setInputPower, label
           </select></label>
         </div>
         <RfScanPlot points={scan.points} metric={metric} selected={selectedPoint.frequencyGHz} />
-        <div className="v1-scan-point"><PointDetails point={selectedPoint} labels={labels} /></div>
+        <div className="v1-scan-point"><PointDetails point={selectedPoint} labels={labels} locate={locate} /></div>
       </>}
     </details>
   </section>;

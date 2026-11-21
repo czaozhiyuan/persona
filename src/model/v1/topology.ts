@@ -47,6 +47,14 @@ export type ConversionBinding = {
   overrides?: Partial<Pick<ConversionProfile, 'rfGainRefDb' | 'pdPowerRefDbm' | 'k'>>;
 };
 
+export type OpticalSource = { endpoint: EndpointRef; channelId: OpticalChannelId; powerDbm?: number };
+
+export type LinkTrial = {
+  frequencyGHz: number;
+  inputPowerDbm?: number;
+  opticalSources?: readonly OpticalSource[];
+};
+
 export type NamedLink = {
   id: string;
   name: string;
@@ -55,4 +63,5 @@ export type NamedLink = {
   channelId?: OpticalChannelId;
   via?: readonly (ConnectionRef | CableCoreRef)[];
   conversionBindings?: readonly ConversionBinding[];
+  trial?: LinkTrial;
 };

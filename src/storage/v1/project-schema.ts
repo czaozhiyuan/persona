@@ -169,6 +169,8 @@ const requiredEdge: Check = (value, path) => {
 };
 const link = shape(identity, {
   from: endpoint, to: endpoint, channelId: text, via: list(requiredEdge),
+  trial: shape({ frequencyGHz: number }, { inputPowerDbm: number,
+    opticalSources: list(shape({ endpoint, channelId: text }, { powerDbm: number })) }),
   conversionBindings: list(shape({ id: text, profileId: text, eo: boundary, oe: boundary }, {
     overrides: shape({}, { ...profileValues, k: number }),
   })),

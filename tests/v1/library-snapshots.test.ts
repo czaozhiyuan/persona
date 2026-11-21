@@ -110,7 +110,7 @@ test('type collisions and updates that remove referenced ports are diagnosed wit
   const before = store.getSnapshot();
   const incompatible = previewTemplateUpdate(before.project, [{ ...gain, ports: [], transfers: [] }], gain.id);
   assert.equal(incompatible.ok, false);
-  assert.match(incompatible.message, /命名链路「used」.*起点端点引用无效/);
+  assert.match(incompatible.message, /链路「used」.*起点端点引用无效/);
   assert.ok(incompatible.removedPorts.includes('RF_OUT'));
   assert.equal(store.getSnapshot(), before);
 });

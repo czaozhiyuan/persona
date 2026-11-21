@@ -67,14 +67,31 @@ export function validateNamedLinks(
   links: readonly NamedLink[], profiles: ReadonlyMap<string, ConversionProfile>,
   definitionAtPath: (path: InstancePath) => ComponentDefinition | ModuleDefinition | undefined,
 ): void {
-  for (const link of indexById(links, '命名链路').values()) {
-    const context = `命名链路「${link.id}」`;
+  for (const link of indexById(links, '链路').values()) {
+    const context = `链路「${link.id}」`;
     if (link.channelId !== undefined) validateChannelIds([link.channelId], context);
     for (const [label, endpoint] of [['起点', link.from], ['终点', link.to]] as const) {
       if (endpoint) requireValid(
         definitionAtPath(endpoint.instancePath)?.ports.some(port => port.id === endpoint.portId),
         `${context}: ${label}端点引用无效`,
       );
+    }
+    if (link.trial) {
+      const { frequencyGHz, inputPowerDbm, opticalSources } = link.trial;
+      requireValid(Number.isFinite(frequencyGHz) && frequencyGHz >= 0 && frequencyGHz <= 67
+        && (inputPowerDbm === undefined || Number.isFinite(inputPowerDbm)), `${context}：试算频率或射频输入功率无效`);
+      const sourceKeys = new Set<string>();
+      for (const { endpoint, channelId, powerDbm } of opticalSources ?? []) {
+        const owner = definitionAtPath(endpoint.instancePath);
+        const port = owner?.ports.find(port => port.id === endpoint.portId);
+        requireValid(port?.type === 'OPTICAL' && port.direction === (owner?.kind === 'module' ? 'in' : 'out'),
+          `${context}：试算光源端口无效`);
+        validateChannelIds([channelId], context);
+        const key = JSON.stringify([endpoint.instancePath, endpoint.portId, channelId]);
+        requireValid(!sourceKeys.has(key) && (powerDbm === undefined || Number.isFinite(powerDbm)),
+          `${context}：试算光源重复或功率无效`);
+        sourceKeys.add(key);
+      }
     }
     for (const ref of link.via ?? []) {
       const scope = definitionAtPath(ref.scopePath);

@@ -158,6 +158,11 @@ export function planPortDeletion(project: Project, definitionId: string, portId:
         report('链路必经边', `${link.id} / ${id}`, scope, ref.scopePath);
         return false;
       }),
+      ...(link.trial && { trial: { ...link.trial, opticalSources: link.trial.opticalSources?.filter(({ endpoint }) => {
+        const removed = endpoint.portId === portId && scopeId(endpoint.instancePath) === definitionId;
+        if (removed) report('链路端点', `${link.id} / 试算光源`, definitionId, endpoint.instancePath);
+        return !removed;
+      }) } }),
       conversionBindings: link.conversionBindings?.filter(binding => {
         const invalid = (['eo', 'oe'] as const).filter(kind => !boundaryExists(kind, binding[kind]));
         for (const kind of invalid) {

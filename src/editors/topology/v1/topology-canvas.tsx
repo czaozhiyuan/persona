@@ -18,6 +18,7 @@ import { keepGraphVisible } from './viewport';
 import { CanvasControls, canvasFitOptions, flowAriaLabels } from './canvas-controls';
 import { hierarchyKey } from './hierarchy-view';
 import { projectPathHighlight } from './path-highlight';
+import type { BudgetHighlight } from './path-highlight';
 import { projectTopology, toLocalPosition } from './topology-projection';
 import { handleId, nodeId, portKey, projectWiring, scopedWiringProblem } from './topology-wiring';
 import type { WiringEdge } from './topology-wiring';
@@ -80,6 +81,7 @@ type Props = {
   modulePath: InstancePath;
   selectedInstance?: InstancePath;
   pathResult?: PathResult;
+  budgetHighlight?: BudgetHighlight;
   expanded: ReadonlySet<string>;
   toggleModule: (path: InstancePath) => void;
   openPort: (path: InstancePath, portId: string) => void;
@@ -101,7 +103,7 @@ export function TopologyCanvas(props: Props) {
   return <ReactFlowProvider><EditableTopologyCanvas {...props} /></ReactFlowProvider>;
 }
 
-function EditableTopologyCanvas({ project, instances, modulePath, selectedInstance, pathResult, expanded, toggleModule, selectInstance,
+function EditableTopologyCanvas({ project, instances, modulePath, selectedInstance, pathResult, budgetHighlight, expanded, toggleModule, selectInstance,
   enterModule, move, resize, connect, mapPort, add, deleteSelection, rename, report, undo, redo, openPort }: Props) {
   const flowStore = useStoreApi();
   const [wireStart, setWireStart] = useState<string>();
@@ -119,7 +121,7 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     [project, instances, modulePath, expanded, measured, resizePreview]);
   const { nodes: items, rootKey, nodeByKey, scopes } = projection;
   const highlights = useMemo(() => new Map([...scopes].map(([key, { path }]) =>
-    [key, projectPathHighlight(pathResult, path)])), [scopes, pathResult]);
+    [key, projectPathHighlight(pathResult, path, budgetHighlight)])), [scopes, pathResult, budgetHighlight]);
   const { ports, edges } = useMemo(() => projectWiring(projection, highlights), [projection, highlights]);
 
   const changeViewport = useCallback((requested: Viewport) => {
