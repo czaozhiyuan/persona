@@ -1,10 +1,11 @@
-import type { Rect, XYPosition } from '@xyflow/react';
-import { planInstanceMove } from '../../../state/v1/reparent-instance';
+import type { CoordinateExtent, Rect, XYPosition } from '@xyflow/react';
+import type { planInstanceMoves } from '../../../state/v1/reparent-instance';
+import { keepNodeInside } from './frame-geometry';
 import { hierarchyKey, inHierarchy } from './hierarchy-view';
 import { frameHeader, frameInsets, framePadding } from './module-frame';
 import type { TopologyItem } from './topology-projection';
 
-export type ApprovedMove = Extract<ReturnType<typeof planInstanceMove>, { ok: true }>;
+export type ApprovedMove = Extract<ReturnType<typeof planInstanceMoves>, { ok: true }>;
 
 type DropTarget = {
   kind: 'in' | 'up';
@@ -26,14 +27,14 @@ function moduleBody(node: TopologyItem, bounds: Rect): Rect {
 }
 
 export function reparentDropTarget(source: TopologyItem, nodes: readonly TopologyItem[], rootPath: readonly string[],
-  boundsOf: (node: TopologyItem) => Rect | undefined, point: XYPosition, edgeMargin: number): DropTarget | undefined {
+  boundsOf: (node: TopologyItem) => Rect | undefined, point: XYPosition, edgeMargin: number, movingKeys: ReadonlySet<string>): DropTarget | undefined {
   const path = source.item.instancePath;
   const parentPath = path.slice(0, -1);
   const parentKey = hierarchyKey(parentPath);
   const parent = nodes.find(node => node.key === parentKey);
   const parentBounds = parent && boundsOf(parent);
   if (!parentBounds || contains(parentBounds, point, edgeMargin)) {
-    const siblings = nodes.filter(node => node.key !== source.key && node.item.definition.kind === 'module'
+    const siblings = nodes.filter(node => !movingKeys.has(node.key) && node.item.definition.kind === 'module'
       && node.item.instancePath.length === path.length && inHierarchy(parentPath, node.item.instancePath));
     let nearby: DropTarget | undefined;
     // Collapsed blocks sit above expanded frames. Prefer exact hits before the edge margin.
@@ -57,4 +58,15 @@ export function reparentDropTarget(source: TopologyItem, nodes: readonly Topolog
     return { kind: 'up', node: grandparent, destination, problem: '请拖到直接上一级模块的可用区域。' };
   }
   return { kind: 'up', node: grandparent, destination };
+}
+
+export function fitsDropExtent(bounds: Rect, [[left, top], [right, bottom]]: CoordinateExtent): boolean {
+  return bounds.width <= right - left && bounds.height <= bottom - top;
+}
+
+export function groupDropDelta(bounds: Rect, anchor: XYPosition, position: XYPosition, extent?: CoordinateExtent): XYPosition {
+  const delta = { x: position.x - anchor.x, y: position.y - anchor.y };
+  if (!extent) return delta;
+  const placed = keepNodeInside({ ...bounds, x: bounds.x + delta.x, y: bounds.y + delta.y }, extent);
+  return { x: placed.x - bounds.x, y: placed.y - bounds.y };
 }

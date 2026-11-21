@@ -7,7 +7,7 @@ import { signalPortKey } from '../../../engine/v1/signal-graph';
 import { blankModuleId, builtInDefinitions, isBlankTemplate } from '../../../library/v1/built-in';
 import { libraryDragType, readLibraryItem } from '../../../library/v1/insert-library-item';
 import type { LibraryItem } from '../../../library/v1/insert-library-item';
-import { moveWiringSummary, planInstanceMove } from '../../../state/v1/reparent-instance';
+import { moveWiringSummary, planInstanceMoves } from '../../../state/v1/reparent-instance';
 import { defaultTopologyPosition } from '../../../state/v1/topology-position';
 import type { WiringSelection } from '../../../state/v1/remove-topology-object';
 import type { Connection } from '../../../model/v1/topology';
@@ -25,7 +25,7 @@ import { projectPathHighlight } from './path-highlight';
 import type { BudgetHighlight } from './path-highlight';
 import { estimatedBlockSize, projectTopology } from './topology-projection';
 import type { FrameResizePreview, TopologyItem } from './topology-projection';
-import { reparentDropTarget } from './reparent-drop';
+import { fitsDropExtent, groupDropDelta, reparentDropTarget } from './reparent-drop';
 import type { ApprovedMove } from './reparent-drop';
 import { handleId, nodeId, portKey, projectWiring, scopedWiringProblem } from './topology-wiring';
 import type { WiringEdge } from './topology-wiring';
@@ -55,13 +55,17 @@ type DropPreview = NonNullable<ReturnType<typeof reparentDropTarget>> & {
   plan?: ApprovedMove;
   error?: string;
   label: string;
+  selectedCount: number;
+  extent?: CoordinateExtent;
 };
 type DragSession = {
   base: Project;
   preview?: DropPreview;
   anchor: TopologyItem;
   members: readonly TopologyItem[];
-  constraint?: { bounds: Rect; extent: CoordinateExtent };
+  keys: ReadonlySet<string>;
+  bounds: Rect;
+  extent?: CoordinateExtent;
   frame?: TopologyFrame;
 };
 
@@ -121,7 +125,7 @@ type Props = {
   toggleModule: (path: InstancePath) => void;
   openPort: (path: InstancePath, portId: string) => void;
   enterModule: (path: InstancePath) => void;
-  reparent: (base: Project, plan: ApprovedMove, position?: XYPosition) => void;
+  reparent: (base: Project, plan: ApprovedMove, placements?: readonly TopologyPlacement[]) => void;
   focusMoved?: InstancePath;
   move: (placements: readonly TopologyPlacement[], frame?: TopologyFrame) => void;
   resize: (frame: TopologyFrame, placementAdjustments: readonly TopologyPlacement[]) => void;
@@ -318,23 +322,18 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     const parent = nodeByKey.get(hierarchyKey(parentPath));
     const frame = parent?.frame;
     report('');
-    dragSession.current = { base: project, anchor, members,
-      constraint: parent && frame ? {
-        bounds: getNodesBounds(members.map(item => ({ id: item.key, position: item.bounds, measured: item.bounds, data: {} }))),
-        extent: moduleExtent(frame.base, frameInsets(parent.item.definition.ports)),
-      } : undefined,
+    // Keep the grabbed node first for placement and post-drop focus.
+    const ordered = [anchor, ...members.filter(item => item.key !== anchor.key)];
+    dragSession.current = { base: project, anchor, members: ordered, keys: new Set(ordered.map(item => item.key)),
+      bounds: getNodesBounds(ordered.map(item => ({ id: item.key, position: item.bounds, measured: item.bounds, data: {} }))),
+      extent: parent && frame ? moduleExtent(frame.base, frameInsets(parent.item.definition.ports)) : undefined,
       frame: frame && !frame.saved ? { modulePath: parentPath, ...frame.base } : undefined };
     if (!selectedKeys.has(anchor.key)) selectObject(anchor.item.instancePath, false);
   }
 
   function dragDelta(session: DragSession, position: XYPosition): XYPosition {
-    const dx = position.x - session.anchor.position.x;
-    const dy = position.y - session.anchor.position.y;
-    if (!session.constraint) return { x: dx, y: dy };
     // Clamp the whole bounding box so siblings keep their spacing at the frame edge.
-    const { bounds, extent } = session.constraint;
-    const clamped = keepNodeInside({ ...bounds, x: bounds.x + dx, y: bounds.y + dy }, extent);
-    return { x: clamped.x - bounds.x, y: clamped.y - bounds.y };
+    return groupDropDelta(session.bounds, session.anchor.position, position, session.extent);
   }
 
   function boundsOf(item: TopologyItem): Rect | undefined {
@@ -366,23 +365,30 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
   }
 
   function targetAt(session: DragSession, point: XYPosition) {
-    return reparentDropTarget(session.anchor, items, modulePath, boundsOf, point, 6 / (flow.current?.getZoom() ?? 1));
+    return reparentDropTarget(session.anchor, items, modulePath, boundsOf, point, 6 / (flow.current?.getZoom() ?? 1), session.keys);
   }
 
   function previewDrag(event: MouseEvent | TouchEvent, node: CanvasNode) {
     const session = dragSession.current;
     if (!session) return;
-    const point = session.members.length === 1 ? pointerOnCanvas(event) : undefined;
+    const point = pointerOnCanvas(event);
     const target = point && targetAt(session, point);
     if (!target) {
       if (session.preview) { session.preview = undefined; setDropPreview(undefined); }
     } else if (session.preview?.kind !== target.kind
       || hierarchyKey(session.preview.destination) !== hierarchyKey(target.destination) || session.preview.problem !== target.problem) {
-      const checked = target.problem ? undefined : planInstanceMove(session.base, session.anchor.item.instancePath, target.destination);
       const owner = target.node?.item ?? instances.find(item => hierarchyKey(item.instancePath) === hierarchyKey(target.destination));
+      const saved = target.node?.frame?.saved ? target.node.frame.base
+        : session.base.layout?.topologyFrames?.find(frame => hierarchyKey(frame.modulePath) === hierarchyKey(target.destination));
+      const extent = session.members.length > 1 && saved && owner
+        ? moduleExtent(saved, frameInsets(owner.definition.ports)) : undefined;
+      const problem = target.problem ?? (extent && !fitsDropExtent(session.bounds, extent)
+        ? '目标模块的边框无法容纳这组对象，请先调整边框大小。' : undefined);
+      const checked = problem ? undefined
+        : planInstanceMoves(session.base, session.members.map(item => item.item.instancePath), target.destination);
       const name = owner?.instance?.name ?? owner?.definition.name ?? '当前模块';
-      session.preview = { ...target, plan: checked?.ok ? checked : undefined,
-        error: target.problem ?? (checked?.ok === false ? checked.message : undefined),
+      session.preview = { ...target, extent, selectedCount: session.members.length, plan: checked?.ok ? checked : undefined,
+        error: problem ?? (checked?.ok === false ? checked.message : undefined),
         label: `${target.kind === 'in' ? '移入' : '移到上一级'}：${name}` };
       setDropPreview(session.preview);
     }
@@ -401,14 +407,14 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     const preview = renderedPreview.current;
     cancelDrag();
     if (!session) return;
-    const point = session.members.length === 1 ? pointerOnCanvas(event) : undefined;
-    if (session.members.length === 1 && !point) {
+    const point = pointerOnCanvas(event);
+    if (!point) {
       report('请在框图的有效区域松手。');
       return;
     }
-    const target = point && targetAt(session, point);
-    if (target && point) {
-      if (!preview || preview.kind !== target.kind || hierarchyKey(preview.destination) !== hierarchyKey(target.destination)) {
+    const target = targetAt(session, point);
+    if (target) {
+      if (!preview || preview !== session.preview || preview.kind !== target.kind || hierarchyKey(preview.destination) !== hierarchyKey(target.destination)) {
         report(target.problem ?? '请等目标显示移动预览后再松手。');
         return;
       }
@@ -425,7 +431,12 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
       } : target.kind === 'up' ? {
         x: point.x - session.anchor.bounds.width / 2, y: point.y - session.anchor.bounds.height / 2,
       } : definition?.kind === 'module' ? defaultTopologyPosition(definition.instances.length, definition.ports.length) : undefined;
-      reparent(session.base, preview.plan, position);
+      const plan = preview.plan;
+      const delta = position && groupDropDelta(session.bounds, session.anchor.bounds, position, preview.extent);
+      const placements = delta && session.members.map((item, index) => ({
+        instancePath: plan.instancePaths[index], x: item.bounds.x + delta.x, y: item.bounds.y + delta.y,
+      }));
+      reparent(session.base, plan, placements);
       return;
     }
     const { x, y } = dragDelta(session, node.position);
@@ -657,8 +668,10 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
       {!dropPreview.node && <div className="v1-drop-canvas" aria-hidden="true" />}
       <p className="v1-drop-label" role="status" data-blocked={!!dropPreview.error}>
         {dropPreview.error ?? dropPreview.label}
+        {dropPreview.selectedCount > 1 && ` · ${dropPreview.selectedCount} 个选中对象`}
         {dropPreview.plan && ` · ${moveWiringSummary(dropPreview.plan.wiring)}`}
-        {dropPreview.plan && dropPreview.plan.affected.length > 1 && ` · 影响 ${dropPreview.plan.affected.length} 处实例`}
+        {dropPreview.plan && dropPreview.plan.affected.length > dropPreview.plan.instancePaths.length
+          && ` · 影响 ${dropPreview.plan.affected.length} 处实例`}
       </p>
     </>}
     {!scopes.get(rootKey)?.members.length && <span className="v1-topology-empty">从器件库添加器件，或声明对外端口。</span>}
