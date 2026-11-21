@@ -152,6 +152,7 @@ export function createPathResolver(project: Project) {
     const carrier: Carrier = request.channelId === undefined ? undefined : [request.channelId];
     const result = searchSignalPath({
       starts: [from], target: to, adjacent: outgoing, carrier, required, allRequired: (1n << BigInt(required.size)) - 1n,
+      startCarriers: from.definition.type === 'OPTICAL' && to.definition.type === 'RF' ? sources : undefined,
     });
     switch (result.status) {
       case 'resolved': return traceSupplies(result.path, sources);

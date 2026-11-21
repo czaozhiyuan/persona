@@ -148,11 +148,45 @@ test('CW at a receiver yields optical power and DC current without an electrical
   const { project } = fixture();
   const root = project.moduleDefinitions[0];
   const cw = { ...project, moduleDefinitions: [{ ...root, connections: [{ id: 'cw', from: local('laser1', 'OUT'), to: local('oe1', 'IN') }] }] };
-  const result = createConversionBudget(cw).calculateNamedLink({ id: 'cw', name: 'CW', from: ref('laser1', 'OUT'),
-    to: ref('oe1', 'OUT'), channelId: ch28 }, { frequencyGHz: 2, inputPowerDbm: 0 });
-  near(numeric(result.continuousWave!.optical.powerDbm), 8.0102999566);
-  near(numeric(result.continuousWave!.averageCurrent), 0.8 * 10 ** ((8.0102999566 - 30) / 10));
-  assert.equal(result.powerDbm.availability, 'unavailable');
+  const calc = createConversionBudget(cw).calculateNamedLink;
+  const link: NamedLink = { id: 'cw', name: 'CW', from: ref('laser1', 'OUT'), to: ref('oe1', 'OUT') };
+  const selected = source('laser1');
+  const channels: OpticalSource[] = [selected, { ...selected, channelId: ch30 }];
+  for (const result of [
+    calc({ ...link, channelId: ch28 }, { frequencyGHz: 2 }),
+    calc(link, { frequencyGHz: 2, opticalSources: [selected] }),
+    calc({ ...link, channelId: ch28 }, { frequencyGHz: 2, opticalSources: channels }),
+  ]) {
+    assert.ok(result.continuousWave);
+    near(numeric(result.continuousWave.optical.powerDbm), 8.0102999566);
+    near(numeric(result.continuousWave.averageCurrent), 0.005059644256, 1e-12);
+    assert.equal(result.powerDbm.availability, 'unavailable');
+    assert.match(result.powerDbm.reason, /连续光未携带射频调制/);
+  }
+  const ambiguous = calc(link, { frequencyGHz: 2, opticalSources: channels });
+  assert.equal(ambiguous.continuousWave, undefined);
+  assert.ok(ambiguous.diagnostics.some(item => item.code === 'optical_supply' && item.reason.includes('选择')));
+  const conflict = calc({ ...link, channelId: ch30 }, { frequencyGHz: 2, opticalSources: [selected] });
+  assert.equal(conflict.continuousWave, undefined);
+});
+
+test('known zero receiver response propagates zero power and loaded voltage through RF gain', () => {
+  for (const pd of [
+    { receiver: 'active50', loadedGain: fixed(0) },
+    { receiver: 'active50', loadedGain: { kind: 'rfCurve', points: [[1, 800], [2, 0]] } },
+    { receiver: 'external50', responsivity: fixed(0) },
+  ] satisfies Partial<Receiver>[]) {
+    const { project, link } = fixture(false, pd);
+    const result = createConversionBudget(project).calculateNamedLink(link, { frequencyGHz: 2, inputPowerDbm: -5 });
+    assert.equal(numeric(result.segments[0].gainDb), -Infinity);
+    assert.equal(numeric(result.segments[0].rfOutputDbm), -Infinity);
+    assert.equal(numeric(result.gainDb), -Infinity);
+    assert.equal(numeric(result.powerDbm), -Infinity);
+    const volts = loadedVoltages(result.powerDbm);
+    assert.equal(numeric(volts.vrms), 0);
+    assert.equal(numeric(volts.vpp), 0);
+    assert.ok(!result.diagnostics.some(item => item.code === 'missing_gain'));
+  }
 });
 
 test('two reachable emitters require selection and clearing the selection restores ambiguity', () => {
