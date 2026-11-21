@@ -19,10 +19,11 @@ export function frameInsets(ports: readonly PortDefinition[]) {
   };
 }
 
-export function ModuleFrame({ id, name, ports, highlighted, handleId, editable = false, outerHandles = false, selected = false, wireState, controls, openPort }: {
+export function ModuleFrame({ id, name, ports, highlighted, newPortId, handleId, editable = false, outerHandles = false, selected = false, wireState, controls, openPort }: {
   id: string;
   name: string;
   ports: readonly PortDefinition[];
+  newPortId?: string;
   highlighted: ReadonlySet<string>;
   handleId: (portId: string, inner: boolean) => string;
   editable?: boolean;
@@ -43,7 +44,7 @@ export function ModuleFrame({ id, name, ports, highlighted, handleId, editable =
     {portSides.map(side => <div key={side} className={`v1-module-pins ${side}`}>
       {ports.filter(port => boundaryPortSide(port.direction) === side).map(port => {
         const input = port.direction === 'in';
-        return <div key={port.id} className={`v1-topology-port${highlighted.has(port.id) ? ' is-on-path' : ''}`}
+        return <div key={port.id} className={`v1-topology-port${highlighted.has(port.id) ? ' is-on-path' : ''}${port.id === newPortId ? ' is-new-port' : ''}`}
           title={`${port.id} · ${portTypeLabels[port.type]}`} data-port-direction={port.direction}>
           <Handle id={handleId(port.id, true)} type={input ? 'source' : 'target'}
             position={input ? Position.Right : Position.Left} className={`${port.type} v1-frame-inner-handle`} data-wire={wireState?.(port.id, true)}

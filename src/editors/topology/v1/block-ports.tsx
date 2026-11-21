@@ -17,8 +17,9 @@ export function PortLabel({ port, open }: { port: PortDefinition; open?: (id: st
     onDoubleClick={event => event.stopPropagation()}>{label}</button> : <span>{label}</span>;
 }
 
-export function BlockPorts({ ports, highlighted, handleId, editable = false, wireState, openPort }: {
+export function BlockPorts({ ports, highlighted, newPortId, handleId, editable = false, wireState, openPort }: {
   ports: readonly PortDefinition[];
+  newPortId?: string;
   highlighted: ReadonlySet<string>;
   handleId: (id: string) => string;
   editable?: boolean;
@@ -28,7 +29,7 @@ export function BlockPorts({ ports, highlighted, handleId, editable = false, wir
   return <div className="v1-block-columns">
     {portSides.map(side => <div className={`v1-block-column ${side}`} key={side}>
       {ports.filter(port => boundaryPortSide(port.direction) === side).map(port =>
-        <div className={`v1-topology-port${highlighted.has(port.id) ? ' is-on-path' : ''}`} key={port.id}
+        <div className={`v1-topology-port${highlighted.has(port.id) ? ' is-on-path' : ''}${port.id === newPortId ? ' is-new-port' : ''}`} key={port.id}
           title={`${port.id} · ${portTypeLabels[port.type]}`} data-port-direction={port.direction} data-wire={wireState?.(port.id)}>
           <Handle id={handleId(port.id)} type={port.direction === 'in' ? 'target' : 'source'}
             position={side === 'left' ? Position.Left : Position.Right} className={port.type} isConnectable={editable} />

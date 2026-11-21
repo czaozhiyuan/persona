@@ -25,8 +25,9 @@ function readDefault(data: FormData, parameter: ParameterDefinition): ParameterD
     range: min === undefined && max === undefined ? undefined : { min, max } };
 }
 
-export function PropertiesPanel({ store, occurrence, occurrences, jumpToParameter }: {
+export function PropertiesPanel({ store, occurrence, occurrences, jumpToParameter, onAddPort }: {
   store: ProjectStore; occurrence: ResolvedInstance; occurrences: readonly ResolvedInstance[];
+  onAddPort: (path: InstancePath) => void;
   jumpToParameter: (path: InstancePath, parameterId: string) => void;
 }) {
   const { definition, instance, instancePath, parameters, settings } = occurrence;
@@ -157,8 +158,14 @@ export function PropertiesPanel({ store, occurrence, occurrences, jumpToParamete
         <button type="button" onClick={() => addModule('reuse')}>再次使用此模块</button>
         <button type="button" onClick={() => addModule('copy')}>复制为独立模块</button>
       </section>}
-      {!!definition.ports.length && <section>
-        <h3>{definition.kind === 'module' ? '对外端口' : '端口'}</h3>
+      <section className="v1-object-ports">
+        <div className="v1-object-ports-heading">
+          <h3>端口</h3>
+          <button type="button" className="primary" aria-haspopup="dialog" onClick={() => onAddPort(instancePath)}>＋ 添加端口</button>
+        </div>
+        <p className="v1-property-effective">编辑目标 · {instance?.name ?? definition.name}{definition.kind === 'module' && '（模块对外端口）'}</p>
+        {sharedLocations.length > 0 && <p className="v1-property-effective">共享定义 · 影响 {sharedLocations.join('、')}</p>}
+        {!definition.ports.length && <p className="empty">暂无端口。</p>}
         {definition.ports.map(port => <details key={port.id} data-port-id={port.id}>
           <summary>{portDisplayName(port)}<span className="v1-parameter-value">
             {portTypeLabels[port.type]} · {port.direction === 'in' ? '输入' : '输出'}
@@ -169,7 +176,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, jumpToParamete
               ports: definition.ports.map(item => item.id === port.id ? read() : item),
             }))} />
         </details>)}
-      </section>}
+      </section>
       <details className="v1-advanced-properties">
         <summary>高级设置 · 共享定义</summary>
         <p className="v1-property-effective">这里编辑共享定义。{sharedLocations.length > 0 && ` 改动会应用到 ${sharedLocations.join('、')}。`}</p>

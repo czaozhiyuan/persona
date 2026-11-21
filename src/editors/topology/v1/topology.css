@@ -70,6 +70,10 @@
 .react-flow__node.draggable .v1-frame-title { cursor: grab; }
 .v1-frame-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .v1-block-title strong { flex: 1; min-width: 0; }
+.v1-node-add-port {
+  flex: none; padding: 0 .3rem; border: 1px solid #90b6ad; border-radius: .25rem;
+  background: #f1faf6; color: #275d56; font: inherit; font-size: .75rem; cursor: pointer; pointer-events: auto;
+}
 .v1-module-toggle { flex: none; min-height: 1.3rem; width: 1.3rem; padding: 0; line-height: 1; border: 1px solid #9ab6ad; border-radius: .25rem; background: #fbfdfc; color: #214d46; }
 .v1-inline-shared { margin-top: .1rem; padding: .08rem .25rem; border-radius: .2rem; background: #fff; color: #375951; font-size: .7rem; white-space: nowrap; }
 .v1-module-pins .react-flow__handle { pointer-events: auto; }
@@ -98,6 +102,8 @@
 .v1-topology-port[data-wire="target"] .react-flow__handle, .react-flow__handle[data-wire="target"] { outline: 3px solid #0a8a6c; }
 .v1-topology-canvas .react-flow__edge.selected .react-flow__edge-path { stroke: #137d6c; stroke-width: 3; }
 .v1-topology-port.is-on-path .react-flow__handle { outline: 2px solid #a85618; }
+.v1-topology-port.is-new-port { background: #dff4ea; color: #145946; border-radius: .25rem; }
+.v1-topology-port.is-new-port .react-flow__handle { outline: 2px solid #208167; }
 .v1-topology-device strong { display: block; overflow-wrap: anywhere; margin-bottom: .25rem; }
 .v1-topology-port { position: relative; display: flex; gap: .3rem; align-items: center; justify-content: space-between; min-height: 1.5rem; font-size: .78rem; overflow-wrap: anywhere; }
 .v1-topology-port .react-flow__handle { width: .65rem; height: .65rem; background: #526865; border-color: #fff; }

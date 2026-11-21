@@ -7,7 +7,7 @@ import { createLinkBudget } from '../../engine/v1/link-budget';
 import { createOpticalBudgetForGraph } from '../../engine/v1/optical-budget';
 import type { LinkTrial, NamedLink } from '../../model/v1/topology';
 import { signalPortKey } from '../../engine/v1/signal-graph';
-import type { EndpointRef, InstancePath, Project } from '../../model/v1/types';
+import type { EndpointRef, InstancePath, PortDefinition, Project } from '../../model/v1/types';
 import type { ProjectStore } from '../../state/v1/project-store';
 import { parseProjectJson, serializeProjectJson } from '../../storage/v1/project-json';
 import type { BudgetHighlight } from '../../editors/topology/v1/path-highlight';
@@ -20,6 +20,9 @@ import { LibraryPanel } from './library-panel';
 import { LinkEditor } from './links/link-editor';
 import { createLinkOptions } from './links/link-options';
 import { ProfilePanel } from './properties/profile-panel';
+import { addDefinitionPort } from '../../state/v1/module-ports';
+import { AddPortDialog } from './properties/add-port-dialog';
+import { structureScope } from './structure-scope';
 import { PropertiesPanel } from './properties/properties-panel';
 import { returnToTopology } from './view-navigation';
 import type { TopologyLocation } from './view-navigation';
@@ -48,6 +51,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const importAttempt = useRef(0);
   const topologyLocation = useRef<TopologyLocation | undefined>(undefined);
   const [projectSession, setProjectSession] = useState(0);
+  const [portTarget, setPortTarget] = useState<InstancePath>();
+  const [newPort, setNewPort] = useState<EndpointRef>();
   const [page, setPage] = useState<Page>('canvas');
   const [savedProject, setSavedProject] = useState(project);
   const modified = project !== savedProject;
@@ -68,6 +73,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const active = activeOccurrence?.definition;
   const selected = selection.instancePath && store.resolveInstance(selection.instancePath);
   const properties = selected || activeOccurrence;
+  const targetPortOwner = portTarget && store.resolveInstance(portTarget);
   const layout = selection.view === 'topology' ? project.layout?.topology : project.layout?.physical;
   const linkOptions = useMemo(() => createLinkOptions(project), [project]);
   const budget = useMemo(() => createLinkBudget(project), [project]);
@@ -171,6 +177,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
       importAttempt.current++;
       topologyLocation.current = undefined;
       setProjectSession(session => session + 1);
+      setPortTarget(undefined);
+      setNewPort(undefined);
       setLinkInputs(new Map());
       setLocalOptical({ sources: [] });
       setExpandedHierarchy(new Set(['[]']));
@@ -323,6 +331,13 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     });
   }
 
+  function addPort(port: PortDefinition) {
+    if (!targetPortOwner) return '目标对象已不存在。';
+    const result = store.commit(draft => addDefinitionPort(draft, targetPortOwner.definition.id, port));
+    if (!result.ok) return result.message;
+    setNewPort({ instancePath: targetPortOwner.instancePath, portId: port.id });
+  }
+
   function renameSelection() {
     setPropertiesOpen(true);
     requestAnimationFrame(() => {
@@ -412,7 +427,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
               <TopologyEditor key={JSON.stringify(['topology', projectSession, selection.modulePath])}
                 store={store} state={state} module={active} pathResult={pathResult} graph={linkOptions.graph} rename={renameSelection}
                 expanded={expandedCanvas} setExpanded={setExpandedCanvas} budgetHighlight={budgetHighlight}
-                onPortBudget={selectBudgetPort} onDcBudget={showDc} />}
+                onPortBudget={selectBudgetPort} onDcBudget={showDc} onAddPort={setPortTarget} newPort={newPort} />}
           </div>
           <div className="v1-canvas-page v1-layout-scroll" inert={page !== 'canvas' || selection.view !== 'physical'}
             aria-hidden={page !== 'canvas' || selection.view !== 'physical'}>
@@ -507,10 +522,13 @@ export function Workbench({ store, loadExample, newProject }: Props) {
           </div>
           <div id="workbench-properties" className="v1-side-scroll" hidden={!propertiesOpen}>
             {properties && <PropertiesPanel key={JSON.stringify([projectSession, properties.instancePath])}
-              store={store} occurrence={properties} occurrences={linkOptions.graph.instances} jumpToParameter={jumpToParameter} />}
+              store={store} occurrence={properties} occurrences={linkOptions.graph.instances} jumpToParameter={jumpToParameter} onAddPort={setPortTarget} />}
           </div>
         </aside>
       </div>
+      {targetPortOwner && <AddPortDialog name={targetPortOwner.instance?.name ?? targetPortOwner.definition.name}
+        locations={structureScope(linkOptions.graph.instances, targetPortOwner.definition.id)}
+        add={addPort} close={() => setPortTarget(undefined)} />}
     </div>
   );
 }

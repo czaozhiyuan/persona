@@ -8,7 +8,7 @@ import { libraryDragType, readLibraryItem } from '../../../library/v1/insert-lib
 import type { LibraryItem } from '../../../library/v1/insert-library-item';
 import type { WiringSelection } from '../../../state/v1/remove-topology-object';
 import type { Connection } from '../../../model/v1/topology';
-import type { InstancePath, PortDefinition, PortMapping, Project } from '../../../model/v1/types';
+import type { EndpointRef, InstancePath, PortDefinition, PortMapping, Project } from '../../../model/v1/types';
 import { structureScope } from '../../../workbench/v1/structure-scope';
 import { BlockPorts } from './block-ports';
 import { frameHeader, frameInsets, ModuleFrame } from './module-frame';
@@ -33,6 +33,8 @@ type NodeData = {
   foldedPath?: boolean;
   toggle?: () => void;
   openPort: (id: string) => void;
+  addPort?: () => void;
+  newPortId?: string;
   wireState?: (id: string, inner?: boolean) => 'origin' | 'target' | undefined;
 };
 type DeviceNode = Node<NodeData, 'device'>;
@@ -50,23 +52,31 @@ function ExpandButton({ data, expanded }: { data: NodeData; expanded: boolean })
     onClick={event => { event.stopPropagation(); data.toggle?.(); }}>{expanded ? '−' : '+'}</button>;
 }
 
+function AddPortButton({ data }: { data: NodeData }) {
+  const label = `添加端口 · ${data.name}`;
+  return data.addPort && <button type="button" className="v1-node-add-port nodrag nopan" aria-label={label} title={label} aria-haspopup="dialog"
+    onDoubleClick={event => event.stopPropagation()}
+    onClick={event => { event.stopPropagation(); data.addPort?.(); }}>＋端口</button>;
+}
+
 function Device({ id, data, selected }: NodeProps<DeviceNode>) {
   const updateInternals = useUpdateNodeInternals();
   useEffect(() => updateInternals(id), [id, data.ports, data.foldedPath, updateInternals]);
   return <div className={`v1-topology-device${selected ? ' is-selected' : ''}${data.foldedPath ? ' has-folded-path' : ''}`}>
-    <div className="v1-block-title"><strong>{data.name}</strong><ExpandButton data={data} expanded={false} /></div>
+    <div className="v1-block-title"><strong>{data.name}</strong><AddPortButton data={data} /><ExpandButton data={data} expanded={false} /></div>
     {data.foldedPath && <span className="v1-topology-path-label">路径经过内部</span>}
-    <BlockPorts ports={data.ports} highlighted={data.pathPorts} handleId={handleId} editable wireState={data.wireState} openPort={data.openPort} />
+    <BlockPorts ports={data.ports} highlighted={data.pathPorts} newPortId={data.newPortId} handleId={handleId} editable wireState={data.wireState} openPort={data.openPort} />
   </div>;
 }
 
 function Frame({ id, data, selected }: NodeProps<FrameNode>) {
   return <>
-    <ModuleFrame id={id} name={data.name} ports={data.ports} highlighted={data.pathPorts} handleId={handleId}
+    <ModuleFrame id={id} name={data.name} ports={data.ports} highlighted={data.pathPorts} newPortId={data.newPortId} handleId={handleId}
       editable outerHandles={data.outerHandles} selected={selected} wireState={data.wireState} openPort={data.openPort}
       controls={<>
         {data.locations.length > 0 && <span className="v1-inline-shared" title={data.locations.join('、')}
           aria-label={`共享结构会应用到 ${data.locations.join('、')}`}>共享 · {data.locations.length} 处</span>}
+        <AddPortButton data={data} />
         <ExpandButton data={data} expanded />
       </>} />
     {data.resize && <FrameResizeHandles {...data.resize} />}
@@ -80,6 +90,8 @@ type Props = {
   instances: readonly ResolvedInstance[];
   modulePath: InstancePath;
   selectedInstance?: InstancePath;
+  onAddPort: (path: InstancePath) => void;
+  newPort?: EndpointRef;
   groupMode: boolean;
   groupPaths: readonly InstancePath[];
   changeGroupSelection: (paths: readonly InstancePath[], active?: boolean) => void;
@@ -108,7 +120,7 @@ export function TopologyCanvas(props: Props) {
 
 function EditableTopologyCanvas({ project, instances, modulePath, selectedInstance, pathResult, budgetHighlight, expanded, toggleModule, selectInstance,
   enterModule, move, resize, connect, mapPort, add, deleteSelection, rename, report, undo, redo, openPort,
-  groupMode, groupPaths, changeGroupSelection }: Props) {
+  groupMode, groupPaths, changeGroupSelection, onAddPort, newPort }: Props) {
   const flowStore = useStoreApi();
   const boxSelection = useRef<Set<string> | undefined>(undefined);
   const grouped = new Set(groupPaths.map(hierarchyKey));
@@ -212,6 +224,8 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
       foldedPath: !frame && !!item.instance && parentHighlight?.folded.has(item.instance.id),
       wireState: wireStart ? (port, inner) => wireState(id, port, inner) : undefined,
       openPort: portId => { cancelWiring(); openPort(path, portId); },
+      addPort: !groupMode && (active ?? rootKey) === key ? () => { cancelWiring(); onAddPort(path); } : undefined,
+      newPortId: newPort && hierarchyKey(newPort.instancePath) === key ? newPort.portId : undefined,
       toggle: !boundary && definition.kind === 'module' ? () => {
         cancelWiring();
         setSelectedEdgeKey(undefined);
