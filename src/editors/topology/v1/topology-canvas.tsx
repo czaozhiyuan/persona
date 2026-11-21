@@ -80,6 +80,9 @@ type Props = {
   instances: readonly ResolvedInstance[];
   modulePath: InstancePath;
   selectedInstance?: InstancePath;
+  groupMode: boolean;
+  groupPaths: readonly InstancePath[];
+  changeGroupSelection: (paths: readonly InstancePath[], active?: boolean) => void;
   pathResult?: PathResult;
   budgetHighlight?: BudgetHighlight;
   expanded: ReadonlySet<string>;
@@ -104,8 +107,11 @@ export function TopologyCanvas(props: Props) {
 }
 
 function EditableTopologyCanvas({ project, instances, modulePath, selectedInstance, pathResult, budgetHighlight, expanded, toggleModule, selectInstance,
-  enterModule, move, resize, connect, mapPort, add, deleteSelection, rename, report, undo, redo, openPort }: Props) {
+  enterModule, move, resize, connect, mapPort, add, deleteSelection, rename, report, undo, redo, openPort,
+  groupMode, groupPaths, changeGroupSelection }: Props) {
   const flowStore = useStoreApi();
+  const boxSelection = useRef<Set<string> | undefined>(undefined);
+  const grouped = new Set(groupPaths.map(hierarchyKey));
   const [wireStart, setWireStart] = useState<string>();
   const cancelled = useRef(false);
   const connected = useRef(false);
@@ -213,12 +219,12 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
       } : undefined,
     };
     const placement = { id, ariaLabel: name, position: drag?.key === key ? drag.position : node.position,
-      parentId: parentKey === undefined ? undefined : nodeId(parentKey), selected: active === key && !boundary };
+      parentId: parentKey === undefined ? undefined : nodeId(parentKey), selected: (active === key || grouped.has(key)) && !boundary };
     // Keep sibling blocks accessible where an expanded branch overlaps their stored positions.
     if (!frame) return { ...placement, type: 'device',
       zIndex: 2 + (deepest - path.length) * 2 + Number(path[modulePath.length] === selectedBranch), data };
     const direct = scopes.get(key)?.members ?? [];
-    return { ...placement, type: 'moduleFrame', draggable: !boundary, dragHandle: '.v1-frame-title',
+    return { ...placement, type: 'moduleFrame', draggable: !boundary && !groupMode, dragHandle: '.v1-frame-title',
       selectable: !boundary, focusable: !boundary, zIndex: path.length - deepest - 2,
       style: { width: frame.display.width, height: frame.display.height, pointerEvents: 'none' },
       data: { ...data, outerHandles: !boundary, locations: boundary ? [] : structureScope(instances, definition.id),
@@ -251,6 +257,9 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
         event.preventDefault();
         cancelWiring();
         report('');
+      } else if (event.key === 'Escape' && groupMode) {
+        event.preventDefault();
+        changeGroupSelection([], false);
       } else if (event.key === 'F2' && selectedNode && selectedNode.key !== rootKey) {
         event.preventDefault();
         rename();
@@ -292,7 +301,18 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
       nodeTypes={nodeTypes} ariaLabelConfig={flowAriaLabels} fitView fitViewOptions={canvasFitOptions}
       viewport={viewport} onViewportChange={changeViewport} onInit={instance => { flow.current = instance; }}
       minZoom={0.001} maxZoom={2} deleteKeyCode={null} connectionMode={ConnectionMode.Loose}
-      zIndexMode="manual"
+      zIndexMode="manual" nodesDraggable={!groupMode} selectionOnDrag={groupMode} panOnDrag={groupMode ? [1, 2] : true}
+      onSelectionStart={() => {
+        cancelWiring();
+        setSelectedEdgeKey(undefined);
+        boxSelection.current = new Set(nodes.filter(node => node.selected).map(node => node.data.key));
+      }}
+      onSelectionEnd={() => {
+        const keys = boxSelection.current;
+        boxSelection.current = undefined;
+        if (keys) changeGroupSelection(items.filter(item => item.key !== rootKey && keys.has(item.key)).map(item => item.item.instancePath));
+        queueMicrotask(() => flowStore.setState({ nodesSelectionActive: false }));
+      }}
       connectionLineStyle={cancelled.current ? { opacity: 0 } : undefined}
       isValidConnection={edge => !cancelled.current && !scopedWiringProblem(...connectionPorts(edge))}
       onConnect={onConnect} onConnectStart={startWiring} onClickConnectStart={startWiring}
@@ -311,20 +331,33 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
         }
         setWireStart(undefined);
       }}
-      onPaneClick={() => { cancelWiring(); setSelectedEdgeKey(undefined); selectInstance(); report(''); }}
-      onEdgeClick={(_, edge) => { cancelWiring(); selectInstance(); setSelectedEdgeKey(edge.id); report(''); }}
+      onPaneClick={() => {
+        cancelWiring(); setSelectedEdgeKey(undefined); selectInstance(); report('');
+        if (groupMode) changeGroupSelection([]);
+      }}
+      onEdgeClick={(_, edge) => { if (!groupMode) { cancelWiring(); selectInstance(); setSelectedEdgeKey(edge.id); report(''); } }}
       onNodeClick={(event, node) => {
         if (node.data.key === rootKey || (event.target instanceof Element && event.target.closest('.react-flow__handle'))) return;
         cancelWiring();
         setSelectedEdgeKey(undefined);
-        selectInstance(node.data.path);
+        if (groupMode || event.ctrlKey || event.metaKey) {
+          const initial = groupMode ? groupPaths : selectedInstance ? [selectedInstance] : [];
+          const picked = initial.some(path => hierarchyKey(path) === node.data.key);
+          changeGroupSelection(picked ? initial.filter(path => hierarchyKey(path) !== node.data.key) : [...initial, node.data.path]);
+        } else selectInstance(node.data.path);
         report('');
       }}
       onNodeDoubleClick={(event, node) => {
         if (event.target instanceof Element && event.target.closest('.react-flow__handle')) return;
-        if (node.data.toggle) enterModule(node.data.path);
+        if (!groupMode && node.data.toggle) enterModule(node.data.path);
       }}
       onNodesChange={changes => {
+        for (const change of changes) {
+          if (change.type !== 'select' || !boxSelection.current) continue;
+          const key = decodeURIComponent(change.id);
+          if (change.selected) boxSelection.current.add(key);
+          else boxSelection.current.delete(key);
+        }
         const dimensions = changes.flatMap(change => {
           if (change.type !== 'dimensions' || !change.dimensions) return [];
           const key = decodeURIComponent(change.id);
