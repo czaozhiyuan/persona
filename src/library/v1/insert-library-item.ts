@@ -1,6 +1,6 @@
 import type { InstancePath, Project } from '../../model/v1/types';
 import { editModule, moveTopologyNode } from '../../state/v1/topology-edits';
-import { blankEnclosureId, blankModuleId, builtInDefinitions } from './built-in';
+import { builtInDefinitions, isBlankTemplate } from './built-in';
 import { addTemplateInstance } from './project-snapshots';
 
 export type LibraryItem = { source: 'template' | 'project'; id: string; name: string };
@@ -31,7 +31,7 @@ export function insertLibraryItem(project: Project, item: LibraryItem, moduleId:
         switchStateId: definition.kind === 'component' ? definition.switchStates?.[0]?.id : undefined,
       }],
     }));
-  } else if (item.id === blankModuleId || item.id === blankEnclosureId) {
+  } else if (isBlankTemplate(item.id)) {
     const template = builtInDefinitions.find(entry => entry.id === item.id)!;
     const definition = { ...template, id: instanceId, name: item.name };
     updated = addTemplateInstance(project, [definition], definition.id, moduleId, instanceId, item.name).project;

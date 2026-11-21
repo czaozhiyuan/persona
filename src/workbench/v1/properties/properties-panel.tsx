@@ -35,6 +35,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, jumpToParamete
   const [deletion, setDeletion] = useState<string>();
   const parentPath = instancePath.slice(0, -1);
   const parent = instance && store.resolveInstance(parentPath)?.definition;
+  const enclosure = definition.kind === 'module' ? definition.physicalEnclosure : undefined;
   const sharedLocations = structureScope(occurrences, definition.id);
   const parentLocations = parent ? structureScope(occurrences, parent.id) : [];
 
@@ -157,6 +158,24 @@ export function PropertiesPanel({ store, occurrence, occurrences, jumpToParamete
         {parentLocations.length > 0 && <p className="v1-property-effective">在上级模块添加后，以下位置都会新增此对象：{parentLocations.join('、')}。</p>}
         <button type="button" onClick={() => addModule('reuse')}>再次使用此模块</button>
         <button type="button" onClick={() => addModule('copy')}>复制为独立模块</button>
+      </section>}
+      {definition.kind === 'module' && enclosure && <section>
+        <h3>机箱尺寸</h3>
+        {sharedLocations.length > 0 && <p className="v1-property-effective">共享定义 · 影响 {sharedLocations.join('、')}</p>}
+        <form key={JSON.stringify(enclosure)} onSubmit={event => {
+          event.preventDefault();
+          const data = new FormData(event.currentTarget);
+          changeDefinition(() => ({ ...definition, physicalEnclosure: {
+            widthMm: Number(data.get('width')), depthMm: Number(data.get('depth')), heightMm: Number(data.get('height')),
+          } }));
+        }}>
+          <div className="v1-enclosure-dimensions">
+            <label>宽 (mm)<input type="number" name="width" min="0.001" step="any" defaultValue={enclosure.widthMm} required /></label>
+            <label>深 (mm)<input type="number" name="depth" min="0.001" step="any" defaultValue={enclosure.depthMm} required /></label>
+            <label>高 (mm)<input type="number" name="height" min="0.001" step="any" defaultValue={enclosure.heightMm} required /></label>
+          </div>
+          <button type="submit">保存机箱尺寸</button>
+        </form>
       </section>}
       <section className="v1-object-ports">
         <div className="v1-object-ports-heading">

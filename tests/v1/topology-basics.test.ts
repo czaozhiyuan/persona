@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { wiringProblem } from '../../src/editors/topology/v1/wiring-validation';
-import { blankEnclosureId, blankModuleId, builtInDefinitions } from '../../src/library/v1/built-in';
+import { blankComponentId, blankEnclosureId, blankModuleId, builtInDefinitions } from '../../src/library/v1/built-in';
 import { insertLibraryItem } from '../../src/library/v1/insert-library-item';
 import type { ModuleDefinition, PortDefinition, Project } from '../../src/model/v1/types';
 import { createProjectStore } from '../../src/state/v1/project-store';
@@ -28,6 +28,32 @@ test('each built-in can be inserted from a blank project and blank containers re
   assert.deepEqual(restored.layout?.topology, [{ instancePath: ['tx'], x: 12, y: 34 }]);
   assert.ok(restored.componentDefinitions.find(item => item.id === 'library-rf-amplifier')
     ?.parameters?.every(parameter => parameter.defaultValue === undefined));
+});
+
+test('blank devices are independent, empty and restored with their nested placement in one history entry', () => {
+  const store = createProjectStore(empty);
+  const container = { source: 'template', id: blankModuleId, name: '机内模块' } as const;
+  const device = { source: 'template', id: blankComponentId, name: '待定义器件' } as const;
+  assert.equal(store.commit(draft => insertLibraryItem(draft, container, root.id, [], 'module')).ok, true);
+  assert.equal(store.commit(draft => insertLibraryItem(draft, device, 'module', ['module'], 'first', { x: 105, y: 83 })).ok, true);
+  const beforeSecond = store.getSnapshot().project;
+  assert.equal(store.commit(draft => insertLibraryItem(draft, device, 'module', ['module'], 'second', { x: 320, y: 83 })).ok, true);
+  assert.deepEqual(store.resolveInstance(['module', 'first'])?.definition,
+    { id: 'first', name: device.name, kind: 'component', ports: [] });
+  assert.equal(store.resolveInstance(['module', 'second'])?.definition.id, 'second');
+  store.undo();
+  assert.deepEqual(store.getSnapshot().project, beforeSecond);
+  assert.equal(store.resolveInstance(['module', 'second']), undefined);
+  store.redo();
+  const restored = parseProjectJson(serializeProjectJson(store.getSnapshot().project));
+  assert.deepEqual(restored.layout?.topology, [
+    { instancePath: ['module', 'first'], x: 105, y: 83 },
+    { instancePath: ['module', 'second'], x: 320, y: 83 },
+  ]);
+  assert.deepEqual(restored.componentDefinitions.map(({ id, name, ports, transfers }) => ({ id, name, ports, transfers })), [
+    { id: 'first', name: device.name, ports: [], transfers: undefined },
+    { id: 'second', name: device.name, ports: [], transfers: undefined },
+  ]);
 });
 
 test('wiring diagnostics distinguish directions, signal categories and duplicate connections', () => {

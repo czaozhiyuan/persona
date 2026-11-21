@@ -88,7 +88,13 @@
 .v1-module-pins.left .v1-frame-outer-handle { left: -3px; }
 .v1-module-pins.right .v1-frame-inner-handle { left: calc(100% - 3px); }
 .v1-module-pins.right .v1-frame-outer-handle { left: calc(100% + 3px); }
-.v1-topology-canvas { position: absolute; inset: 0; overflow: hidden; background: #f6faf9; }
+.v1-topology-canvas { position: absolute; inset: 0; overflow: hidden; background: #f6faf9; isolation: isolate; }
+.v1-module-placement { position: absolute; inset: 0; z-index: 5; cursor: crosshair; }
+.v1-placement-hint {
+  position: absolute; z-index: 2; bottom: 14px; right: 14px; max-width: calc(100% - 14rem);
+  margin: 0; padding: .4rem .6rem; border: 1px solid #bdd5cd; border-radius: .35rem;
+  background: #f1faf6; color: #214d46; font-size: .82rem; pointer-events: none;
+}
 .v1-topology-empty {
   position: absolute; top: 50%; left: 50%; translate: -50% -50%;
   text-align: center; color: #536867; pointer-events: none;
@@ -114,7 +120,7 @@
 .v1-topology-port .DC_POWER { background: #ad5420; }
 .v1-topology-tools {
   position: relative; z-index: 3; flex: none; padding: .25rem .65rem;
-  display: flex; align-items: center; gap: .45rem;
+  display: flex; flex-wrap: wrap; align-items: center; gap: .45rem;
   border-top: 1px solid #cbdad5; background: #f9fbfa;
 }
 .v1-group-count { color: #42605f; font-size: .8rem; }

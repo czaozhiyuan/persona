@@ -3,6 +3,7 @@
 .v1-object-ports-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; }
 .v1-object-ports-heading h3 { margin: 0; }
 .v1-add-port-dialog form label { display: grid; gap: .25rem; margin: .6rem 0; }
+.v1-enclosure-dimensions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .35rem; }
 .v1-property-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .85rem; }
 .v1-properties form { margin: .7rem 0; max-width: 36rem; }
 .v1-properties label { display: block; margin: .6rem 0; font-size: .87rem; }

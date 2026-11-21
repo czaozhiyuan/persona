@@ -18,8 +18,11 @@ const attenuation = numeric('gain', '净增益（带符号）', 'dB', { max: 0 }
 const voltage = numeric('voltage', '输出电压', 'V', { min: Number.MIN_VALUE });
 const capacity = numeric('capacity', '额定输出功率', 'W', { min: 0 });
 
+export const blankComponentId = 'library-empty-component';
 export const blankModuleId = 'library-empty-module';
 export const blankEnclosureId = 'library-empty-enclosure';
+
+export const isBlankTemplate = (id: string) => id === blankComponentId || id === blankModuleId || id === blankEnclosureId;
 
 export const builtInDefinitions = [
   {
@@ -38,6 +41,7 @@ export const builtInDefinitions = [
     portMappings: rfPorts.map(port => ({ portId: port.id, target: { instanceId: 'amplifier', portId: port.id } })),
     parameterMappings: [{ parameterId: 'gain', target: { instanceId: 'amplifier', parameterId: 'gain' } }],
   },
+  { kind: 'component', id: blankComponentId, name: '空白器件', ports: [] },
   { kind: 'module', id: blankModuleId, name: '空白模块', ports: [], instances: [] },
   { kind: 'module', id: blankEnclosureId, name: '空机箱', ports: [], instances: [],
     physicalEnclosure: { widthMm: 440, depthMm: 350, heightMm: 44.45 } },

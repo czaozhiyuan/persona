@@ -1,6 +1,6 @@
 import type { Rect, XYPosition } from '@xyflow/react';
 import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
-import type { InstancePath, ModuleDefinition, Project } from '../../../model/v1/types';
+import type { InstancePath, ModuleDefinition, PortDefinition, Project } from '../../../model/v1/types';
 import { defaultTopologyPosition } from '../../../state/v1/topology-position';
 import { blockPortRows } from './block-ports';
 import { fitModuleFrame, keepNodeInside, minimumFrame, moduleExtent } from './frame-geometry';
@@ -8,6 +8,9 @@ import { hierarchyChildren, hierarchyKey } from './hierarchy-view';
 import { frameInsets, framePadding } from './module-frame';
 
 type Size = { width: number; height: number };
+export const estimatedBlockSize = (ports: readonly PortDefinition[]): Size =>
+  ({ width: 202, height: 48 + blockPortRows(ports) * 24 });
+
 type Frame = { base: Rect; display: Rect; saved: boolean };
 export type TopologyItem = {
   item: ResolvedInstance;
@@ -50,7 +53,7 @@ export function projectTopology(project: Project, instances: readonly ResolvedIn
       const placement = positions.get(childKey);
       const preferred = placement ? { x: placement.x, y: placement.y }
         : defaultTopologyPosition(index, ports.length);
-      const size = measured.get(childKey) ?? { width: 202, height: 48 + blockPortRows(child.definition.ports) * 24 };
+      const size = measured.get(childKey) ?? estimatedBlockSize(child.definition.ports);
       return { item: child, key: childKey, bounds: { ...preferred, ...size }, preferred, position: preferred, offset: { x: 0, y: 0 } };
     });
 
