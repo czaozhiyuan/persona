@@ -26,7 +26,7 @@ import { CableForm, ConnectionForm, MappingForm, TopologyTool, field } from './w
 import type { LocalPort, UpdateWiring } from './wiring-forms';
 import './topology.css';
 
-export function TopologyEditor({ store, state, module, pathResult, graph, rename, expanded, setExpanded, budgetHighlight, onPortBudget, onDcBudget, onAddPort, newPort, onAddInside, onSelectObject, onSelectObjects, moveAcrossLevels, requestMoveUp, focusMoved }: {
+export function TopologyEditor({ store, state, module, pathResult, graph, rename, expanded, setExpanded, budgetHighlight, onPortBudget, onDcBudget, onAddPort, newPort, onAddInside, onSelectObject, onSelectObjects, moveAcrossLevels, requestMoveUp, focusMoved, copyModule, pasteModule, copyNotice }: {
   store: ProjectStore; state: ProjectStoreSnapshot; module: ModuleDefinition; pathResult?: PathResult; graph: SignalGraph; rename: () => void;
   expanded: ReadonlySet<string>; setExpanded: (value: ReadonlySet<string>) => void;
   budgetHighlight?: BudgetHighlight;
@@ -38,6 +38,9 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
   onSelectObjects: (paths: readonly InstancePath[]) => void;
   moveAcrossLevels: (base: Project, plan: ApprovedMove, layout?: ReparentLayout) => string | undefined;
   requestMoveUp: (path: InstancePath) => void;
+  copyModule: Parameters<typeof TopologyCanvas>[0]['copyModule'];
+  pasteModule: Parameters<typeof TopologyCanvas>[0]['pasteModule'];
+  copyNotice: string;
   focusMoved?: InstancePath;
   newPort?: EndpointRef;
 }) {
@@ -207,7 +210,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
         onAddPort={onAddPort} newPort={newPort}
         openPort={(path, portId) => { setMessage(''); setPortAction({ path, portId }); }}
         add={add} placingModule={placingModule} cancelPlacement={() => { setPlacingModule(false); setMessage(''); }}
-        deleteSelection={deleteSelection} rename={rename} report={setMessage} undo={store.undo} redo={store.redo}
+        deleteSelection={deleteSelection} rename={rename} copyModule={copyModule} pasteModule={pasteModule} report={setMessage} undo={store.undo} redo={store.redo}
         move={(moves, frame) => commit(draft => {
           const placed = moveTopologyNodes(draft, moves);
           return frame ? resizeTopologyFrame(placed, frame) : placed;
@@ -238,6 +241,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
         <output htmlFor="topology-depth">{visibleDepth} / {maxDepth}</output>
       </div>
       {placingModule && <p className="v1-placement-hint" role="status">单击画布放置到「{moduleName}」 · Esc 取消</p>}
+      {copyNotice && !message && <p className="v1-topology-message v1-module-copy-notice" role="status">{copyNotice}</p>}
       {message && !preview && !portAction && !bindingPreview && !groupDialog && <p className="v1-topology-message error" role="alert">{message}</p>}
     </div>
     <div className="v1-topology-tools">
