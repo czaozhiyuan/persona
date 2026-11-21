@@ -2,16 +2,21 @@ import { useState } from 'react';
 import { DEFAULT_CONVERSION_K } from '../../../model/v1/device';
 import type { ConversionProfile } from '../../../model/v1/device';
 import type { ProjectStore } from '../../../state/v1/project-store';
+import { CalibrationCurveEditor, readCalibrationCurve } from './calibration-curve-editor';
+import type { CurvePointDraft } from './calibration-curve-editor';
 import { EmpiricalField, numberField, readEmpirical, textField } from './value-fields';
 
 function ProfileForm({ profile, save }: { profile?: ConversionProfile; save: (read: () => ConversionProfile) => void }) {
   const [kind, setKind] = useState(profile?.rfGainRefDb.kind ?? 'fixed');
+  const [curve, setCurve] = useState<CurvePointDraft[]>(() => profile?.rfGainRefDb.kind === 'rfCurve'
+    ? profile.rfGainRefDb.points.map(([frequency, gain], index) => ({ id: String(index), frequency: String(frequency), gain: String(gain) }))
+    : []);
   return <form onSubmit={event => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     save(() => {
       const name = textField(data, 'name');
-      const rfGainRefDb = readEmpirical(data, 'gain', kind);
+      const rfGainRefDb = kind === 'rfCurve' ? readCalibrationCurve(curve) : readEmpirical(data, 'gain', 'fixed');
       if (!name || !rfGainRefDb) throw new Error('请填写标定名称和基准射频增益。');
       return {
         ...profile, id: profile?.id ?? crypto.randomUUID(), name, rfGainRefDb,
@@ -23,7 +28,8 @@ function ProfileForm({ profile, save }: { profile?: ConversionProfile; save: (re
     <label>基准射频增益类型<select value={kind} onChange={event => setKind(event.target.value as typeof kind)}>
       <option value="fixed">固定值</option><option value="rfCurve">射频曲线折点</option>
     </select></label>
-    <EmpiricalField key={kind} name="gain" kind={kind} label="整段基准射频增益 (dB)" value={profile?.rfGainRefDb} required />
+    {kind === 'rfCurve' ? <CalibrationCurveEditor draft={curve} onChange={setCurve} />
+      : <EmpiricalField name="gain" kind="fixed" label="整段基准射频增益 (dB)" value={profile?.rfGainRefDb} required />}
     <div className="v1-property-pair">
       <label>探测器参考光功率 (dBm)<input name="pdReference" type="number" step="any" defaultValue={profile?.pdPowerRefDbm} required /></label>
       <label>经验系数 K<input name="k" type="number" step="any" defaultValue={profile?.k} placeholder={String(DEFAULT_CONVERSION_K)} /></label>
