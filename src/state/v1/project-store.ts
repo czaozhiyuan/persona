@@ -8,6 +8,7 @@ type Selection = Readonly<{
   view: View;
   modulePath: InstancePath;
   instancePath?: InstancePath;
+  instancePaths?: readonly InstancePath[];
   linkId?: string;
 }>;
 
@@ -56,13 +57,19 @@ export function createProjectStore(initialProject: Project) {
     for (const listener of listeners) listener();
   }
 
+  function objectSelection(paths: readonly InstancePath[]): Pick<Selection, 'instancePath' | 'instancePaths'> {
+    const unique = new Map(paths.filter(path => hierarchy.resolveInstance(path)).map(path => [JSON.stringify(path), [...path]]));
+    const objects = [...unique.values()];
+    if (objects.length < 2) return { instancePath: objects[0] };
+    return { instancePath: undefined, instancePaths: objects };
+  }
+
   function reconcile(project: Project): Selection {
-    const selection = snapshot.selection;
-    let { modulePath, instancePath, linkId } = selection;
+    const { instancePath, instancePaths, ...selection } = snapshot.selection;
+    let { modulePath, linkId } = selection;
     while (hierarchy.resolveInstance(modulePath)?.definition.kind !== 'module') modulePath = modulePath.slice(0, -1);
-    if (instancePath && !hierarchy.resolveInstance(instancePath)?.instance) instancePath = undefined;
     if (linkId !== undefined && !project.namedLinks?.some(link => link.id === linkId)) linkId = undefined;
-    return { ...selection, modulePath, instancePath, linkId };
+    return { ...selection, modulePath, ...objectSelection(instancePaths ?? (instancePath ? [instancePath] : [])), linkId };
   }
 
   function changeProject(project: Project, resetSelection = false) {
@@ -116,12 +123,18 @@ export function createProjectStore(initialProject: Project) {
 
   function selectModule(path: InstancePath) {
     if (hierarchy.resolveInstance(path)?.definition.kind !== 'module' || samePath(path, snapshot.selection.modulePath)) return;
-    publish(snapshot.project, { ...snapshot.selection, modulePath: [...path], instancePath: undefined });
+    const { instancePaths, ...selection } = snapshot.selection;
+    publish(snapshot.project, { ...selection, modulePath: [...path], instancePath: undefined });
+  }
+
+  function selectInstances(paths: readonly InstancePath[]) {
+    const { instancePaths, ...selection } = snapshot.selection;
+    publish(snapshot.project, { ...selection, ...objectSelection(paths) });
   }
 
   function selectInstance(path?: InstancePath) {
-    if (path && !hierarchy.resolveInstance(path)?.instance) return;
-    publish(snapshot.project, { ...snapshot.selection, instancePath: path && [...path] });
+    if (path && !hierarchy.resolveInstance(path)) return;
+    selectInstances(path ? [path] : []);
   }
 
   function selectLink(linkId?: string) {
@@ -135,7 +148,7 @@ export function createProjectStore(initialProject: Project) {
       listeners.add(listener);
       return () => { listeners.delete(listener); };
     },
-    commit, replaceProject, undo, redo, setView, selectModule, selectInstance, selectLink,
+    commit, replaceProject, undo, redo, setView, selectModule, selectInstance, selectInstances, selectLink,
     resolveInstance: (path: InstancePath) => hierarchy.resolveInstance(path),
   };
 }

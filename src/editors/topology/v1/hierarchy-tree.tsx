@@ -7,20 +7,21 @@ import { hierarchyChildren, hierarchyKey } from './hierarchy-view';
 type Props = {
   instances: readonly ResolvedInstance[];
   modulePath: InstancePath;
-  selected?: InstancePath;
+  selected: readonly InstancePath[];
   expanded: ReadonlySet<string>;
   toggle: (path: InstancePath) => void;
-  navigate: (path: InstancePath, module: boolean) => void;
+  select: (path: InstancePath, extend: boolean) => void;
+  enter: (path: InstancePath) => void;
   navigatePort: (path: InstancePath, portId: string) => void;
 };
 
-export function HierarchyTree({ instances, modulePath, selected, expanded, toggle, navigate, navigatePort }: Props) {
+export function HierarchyTree({ instances, modulePath, selected, expanded, toggle, select, enter, navigatePort }: Props) {
   const children = hierarchyChildren(instances);
   const root = instances[0];
   const pending = root ? [root] : [];
   const rows: ResolvedInstance[] = [];
   const active = hierarchyKey(modulePath);
-  const selectedKey = selected && hierarchyKey(selected);
+  const selectedKeys = new Set(selected.map(hierarchyKey));
   while (pending.length) {
     const occurrence = pending.pop()!;
     rows.push(occurrence);
@@ -41,9 +42,10 @@ export function HierarchyTree({ instances, modulePath, selected, expanded, toggl
             aria-label={`${open ? '折叠' : '展开'} ${name}`} onClick={() => toggle(instancePath)}>{open ? '▾' : '▸'}</button>
             : <span className="v1-hierarchy-disclosure" />}
           <button type="button" className="v1-hierarchy-entry" title={`${name} · ${definition.name}`}
-            aria-label={`定位 ${name}`}
-            aria-current={key === active ? 'location' : undefined} aria-pressed={key === selectedKey}
-            onClick={() => navigate(instancePath, module)}>
+            aria-label={`选中 ${name}`}
+            aria-current={key === active ? 'location' : undefined} aria-pressed={selectedKeys.has(key)}
+            onClick={event => select(instancePath, event.ctrlKey || event.shiftKey || event.metaKey)}
+            onDoubleClick={module ? () => enter(instancePath) : undefined}>
             <span className={`v1-hierarchy-icon ${module ? 'module' : ''}`} aria-hidden="true" />
             <span>{name}</span>
           </button>
