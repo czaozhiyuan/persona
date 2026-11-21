@@ -1,11 +1,14 @@
 import type { PathResult } from '../../../engine/v1/path-resolver';
+import type { SignalEdge } from '../../../engine/v1/signal-graph';
 import { signalPortKey } from '../../../engine/v1/signal-graph';
 import type { EndpointRef, InstancePath } from '../../../model/v1/types';
 
 export const canvasEdgeKey = (kind: 'connection' | 'mapping' | 'core', id: string, coreId?: string) =>
   JSON.stringify(coreId === undefined ? [kind, id] : [kind, id, coreId]);
 
-export function projectPathHighlight(result: PathResult | undefined, scope: InstancePath) {
+export type BudgetHighlight = { endpoints?: readonly EndpointRef[]; edges?: readonly SignalEdge[] };
+
+export function projectPathHighlight(result: PathResult | undefined, scope: InstancePath, budget?: BudgetHighlight) {
   const edges = new Set<string>();
   const ports = new Set<string>();
   const folded = new Set<string>();
@@ -17,15 +20,17 @@ export function projectPathHighlight(result: PathResult | undefined, scope: Inst
     else folded.add(ref.instancePath[scope.length]);
   }
   const paths = [result?.trace, ...(result?.trace?.supplies.flatMap(supply => supply.status === 'resolved' ? [supply.path] : []) ?? [])];
+  function markEdge({ source }: SignalEdge) {
+    if (source.kind === 'connection' && exactScope(source.ref.scopePath)) edges.add(canvasEdgeKey('connection', source.ref.connectionId));
+    if (source.kind === 'cableCore' && exactScope(source.ref.scopePath)) edges.add(canvasEdgeKey('core', source.ref.bundleId, source.ref.coreId));
+    if (source.kind === 'portMapping' && exactScope(source.publicPort.instancePath)) edges.add(canvasEdgeKey('mapping', source.publicPort.portId));
+  }
   for (const path of paths) {
     for (const step of path?.steps ?? []) markPort(step.port.ref);
-    for (const edge of path?.edges ?? []) {
-      const source = edge.source;
-      if (source.kind === 'connection' && exactScope(source.ref.scopePath)) edges.add(canvasEdgeKey('connection', source.ref.connectionId));
-      if (source.kind === 'cableCore' && exactScope(source.ref.scopePath)) edges.add(canvasEdgeKey('core', source.ref.bundleId, source.ref.coreId));
-      if (source.kind === 'portMapping' && exactScope(source.publicPort.instancePath)) edges.add(canvasEdgeKey('mapping', source.publicPort.portId));
-    }
+    for (const edge of path?.edges ?? []) markEdge(edge);
   }
+  budget?.endpoints?.forEach(markPort);
+  budget?.edges?.forEach(markEdge);
   if (result && result.status !== 'resolved' && result.endpoint) markPort(result.endpoint);
   return { edges, ports, folded };
 }

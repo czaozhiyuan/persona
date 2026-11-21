@@ -202,7 +202,7 @@ export function createPathResolver(project: Project) {
     } catch (error) {
       return { status: 'invalid_reference', reason: (error as Error).message };
     }
-    if (!link.from || !link.to) return { status: 'incomplete', reason: '命名链路需要设置起点和终点。' };
+    if (!link.from || !link.to) return { status: 'incomplete', reason: '尚未连接：请设置链路起点和终点。' };
     return resolve({ from: link.from, to: link.to, channelId: link.channelId }, options, link);
   }
 

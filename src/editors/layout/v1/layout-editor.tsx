@@ -51,7 +51,9 @@ function PendingItems({ items, place }: { items: readonly LayoutOccurrence[]; pl
   </li>)}</ul>;
 }
 
-export function LayoutEditor({ store, state }: { store: ProjectStore; state: ProjectStoreSnapshot }) {
+export function LayoutEditor({ store, state, onDcBudget }: {
+  store: ProjectStore; state: ProjectStoreSnapshot; onDcBudget: (scope: InstancePath) => void;
+}) {
   const { project, selection } = state;
   const [requestedEnclosure, setRequestedEnclosure] = useState<{ key: string; scope: string }>();
   const [error, setError] = useState('');
@@ -171,6 +173,7 @@ export function LayoutEditor({ store, state }: { store: ProjectStore; state: Pro
         </select>
       </label>
     </div>
+    <button type="button" onClick={() => onDcBudget(active.instancePath)}>查看供电/功耗</button>
     <div className="v1-layout-content">
       <aside className="v1-layout-pending" aria-labelledby="layout-pending-title">
         <h3 id="layout-pending-title">待放置对象</h3>

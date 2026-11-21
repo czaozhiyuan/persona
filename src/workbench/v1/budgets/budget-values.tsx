@@ -13,6 +13,6 @@ export function Rating({ check }: { check?: InputRatingCheck }) {
   if (!check || check.status === 'within_range') return <>—</>;
   if (check.status === 'unknown') return <>无法判断 · {check.reason}</>;
   return <strong className="v1-budget-warning">
-    {check.status === 'above_max' ? '超出上限' : '低于下限'} {check.excess.toFixed(1)} {check.limits.unit}
+    实际超限 · {check.status === 'above_max' ? '超出上限' : '低于下限'} {check.excess.toFixed(1)} {check.limits.unit}
   </strong>;
 }

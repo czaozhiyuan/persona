@@ -1,6 +1,6 @@
 import { resolveOpticalChannel } from '../../model/v1/channels';
 import type { OpticalChannelId } from '../../model/v1/channels';
-import type { ConversionBoundary } from '../../model/v1/topology';
+import type { ConversionBoundary, OpticalSource } from '../../model/v1/topology';
 import type { EndpointRef, Project } from '../../model/v1/types';
 import { addGain, budgetValue, checkInputRating, unavailable } from './budget-metric';
 import type { BudgetMetric, InputRatingCheck } from './budget-metric';
@@ -10,7 +10,7 @@ import type { SearchResult, SignalPath } from './path-search';
 import { buildSignalGraph, signalPortKey } from './signal-graph';
 import type { SignalEdge, SignalGraph, SignalPort } from './signal-graph';
 
-export type OpticalSource = { endpoint: EndpointRef; channelId: OpticalChannelId; powerDbm?: number };
+export type { OpticalSource } from '../../model/v1/topology';
 export type LocalOpticalRequest =
   | { source: OpticalSource; to: EndpointRef }
   | { eo: ConversionBoundary; sources: readonly OpticalSource[]; channelId: OpticalChannelId; to: EndpointRef };
