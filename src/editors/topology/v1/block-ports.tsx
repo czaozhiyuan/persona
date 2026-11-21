@@ -1,3 +1,4 @@
+import { signalColor } from './signal-wire';
 import { portDisplayName, portTypeLabels } from '../../../workbench/v1/labels';
 import { Handle, Position } from '@xyflow/react';
 import type { PortDefinition } from '../../../model/v1/types';
@@ -32,7 +33,7 @@ export function BlockPorts({ ports, highlighted, newPortId, handleId, editable =
         <div className={`v1-topology-port${highlighted.has(port.id) ? ' is-on-path' : ''}${port.id === newPortId ? ' is-new-port' : ''}`} key={port.id}
           title={`${port.id} · ${portTypeLabels[port.type]}`} data-port-direction={port.direction} data-wire={wireState?.(port.id)}>
           <Handle id={handleId(port.id)} type={port.direction === 'in' ? 'target' : 'source'}
-            position={side === 'left' ? Position.Left : Position.Right} className={port.type} isConnectable={editable} />
+            position={side === 'left' ? Position.Left : Position.Right} className={port.type} style={{ background: signalColor(port.type) }} isConnectable={editable} />
           <PortLabel port={port} open={openPort} />
         </div>)}
     </div>)}

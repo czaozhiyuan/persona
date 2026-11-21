@@ -1,3 +1,4 @@
+import { signalColor } from './signal-wire';
 import { portTypeLabels } from '../../../workbench/v1/labels';
 import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react';
 import { useEffect } from 'react';
@@ -49,10 +50,10 @@ export function ModuleFrame({ id, width, height, name, ports, highlighted, newPo
         return <div key={port.id} className={`v1-topology-port${highlighted.has(port.id) ? ' is-on-path' : ''}${port.id === newPortId ? ' is-new-port' : ''}`}
           title={`${port.id} · ${portTypeLabels[port.type]}`} data-port-direction={port.direction}>
           <Handle id={handleId(port.id, true)} type={input ? 'source' : 'target'}
-            position={input ? Position.Right : Position.Left} className={`${port.type} v1-frame-inner-handle`} data-wire={wireState?.(port.id, true)}
+            position={input ? Position.Right : Position.Left} className={`${port.type} v1-frame-inner-handle`} style={{ background: signalColor(port.type) }} data-wire={wireState?.(port.id, true)}
             isConnectable={editable} />
           {outerHandles && <Handle id={handleId(port.id, false)} type={input ? 'target' : 'source'}
-            position={input ? Position.Left : Position.Right} className={`${port.type} v1-frame-outer-handle`} data-wire={wireState?.(port.id, false)}
+            position={input ? Position.Left : Position.Right} className={`${port.type} v1-frame-outer-handle`} style={{ background: signalColor(port.type) }} data-wire={wireState?.(port.id, false)}
             isConnectable={editable} />}
           <PortLabel port={port} open={openPort} />
         </div>;

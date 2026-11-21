@@ -1,4 +1,4 @@
-import { Background, ConnectionMode, ReactFlow, ReactFlowProvider, useKeyPress, useStoreApi, useUpdateNodeInternals } from '@xyflow/react';
+import { Background, ConnectionMode, ReactFlow, ReactFlowProvider, useKeyPress, useStoreApi, useUpdateNodeInternals, ViewportPortal } from '@xyflow/react';
 import type { Connection as FlowConnection, CoordinateExtent, Node, NodeProps, OnConnectStartParams, ReactFlowInstance, Rect, Viewport, XYPosition } from '@xyflow/react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
@@ -29,6 +29,7 @@ import { groupDragBounds, groupDragExtent, groupDropDelta, placeDropGroup, repar
 import type { ApprovedMove, ReparentLayout } from './reparent-drop';
 import { handleId, nodeId, portKey, projectWiring, scopedWiringProblem } from './topology-wiring';
 import type { WiringEdge } from './topology-wiring';
+import { SignalWire, signalColor } from './signal-wire';
 import '@xyflow/react/dist/style.css';
 
 type NodeData = {
@@ -107,6 +108,7 @@ function Frame({ id, data, selected, width, height }: NodeProps<FrameNode>) {
 }
 
 const nodeTypes = { device: Device, moduleFrame: Frame };
+const edgeTypes = { signal: SignalWire };
 
 type Props = {
   project: Project;
@@ -279,7 +281,7 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     // Keep sibling blocks accessible where an expanded branch overlaps their stored positions.
     // React Flow drops internal measurements when a controlled node is replaced.
     if (!frame) return { ...placement, type: 'device', measured: measured.get(key),
-      zIndex: 2 + (deepest - path.length) * 2 + Number(path[modulePath.length] === selectedBranch), data };
+      zIndex: 3 + deepest - modulePath.length + (deepest - path.length) * 2 + Number(path[modulePath.length] === selectedBranch), data };
     const direct = scopes.get(key)?.members ?? [];
     const outer = parentKey && nodeByKey.get(parentKey);
     const origin = outer && outer.frame ? moduleExtent(outer.frame.base, frameInsets(outer.item.definition.ports))[0] : undefined;
@@ -288,7 +290,7 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
       y: frame.display.y + origin[1] - node.bounds.y,
     } : undefined;
     return { ...placement, type: 'moduleFrame', dragHandle: '.v1-frame-title',
-      selectable: !boundary, focusable: !boundary, zIndex: path.length - deepest - 2,
+      selectable: !boundary, focusable: !boundary, zIndex: 2 + path.length - modulePath.length,
       measured: { width: frame.display.width, height: frame.display.height },
       style: { width: frame.display.width, height: frame.display.height, pointerEvents: 'none' },
       data: { ...data, outerHandles: !boundary, locations: boundary ? [] : structureScope(instances, definition.id),
@@ -308,6 +310,19 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
         },
       },
     };
+  });
+
+  // Render frame surfaces below the wires while keeping frame controls and labels above them.
+  const frameOrigins = new Map<string, XYPosition>();
+  const frameSurfaces = nodes.flatMap(node => {
+    if (node.type !== 'moduleFrame') return [];
+    const parent = node.parentId ? frameOrigins.get(node.parentId) : undefined;
+    const x = (parent?.x ?? 0) + node.position.x;
+    const y = (parent?.y ?? 0) + node.position.y;
+    frameOrigins.set(node.id, { x, y });
+    return [<div key={node.id} className="v1-frame-surface" style={{
+      left: x, top: y, width: node.measured?.width, height: node.measured?.height, zIndex: node.zIndex,
+    }} />];
   });
 
   function startDrag(node: CanvasNode, moving: CanvasNode[]) {
@@ -564,7 +579,7 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
       }}
       place={screen => placeAt({ source: 'template', id: blankModuleId, name: '新建模块' }, screen)} />}
     <ReactFlow<CanvasNode, WiringEdge> nodes={nodes} edges={edges.map(edge => ({ ...edge, selected: selectedWiring === edge }))}
-      nodeTypes={nodeTypes} ariaLabelConfig={flowAriaLabels} fitView fitViewOptions={canvasFitOptions}
+      nodeTypes={nodeTypes} edgeTypes={edgeTypes} ariaLabelConfig={flowAriaLabels} fitView fitViewOptions={canvasFitOptions}
       viewport={viewport} onViewportChange={changeViewport} onInit={instance => { flow.current = instance; }}
       minZoom={0.001} maxZoom={2} deleteKeyCode={null} connectionMode={ConnectionMode.Loose}
       zIndexMode="manual" selectNodesOnDrag={false}
@@ -581,7 +596,8 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
         if (paths) selectObjects(paths);
         queueMicrotask(() => flowStore.setState({ nodesSelectionActive: false }));
       }}
-      connectionLineStyle={cancelled.current ? { opacity: 0 } : undefined}
+      connectionLineStyle={{ opacity: cancelled.current ? 0 : undefined,
+        stroke: fromPort && signalColor(fromPort.port.type), strokeWidth: 'var(--v1-wire-width)' }}
       isValidConnection={edge => !cancelled.current && !scopedWiringProblem(...connectionPorts(edge))}
       onConnect={onConnect} onConnectStart={startWiring} onClickConnectStart={startWiring}
       onConnectEnd={(_, result) => {
@@ -658,6 +674,7 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
       onNodeDrag={previewDrag}
       onNodeDragStop={finishDrag}>
       <Background />
+      <ViewportPortal><div className="v1-frame-surfaces" aria-hidden="true">{frameSurfaces}</div></ViewportPortal>
       <CanvasControls canLocate={!!(selectedNode || selectedWiring)} locate={() => {
         const ids = selectedNode ? [nodeId(selectedNode.key)] : selectedWiring ? [selectedWiring.source, selectedWiring.target] : [];
         if (ids.length) void flow.current?.fitView({ ...canvasFitOptions, maxZoom: 1.2, nodes: ids.map(id => ({ id })) });
