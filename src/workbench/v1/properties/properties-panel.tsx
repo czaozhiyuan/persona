@@ -211,7 +211,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, jumpToParamete
             {portTypeLabels[port.type]} · {port.direction === 'in' ? '输入' : '输出'}
           </span></summary>
           <p className="v1-property-effective">端口属于共享结构。{sharedLocations.length > 0 && ` 影响 ${sharedLocations.join('、')}。`} 端口 ID：{port.id}</p>
-          <PortFields port={port} remove={() => { setError(''); setDeletion(port.id); }}
+          <PortFields port={port} occurrence={occurrence} remove={() => { setError(''); setDeletion(port.id); }}
             save={next => changeDefinition(() => ({ ...definition,
               ports: definition.ports.map(item => item.id === port.id ? next : item),
             }))} />

@@ -64,18 +64,18 @@ export function validateProject(project: Project): void {
   const paramsByDefinition = new Map<string, Map<string, ParameterDefinition>>();
   const childrenByModule = new Map<string, Map<string, Instance>>();
   for (const definition of definitions.values()) {
-    const ports = indexById(definition.ports, `定义「${definition.id}」的端口`);
-    for (const port of ports.values()) {
-      requireValid(portTypes.has(port.type) && (port.direction === 'in' || port.direction === 'out'),
-        `定义「${definition.id}」的端口「${port.id}」类型或方向无效`);
-      validatePortConstraints(port, `定义「${definition.id}」的端口「${port.id}」`);
-    }
-    portsByDefinition.set(definition.id, ports);
     const parameters = indexById(definition.parameters ?? [], `定义「${definition.id}」的参数`);
     for (const parameter of parameters.values()) {
       validateParameterDefinition(parameter, `定义「${definition.id}」的参数「${parameter.id}」`);
     }
     paramsByDefinition.set(definition.id, parameters);
+    const ports = indexById(definition.ports, `定义「${definition.id}」的端口`);
+    for (const port of ports.values()) {
+      requireValid(portTypes.has(port.type) && (port.direction === 'in' || port.direction === 'out'),
+        `定义「${definition.id}」的端口「${port.id}」类型或方向无效`);
+      validatePortConstraints(port, parameters, `定义「${definition.id}」的端口「${port.id}」`);
+    }
+    portsByDefinition.set(definition.id, ports);
     if (definition.kind === 'component') {
       if (definition.physicalFootprint) requireValid(validFootprint(definition.physicalFootprint),
         `器件「${definition.id}」的宽和深须为以 mm 计量的有限正数`);

@@ -41,7 +41,7 @@ function dissolve(project: Project, source: InstancePath) {
     if (!target) throw new Error(`对外端口「${ref.portId}」仍被引用，但没有内部映射，无法解散。`);
     const inner = definitions.get(children.get(target.instanceId)!.definitionId)!.ports.find(port => port.id === target.portId)!;
     if (!unrestrictedAlias(ports.get(ref.portId)!, inner)) {
-      throw new Error(`对外端口「${ref.portId}」带有光通道或额定限制，解散会改变原有信号条件。`);
+      throw new Error(`对外端口「${ref.portId}」带有光通道、额定限制或输出电压，解散会改变原有信号条件。`);
     }
     adjustedPorts.add(ref.portId);
     return target;

@@ -4,7 +4,23 @@ import type { ComponentDefinition, PortDefinition, PortType } from './types';
 import { validateChannelIds, validateEmpirical, validateRange } from './validate-parameters';
 import { indexById, requireValid } from './validation';
 
-export function validatePortConstraints(port: PortDefinition, context: string): void {
+function validateDcValue(value: DcValue | undefined, unit: 'V' | 'A' | 'W' | 'ratio', parameters: ReadonlyMap<string, ParameterDefinition>, context: string) {
+  if (value === undefined) return;
+  const allowsRange = (min: number, max: number) => (unit === 'V' || unit === 'ratio' ? min > 0 : min >= 0)
+    && (unit !== 'ratio' || max <= 1);
+  if (value.kind === 'parameter') {
+    const parameter = parameters.get(value.parameterId);
+    requireValid(parameter?.kind === 'numeric' && parameter.unit === unit && parameter.valueKind === 'fixed',
+      `${context}: 应引用单位为 ${unit} 的固定值参数`);
+    requireValid(allowsRange(parameter.range?.min ?? -Infinity, parameter.range?.max ?? Infinity),
+      `${context}: 参数范围必须限制在有效的直流取值内`);
+  } else {
+    validateEmpirical(value, ['fixed'], context);
+    requireValid(allowsRange(value.value, value.value), `${context}: 无效的直流参数值`);
+  }
+}
+
+export function validatePortConstraints(port: PortDefinition, parameters: ReadonlyMap<string, ParameterDefinition>, context: string): void {
   requireValid(port.name === undefined || port.name.trim(), `${context}: 端口显示名称不能为空`);
   if (port.channelIds !== undefined) {
     requireValid(port.type === 'OPTICAL', `${context}: 仅光端口可以设置光通道 ID`);
@@ -16,6 +32,10 @@ export function validatePortConstraints(port: PortDefinition, context: string): 
       : (port.type === 'OPTICAL' || port.type === 'RF') && unit === 'dBm';
     requireValid(port.direction === 'in' && compatible, `${context}: 额定值单位或端口方向不匹配`);
     validateRange(port.inputRating, context);
+  }
+  if (port.outputVoltageV !== undefined) {
+    requireValid(port.type === 'DC_POWER' && port.direction === 'out', `${context}: 仅直流输出端口可设置输出电压`);
+    validateDcValue(port.outputVoltageV, 'V', parameters, `${context}的输出电压`);
   }
 }
 
@@ -69,41 +89,23 @@ export function validateDevice(
       if (operatingPointLossDb !== undefined) validateDb(operatingPointLossDb, kinds, `${context} 控制点附加损耗`, 0);
     }
     if (route.kind === 'dc') {
-      validateDcValue(route.outputVoltageV, 'V', `${context} 输出电压`);
-      validateDcValue(route.efficiency, 'ratio', `${context}的转换效率`);
+      validateDcValue(route.efficiency, 'ratio', parameters, `${context}的转换效率`);
       validateDcCapacity(route.capacity, `${context}的额定输出容量`);
       requireValid(route.toPortId !== definition.dcSupply?.portId, `${context}: 直流电源输出端口不能同时作为变换器输出`);
-    }
-  }
-
-  function validateDcValue(value: DcValue | undefined, unit: 'V' | 'A' | 'W' | 'ratio', context: string) {
-    if (value === undefined) return;
-    const allowsRange = (min: number, max: number) => (unit === 'V' || unit === 'ratio' ? min > 0 : min >= 0)
-      && (unit !== 'ratio' || max <= 1);
-    if (value.kind === 'parameter') {
-      const parameter = parameters.get(value.parameterId);
-      requireValid(parameter?.kind === 'numeric' && parameter.unit === unit && parameter.valueKind === 'fixed',
-        `${context}: 应引用单位为 ${unit} 的固定值参数`);
-      requireValid(allowsRange(parameter.range?.min ?? -Infinity, parameter.range?.max ?? Infinity),
-        `${context}: 参数范围必须限制在有效的直流取值内`);
-    } else {
-      validateEmpirical(value, ['fixed'], context);
-      requireValid(allowsRange(value.value, value.value), `${context}: 无效的直流参数值`);
     }
   }
 
   function validateDcCapacity(capacity: DcCapacity | undefined, context: string) {
     if (capacity === undefined) return;
     requireValid(capacity.unit === 'A' || capacity.unit === 'W', `${context}: 单位应为 A 或 W`);
-    validateDcValue(capacity.value, capacity.unit, context);
+    validateDcValue(capacity.value, capacity.unit, parameters, context);
   }
 
   if (definition.dcSupply) {
-    const { portId, voltageV, capacity } = definition.dcSupply;
+    const { portId, capacity } = definition.dcSupply;
     const port = ports.get(portId);
     const context = `定义「${definition.id}」的直流电源`;
     requireValid(port?.type === 'DC_POWER' && port.direction === 'out', `${context}: 应为直流供电输出端口`);
-    validateDcValue(voltageV, 'V', `${context}的电压`);
     validateDcCapacity(capacity, `${context}的额定输出容量`);
   }
   if (definition.dcLoad) {
@@ -111,7 +113,7 @@ export function validateDevice(
     const port = ports.get(portId);
     const context = `定义「${definition.id}」的直流负载`;
     requireValid(port?.type === 'DC_POWER' && port.direction === 'in', `${context}: 应为直流供电输入端口`);
-    validateDcValue(powerW, 'W', `${context}的功耗`);
+    validateDcValue(powerW, 'W', parameters, `${context}的功耗`);
   }
 
   function validateDb(

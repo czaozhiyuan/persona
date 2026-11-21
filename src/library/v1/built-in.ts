@@ -84,14 +84,15 @@ export const builtInDefinitions = [
     transfers: [{ kind: 'rf', fromPortId: 'RF_IN', toPortId: 'RF_OUT', gainDb: parameter('gain') }],
   },
   {
-    kind: 'component', id: 'library-dc-supply', name: '直流电源', ports: [dcPorts[1]],
+    kind: 'component', id: 'library-dc-supply', name: '直流电源', ports: [{ ...dcPorts[1], outputVoltageV: parameter('voltage') }],
     parameters: [voltage, capacity],
-    dcSupply: { portId: 'DC_OUT', voltageV: parameter('voltage'), capacity: { unit: 'W', value: parameter('capacity') } },
+    dcSupply: { portId: 'DC_OUT', capacity: { unit: 'W', value: parameter('capacity') } },
   },
   {
-    kind: 'component', id: 'library-dc-converter', name: '直流变换器（DC/DC）', ports: dcPorts,
+    kind: 'component', id: 'library-dc-converter', name: '直流变换器（DC/DC）',
+    ports: [dcPorts[0], { ...dcPorts[1], outputVoltageV: parameter('voltage') }],
     parameters: [voltage, numeric('efficiency', '效率', 'ratio', { min: Number.MIN_VALUE, max: 1 }), capacity],
-    transfers: [{ kind: 'dc', fromPortId: 'DC_IN', toPortId: 'DC_OUT', outputVoltageV: parameter('voltage'),
+    transfers: [{ kind: 'dc', fromPortId: 'DC_IN', toPortId: 'DC_OUT',
       efficiency: parameter('efficiency'), capacity: { unit: 'W', value: parameter('capacity') } }],
   },
 ] as const satisfies readonly (ComponentDefinition | ModuleDefinition)[];

@@ -115,7 +115,7 @@ const parameter = byKind({
   enum: shape({ ...identity, kind: oneOf('enum'), options: list(text) }, { overridable: boolean, defaultValue: text }),
 });
 const port = shape({ id: text, type: oneOf('RF', 'OPTICAL', 'DC_POWER', 'CONTROL'), direction: oneOf('in', 'out') }, {
-  name: text, channelIds: channels, inputRating: shape({ unit: oneOf('dBm', 'V', 'A', 'W') }, limits),
+  name: text, channelIds: channels, outputVoltageV: dcQuantity, inputRating: shape({ unit: oneOf('dBm', 'V', 'A', 'W') }, limits),
 });
 const portPair = { fromPortId: text, toPortId: text };
 const opticalOptions = { channelIds: channels, gainDb: opticalQuantity };
@@ -130,7 +130,7 @@ const transfer = byKind({
     opticalLoss: shape({}, { intrinsicLossDb: opticalQuantity, operatingPointLossDb: opticalQuantity }),
   }),
   oe: shape({ ...portPair, kind: oneOf('oe') }, { channelIds: channels }),
-  dc: shape({ ...portPair, kind: oneOf('dc') }, { outputVoltageV: dcQuantity, efficiency: dcQuantity, capacity: dcCapacity }),
+  dc: shape({ ...portPair, kind: oneOf('dc') }, { efficiency: dcQuantity, capacity: dcCapacity }),
 });
 const definition = { ...identity, ports: list(port) };
 const footprint = { widthMm: number, depthMm: number };
@@ -138,7 +138,7 @@ const component = shape({ ...definition, kind: oneOf('component') }, {
   physicalFootprint: shape(footprint),
   parameters: list(parameter), transfers: list(transfer),
   switchStates: list(shape({ ...identity, routes: list(shape(portPair, opticalOptions)) })),
-  dcSupply: shape({ portId: text }, { voltageV: dcQuantity, capacity: dcCapacity }),
+  dcSupply: shape({ portId: text }, { capacity: dcCapacity }),
   dcLoad: shape({ portId: text }, { powerW: dcQuantity }),
 });
 const instance = shape({ ...identity, definitionId: text }, {

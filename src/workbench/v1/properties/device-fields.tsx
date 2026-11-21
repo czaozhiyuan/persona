@@ -1,13 +1,16 @@
 import { portDisplayName, portTypeLabels } from '../labels';
 import { useState } from 'react';
+import { resolveEmpiricalValue } from '../../../engine/v1/empirical-value';
+import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
 import type { ComponentDefinition, PortDefinition, PortDirection, PortType } from '../../../model/v1/types';
 import type { InputRating, Transfer } from '../../../model/v1/device';
 import { AutosaveForm } from './autosave-form';
 import { ChannelField } from './channel-field';
+import { OutputVoltageField, readOutputVoltage } from './output-voltage-field';
 import { channelId, channelList, choice, numberField, opticalKinds, QuantityField, readQuantity, rfKinds } from './value-fields';
 
-export function PortFields({ port, save, remove }: {
-  port: PortDefinition; save: (port: PortDefinition) => boolean; remove: () => void;
+export function PortFields({ port, occurrence, save, remove }: {
+  port: PortDefinition; occurrence: ResolvedInstance; save: (port: PortDefinition) => boolean; remove: () => void;
 }) {
   const version = JSON.stringify(port);
   return <AutosaveForm version={version} save={data => {
@@ -28,11 +31,12 @@ export function PortFields({ port, save, remove }: {
       : unit !== undefined && (min !== undefined || max !== undefined) ? { unit, min, max } : undefined;
     const next: PortDefinition = {
       ...port, name: choice(data, 'name').trim() || undefined, type, direction, channelIds, inputRating,
+      outputVoltageV: type === 'DC_POWER' && direction === 'out' ? readOutputVoltage(data) : undefined,
     };
     const nextVersion = JSON.stringify(next);
     if (nextVersion !== version && save(next)) return nextVersion;
   }}>
-    <PortControls port={port} remove={remove} />
+    <PortControls port={port} occurrence={occurrence} remove={remove} />
   </AutosaveForm>;
 }
 
@@ -41,7 +45,7 @@ function ratingUnits(type: PortType, direction: PortDirection): readonly InputRa
   return type === 'DC_POWER' ? ['V', 'A', 'W'] : ['dBm'];
 }
 
-function PortControls({ port, remove }: { port: PortDefinition; remove: () => void }) {
+function PortControls({ port, occurrence, remove }: { port: PortDefinition; occurrence: ResolvedInstance; remove: () => void }) {
   const { type, direction } = port;
   const ratings = ratingUnits(type, direction);
   return <>
@@ -69,9 +73,30 @@ function PortControls({ port, remove }: { port: PortDefinition; remove: () => vo
         <label>上限<input name="maximum" type="number" step="any" defaultValue={port.inputRating?.max} /></label>
       </div>
     </fieldset>}
+    {type === 'DC_POWER' && direction === 'out' && <PortVoltage port={port} occurrence={occurrence} />}
     <div className="actions">
       <button type="button" onClick={remove}>预览删除端口</button>
     </div>
+  </>;
+}
+
+function PortVoltage({ port, occurrence }: { port: PortDefinition; occurrence: ResolvedInstance }) {
+  const value = port.outputVoltageV;
+  const parameters = occurrence.definition.parameters?.filter(parameter =>
+    parameter.kind === 'numeric' && parameter.unit === 'V' && parameter.valueKind === 'fixed'
+    && (parameter.range?.min ?? 0) > 0) ?? [];
+  const parameterId = value?.kind === 'parameter' ? value.parameterId : '';
+  const effective = parameterId ? resolveEmpiricalValue('V', value, {}, occurrence) : undefined;
+  return <>
+    {!!parameters.length && <label>输出电压来源
+      <select name="outputVoltageParameter" value={parameterId} onChange={() => { /* Saved by the form's change handler. */ }}>
+        <option value="">固定值或留空</option>
+        {parameters.map(parameter => <option key={parameter.id} value={parameter.id}>{parameter.name}</option>)}
+      </select>
+    </label>}
+    {effective ? <p className="v1-property-effective">输出电压 (V) · {
+      effective.availability === 'available' ? effective.value : '未设置'
+    }</p> : <OutputVoltageField value={value?.kind === 'fixed' ? value.value : undefined} />}
   </>;
 }
 
