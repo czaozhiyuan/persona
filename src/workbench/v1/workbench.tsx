@@ -628,7 +628,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
             {active?.kind === 'module' && <LibraryPanel key={projectSession} store={store} state={state} module={active} />}
           </div>
         </aside>
-        <main className="v1-workbench-main" data-budget={showDock ? collapsed ? 'collapsed' : enlarged ? 'enlarged' : 'open' : undefined}>
+        <main className="v1-workbench-main" data-budget={dock ? collapsed ? 'collapsed' : enlarged ? 'enlarged' : 'open' : undefined}>
           <div className="v1-canvas-page" inert={page !== 'canvas' || selection.view !== 'topology'}
             aria-hidden={page !== 'canvas' || selection.view !== 'topology'}>
             {active?.kind === 'module' &&
