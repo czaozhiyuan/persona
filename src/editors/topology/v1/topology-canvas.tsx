@@ -25,8 +25,8 @@ import { projectPathHighlight } from './path-highlight';
 import type { BudgetHighlight } from './path-highlight';
 import { estimatedBlockSize, projectTopology } from './topology-projection';
 import type { FrameResizePreview, TopologyItem } from './topology-projection';
-import { fitsDropExtent, groupDragBounds, groupDragExtent, groupDropDelta, reparentDropTarget } from './reparent-drop';
-import type { ApprovedMove } from './reparent-drop';
+import { groupDragBounds, groupDragExtent, groupDropDelta, placeDropGroup, reparentDropTarget } from './reparent-drop';
+import type { ApprovedMove, ReparentLayout } from './reparent-drop';
 import { handleId, nodeId, portKey, projectWiring, scopedWiringProblem } from './topology-wiring';
 import type { WiringEdge } from './topology-wiring';
 import '@xyflow/react/dist/style.css';
@@ -56,7 +56,6 @@ type DropPreview = NonNullable<ReturnType<typeof reparentDropTarget>> & {
   error?: string;
   label: string;
   selectedCount: number;
-  extent?: CoordinateExtent;
 };
 type DragSession = {
   base: Project;
@@ -125,7 +124,7 @@ type Props = {
   toggleModule: (path: InstancePath) => void;
   openPort: (path: InstancePath, portId: string) => void;
   enterModule: (path: InstancePath) => void;
-  reparent: (base: Project, plan: ApprovedMove, placements?: readonly TopologyPlacement[]) => void;
+  reparent: (base: Project, plan: ApprovedMove, layout?: ReparentLayout) => void;
   focusMoved?: InstancePath;
   move: (placements: readonly TopologyPlacement[], frame?: TopologyFrame) => void;
   resize: (frame: TopologyFrame, placementAdjustments: readonly TopologyPlacement[]) => void;
@@ -379,17 +378,11 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     } else if (session.preview?.kind !== target.kind
       || hierarchyKey(session.preview.destination) !== hierarchyKey(target.destination) || session.preview.problem !== target.problem) {
       const owner = target.node?.item ?? instances.find(item => hierarchyKey(item.instancePath) === hierarchyKey(target.destination));
-      const saved = target.node?.frame?.saved ? target.node.frame.base
-        : session.base.layout?.topologyFrames?.find(frame => hierarchyKey(frame.modulePath) === hierarchyKey(target.destination));
-      const extent = session.members.length > 1 && saved && owner
-        ? moduleExtent(saved, frameInsets(owner.definition.ports)) : undefined;
-      const problem = target.problem ?? (extent && !fitsDropExtent(session.bounds, extent)
-        ? '目标模块的边框无法容纳这组对象，请先调整边框大小。' : undefined);
-      const checked = problem ? undefined
+      const checked = target.problem ? undefined
         : planInstanceMoves(session.base, session.members.map(item => item.item.instancePath), target.destination);
       const name = owner?.instance?.name ?? owner?.definition.name ?? '当前模块';
-      session.preview = { ...target, extent, selectedCount: session.members.length, plan: checked?.ok ? checked : undefined,
-        error: problem ?? (checked?.ok === false ? checked.message : undefined),
+      session.preview = { ...target, selectedCount: session.members.length, plan: checked?.ok ? checked : undefined,
+        error: target.problem ?? (checked?.ok === false ? checked.message : undefined),
         label: `${target.kind === 'in' ? '移入' : '移到上一级'}：${name}` };
       setDropPreview(session.preview);
     }
@@ -433,11 +426,16 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
         x: point.x - session.anchor.bounds.width / 2, y: point.y - session.anchor.bounds.height / 2,
       } : definition?.kind === 'module' ? defaultTopologyPosition(definition.instances.length, definition.ports.length) : undefined;
       const plan = preview.plan;
-      const delta = position && groupDropDelta(session.bounds, session.anchor.bounds, position, preview.extent);
-      const placements = delta && session.members.map((item, index) => ({
-        instancePath: plan.instancePaths[index], x: item.bounds.x + delta.x, y: item.bounds.y + delta.y,
-      }));
-      reparent(session.base, plan, placements);
+      const saved = session.base.layout?.topologyFrames?.find(frame => hierarchyKey(frame.modulePath) === hierarchyKey(target.destination));
+      const dropped = position && placeDropGroup(session.bounds, session.anchor.bounds, position, saved,
+        definition && frameInsets(definition.ports));
+      const layout = dropped && {
+        placements: session.members.map((item, index) => ({
+          instancePath: plan.instancePaths[index], x: item.bounds.x + dropped.delta.x, y: item.bounds.y + dropped.delta.y,
+        })),
+        frame: dropped.frame,
+      };
+      reparent(session.base, plan, layout);
       return;
     }
     const { x, y } = dragDelta(session, node.position);

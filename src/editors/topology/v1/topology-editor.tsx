@@ -8,11 +8,11 @@ import { insertLibraryItem } from '../../../library/v1/insert-library-item';
 import type { LibraryItem } from '../../../library/v1/insert-library-item';
 import { removeTopologyInstance, removeWiring } from '../../../state/v1/remove-topology-object';
 import type { LocalEndpointRef } from '../../../model/v1/topology';
-import type { ApprovedMove } from './reparent-drop';
+import type { ApprovedMove, ReparentLayout } from './reparent-drop';
 import { groupModule } from '../../../state/v1/group-module';
 import { connectBoundaryPort, exposeModulePort, renamePort } from '../../../state/v1/module-ports';
 import type { WiringSelection } from '../../../state/v1/remove-topology-object';
-import type { EndpointRef, InstancePath, ModuleDefinition, Project, TopologyPlacement } from '../../../model/v1/types';
+import type { EndpointRef, InstancePath, ModuleDefinition, Project } from '../../../model/v1/types';
 import type { ProjectStore, ProjectStoreSnapshot } from '../../../state/v1/project-store';
 import { editModule, editModuleWiring, moveTopologyNodes, resizeTopologyFrame } from '../../../state/v1/topology-edits';
 import { PortActionsDialog } from './port-actions-dialog';
@@ -36,7 +36,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
   onAddInside: (path: InstancePath) => void;
   onSelectObject: (path: InstancePath, extend: boolean) => void;
   onSelectObjects: (paths: readonly InstancePath[]) => void;
-  moveAcrossLevels: (base: Project, plan: ApprovedMove, placements?: readonly TopologyPlacement[]) => string | undefined;
+  moveAcrossLevels: (base: Project, plan: ApprovedMove, layout?: ReparentLayout) => string | undefined;
   requestMoveUp: (path: InstancePath) => void;
   focusMoved?: InstancePath;
   newPort?: EndpointRef;
@@ -203,7 +203,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
         pathResult={pathResult} budgetHighlight={budgetHighlight} expanded={expanded} toggleModule={toggleModule}
         selectedPaths={selectedPaths} selectObject={onSelectObject} selectObjects={onSelectObjects}
         enterModule={store.selectModule} focusMoved={focusMoved}
-        reparent={(base, plan, placements) => setMessage(moveAcrossLevels(base, plan, placements) ?? '')}
+        reparent={(base, plan, layout) => setMessage(moveAcrossLevels(base, plan, layout) ?? '')}
         onAddPort={onAddPort} newPort={newPort}
         openPort={(path, portId) => { setMessage(''); setPortAction({ path, portId }); }}
         add={add} placingModule={placingModule} cancelPlacement={() => { setPlacingModule(false); setMessage(''); }}

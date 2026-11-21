@@ -2,16 +2,16 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'reac
 import { LayoutEditor } from '../../editors/layout/v1/layout-editor';
 import { HierarchyTree } from '../../editors/topology/v1/hierarchy-tree';
 import { hierarchyKey, inHierarchy } from '../../editors/topology/v1/hierarchy-view';
-import type { ApprovedMove } from '../../editors/topology/v1/reparent-drop';
+import type { ApprovedMove, ReparentLayout } from '../../editors/topology/v1/reparent-drop';
 import { TopologyEditor } from '../../editors/topology/v1/topology-editor';
 import { createLinkBudget } from '../../engine/v1/link-budget';
 import { createOpticalBudgetForGraph } from '../../engine/v1/optical-budget';
 import type { LinkTrial, NamedLink } from '../../model/v1/topology';
 import { signalPortKey } from '../../engine/v1/signal-graph';
-import type { EndpointRef, InstancePath, PortDefinition, Project, TopologyPlacement } from '../../model/v1/types';
+import type { EndpointRef, InstancePath, PortDefinition, Project } from '../../model/v1/types';
 import { planDissolveModule } from '../../state/v1/dissolve-module';
 import { moveWiringSummary, planInstanceMove } from '../../state/v1/reparent-instance';
-import { moveTopologyNodes } from '../../state/v1/topology-edits';
+import { moveTopologyNodes, resizeTopologyFrame } from '../../state/v1/topology-edits';
 import type { ProjectStore } from '../../state/v1/project-store';
 import { parseProjectJson, serializeProjectJson } from '../../storage/v1/project-json';
 import type { BudgetHighlight } from '../../editors/topology/v1/path-highlight';
@@ -213,9 +213,13 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     setFocusMoved({ path: instancePath, centerCanvas });
   }
 
-  function moveAcrossLevels(base: Project, plan: ApprovedMove, placements?: readonly TopologyPlacement[], centerCanvas = true) {
+  function moveAcrossLevels(base: Project, plan: ApprovedMove, layout?: ReparentLayout, centerCanvas = true) {
     if (store.getSnapshot().project !== base) return '工程已变化，请重新拖动或选择对象。';
-    const result = store.commit(() => placements ? moveTopologyNodes(plan.project, placements) : plan.project);
+    const result = store.commit(() => {
+      if (!layout) return plan.project;
+      const placed = moveTopologyNodes(plan.project, layout.placements);
+      return layout.frame ? resizeTopologyFrame(placed, layout.frame) : placed;
+    });
     if (!result.ok) return result.message;
     revealStructureChange(plan.instancePaths, path => {
       const moved = plan.affected.find(item => inHierarchy(item.from, path));
@@ -539,7 +543,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
                 onPortBudget={selectBudgetPort} onDcBudget={showDc} onAddPort={setPortTarget} newPort={newPort}
                 onSelectObject={selectObject} onSelectObjects={selectObjects}
                 focusMoved={focusMoved?.centerCanvas ? focusMoved.path : undefined}
-                moveAcrossLevels={(base, plan, placements) => moveAcrossLevels(base, plan, placements, false)} requestMoveUp={requestMoveUp}
+                moveAcrossLevels={(base, plan, layout) => moveAcrossLevels(base, plan, layout, false)} requestMoveUp={requestMoveUp}
                 onAddInside={path => { enterModule(path); setLeftTab('library'); }} />}
           </div>
           <div className="v1-canvas-page v1-layout-scroll" inert={page !== 'canvas' || selection.view !== 'physical'}
