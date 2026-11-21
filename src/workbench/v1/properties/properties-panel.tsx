@@ -59,6 +59,27 @@ export function PropertiesPanel({ store, occurrence, occurrences, jumpToParamete
     if (instance) commit(draft => editInstanceSettings(draft, instancePath, change));
   }
 
+  function saveName(input: HTMLInputElement) {
+    const owner = store.resolveInstance(instancePath);
+    if (!owner) return;
+    const previous = owner.instance?.name ?? owner.definition.name;
+    const name = input.value.trim();
+    if (!name) {
+      input.value = previous;
+      setError('名称不能为空，已保留原名称。');
+      return;
+    }
+    input.value = name;
+    if (name === previous) {
+      setError('');
+      return;
+    }
+    const saved = owner.instance
+      ? commit(draft => editInstanceSettings(draft, instancePath, current => ({ ...current, name })))
+      : commit(draft => editModule(draft, owner.definition.id, current => ({ ...current, name })));
+    if (!saved) input.value = previous;
+  }
+
   function addModule(mode: 'reuse' | 'copy') {
     const id = crypto.randomUUID();
     if (commit(draft => instantiateModule(draft, instancePath, mode, id, () => crypto.randomUUID()))) {
@@ -80,42 +101,34 @@ export function PropertiesPanel({ store, occurrence, occurrences, jumpToParamete
       parameterName: owner?.definition.parameters?.find(parameter => parameter.id === id)?.name ?? id };
   }
 
+  const name = instance?.name ?? definition.name;
+  const nameField = <label>名称<input key={name} name="name" defaultValue={name} data-object-name={instance ? true : undefined} required
+    onBlur={event => saveName(event.currentTarget)}
+    onKeyDown={event => {
+      if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
+      event.preventDefault();
+      event.currentTarget.blur();
+    }} /></label>;
+
   return <section className="panel v1-properties" aria-labelledby="v1-properties-heading">
-    <h2 id="v1-properties-heading">对象属性 · {instance?.name ?? definition.name}</h2>
+    <h2 id="v1-properties-heading">对象属性 · {name}</h2>
     {onMoveUp && <button type="button" onClick={() => onMoveUp(instancePath)}>移到上一级</button>}
     {error && <p className="error" role="alert">{error}</p>}
-    {!instance && <form key={definition.name} onSubmit={event => {
-      event.preventDefault();
-      const name = textField(new FormData(event.currentTarget), 'name');
-      if (name && name !== definition.name) changeDefinition(() => ({ ...definition, name }));
-    }}>
-      <label>名称<input name="name" defaultValue={definition.name} required /></label>
-      <button type="submit">保存名称</button>
-    </form>}
+    <p className="v1-property-effective">名称按 Enter 或离开输入框后自动保存。</p>
+    {!instance && nameField}
     <div className="v1-inspector-fields">
       {instance && <div className="v1-common-properties">
         <p className="v1-property-effective">名称、状态和参数设置只应用于当前实例。</p>
-        <form key={JSON.stringify([instance.name, instance.switchStateId])} onSubmit={event => {
-          event.preventDefault();
-          const data = new FormData(event.currentTarget);
-          const name = textField(data, 'name');
-          if (!name) { setError('名称不能为空。'); return; }
-          const switchStateId = choice(data, 'switch') || undefined;
-          if (name === instance.name && switchStateId === instance.switchStateId) return;
-          changeInstance(current => ({
-            ...current,
-            ...(name !== instance.name && { name }),
-            ...(switchStateId !== instance.switchStateId && { switchStateId }),
-          }));
-        }}>
-          <label>名称<input name="name" defaultValue={instance.name} data-object-name required /></label>
-          {definition.kind === 'component' && definition.switchStates && <label>开关状态
-            <select name="switch" defaultValue={instance.switchStateId}>
-              {definition.switchStates.map(state => <option key={state.id} value={state.id}>{state.name}</option>)}
-            </select>
-          </label>}
-          <button type="submit">保存属性</button>
-        </form>
+        {nameField}
+        {definition.kind === 'component' && definition.switchStates && <label>开关状态
+          <select name="switch" value={instance.switchStateId ?? ''} onChange={event => {
+            const switchStateId = event.currentTarget.value;
+            if (switchStateId !== instance.switchStateId) changeInstance(current => ({ ...current, switchStateId }));
+          }}>
+            {instance.switchStateId === undefined && <option value="" disabled>未设置</option>}
+            {definition.switchStates.map(state => <option key={state.id} value={state.id}>{state.name}</option>)}
+          </select>
+        </label>}
         {!!definition.parameters?.length && <h3>参数</h3>}
         {definition.parameters?.map(parameter => {
           const effective = parameters.get(parameter.id);
