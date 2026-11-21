@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { CoordinateExtent } from '@xyflow/react';
-import { fitsDropExtent, groupDropDelta } from '../../src/editors/topology/v1/reparent-drop';
+import { fitsDropExtent, groupDragBounds, groupDragExtent, groupDropDelta } from '../../src/editors/topology/v1/reparent-drop';
 
 test('a group drop translates the whole box into the destination and rejects an undersized frame', () => {
   const box = { x: 80, y: 100, width: 420, height: 130 };
@@ -13,4 +13,24 @@ test('a group drop translates the whole box into the destination and rejects an 
   assert.equal(fitsDropExtent(box, [[20, 50], [480, 160]]), false);
   assert.deepEqual(groupDropDelta(box, anchor, drop, frame), { x: -20, y: -50 });
   assert.deepEqual(groupDropDelta(box, anchor, drop), { x: 150, y: -100 });
+});
+
+test('expanded members use their visible size and cannot make existing source overflow worse', () => {
+  const compact = { x: 0, y: 0, width: 202, height: 96 };
+  const base = { x: -10, y: -20, width: 360, height: 160 };
+  const members = [
+    { key: 'a', bounds: compact, frame: { base, display: base, saved: false } },
+    { key: 'b', bounds: { ...compact, x: 440 },
+      frame: { base, display: { ...base, width: 380, height: 240 }, saved: true } },
+  ];
+  const target: CoordinateExtent = [[0, 0], [700, 260]];
+  assert.equal(fitsDropExtent(groupDragBounds(members.map(({ key, bounds }) => ({ key, bounds }))), target), true);
+  const expanded = groupDragBounds(members);
+  assert.deepEqual(expanded, { x: 0, y: 0, width: 820, height: 240 });
+  assert.equal(fitsDropExtent(expanded, target), false);
+
+  const source = groupDragExtent(expanded, [[-100, 0], [800, 260]]);
+  assert.deepEqual(groupDropDelta(expanded, compact, compact, source), { x: 0, y: 0 });
+  assert.deepEqual(groupDropDelta(expanded, compact, { x: 20, y: 40 }, source), { x: 0, y: 20 });
+  assert.deepEqual(groupDropDelta(expanded, compact, { x: -20, y: 0 }, source), { x: -20, y: 0 });
 });

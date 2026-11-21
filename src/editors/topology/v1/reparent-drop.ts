@@ -1,3 +1,4 @@
+import { getNodesBounds } from '@xyflow/react';
 import type { CoordinateExtent, Rect, XYPosition } from '@xyflow/react';
 import type { planInstanceMoves } from '../../../state/v1/reparent-instance';
 import { keepNodeInside } from './frame-geometry';
@@ -58,6 +59,20 @@ export function reparentDropTarget(source: TopologyItem, nodes: readonly Topolog
     return { kind: 'up', node: grandparent, destination, problem: '请拖到直接上一级模块的可用区域。' };
   }
   return { kind: 'up', node: grandparent, destination };
+}
+
+export function groupDragBounds(items: readonly Pick<TopologyItem, 'key' | 'bounds' | 'frame'>[]): Rect {
+  return getNodesBounds(items.map(item => ({
+    id: item.key, position: item.bounds, measured: item.frame?.display ?? item.bounds, data: {},
+  })));
+}
+
+export function groupDragExtent(bounds: Rect, [[left, top], [right, bottom]]: CoordinateExtent): CoordinateExtent {
+  // An already expanded group may extend beyond the saved parent frame. Do not jump or allow further overflow.
+  return [
+    [Math.min(left, bounds.x), Math.min(top, bounds.y)],
+    [Math.max(right, bounds.x + bounds.width), Math.max(bottom, bounds.y + bounds.height)],
+  ];
 }
 
 export function fitsDropExtent(bounds: Rect, [[left, top], [right, bottom]]: CoordinateExtent): boolean {

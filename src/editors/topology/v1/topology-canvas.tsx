@@ -1,4 +1,4 @@
-import { Background, ConnectionMode, getNodesBounds, ReactFlow, ReactFlowProvider, useKeyPress, useStoreApi, useUpdateNodeInternals } from '@xyflow/react';
+import { Background, ConnectionMode, ReactFlow, ReactFlowProvider, useKeyPress, useStoreApi, useUpdateNodeInternals } from '@xyflow/react';
 import type { Connection as FlowConnection, CoordinateExtent, Node, NodeProps, OnConnectStartParams, ReactFlowInstance, Rect, Viewport, XYPosition } from '@xyflow/react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
@@ -25,7 +25,7 @@ import { projectPathHighlight } from './path-highlight';
 import type { BudgetHighlight } from './path-highlight';
 import { estimatedBlockSize, projectTopology } from './topology-projection';
 import type { FrameResizePreview, TopologyItem } from './topology-projection';
-import { fitsDropExtent, groupDropDelta, reparentDropTarget } from './reparent-drop';
+import { fitsDropExtent, groupDragBounds, groupDragExtent, groupDropDelta, reparentDropTarget } from './reparent-drop';
 import type { ApprovedMove } from './reparent-drop';
 import { handleId, nodeId, portKey, projectWiring, scopedWiringProblem } from './topology-wiring';
 import type { WiringEdge } from './topology-wiring';
@@ -324,9 +324,10 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     report('');
     // Keep the grabbed node first for placement and post-drop focus.
     const ordered = [anchor, ...members.filter(item => item.key !== anchor.key)];
+    const bounds = groupDragBounds(ordered);
+    const extent = parent && frame ? groupDragExtent(bounds, moduleExtent(frame.base, frameInsets(parent.item.definition.ports))) : undefined;
     dragSession.current = { base: project, anchor, members: ordered, keys: new Set(ordered.map(item => item.key)),
-      bounds: getNodesBounds(ordered.map(item => ({ id: item.key, position: item.bounds, measured: item.bounds, data: {} }))),
-      extent: parent && frame ? moduleExtent(frame.base, frameInsets(parent.item.definition.ports)) : undefined,
+      bounds, extent,
       frame: frame && !frame.saved ? { modulePath: parentPath, ...frame.base } : undefined };
     if (!selectedKeys.has(anchor.key)) selectObject(anchor.item.instancePath, false);
   }
