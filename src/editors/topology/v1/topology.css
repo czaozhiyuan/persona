@@ -90,6 +90,15 @@
 .v1-module-pins.right .v1-frame-outer-handle { left: calc(100% + 3px); }
 .v1-topology-canvas { position: absolute; inset: 0; overflow: hidden; background: #f6faf9; isolation: isolate; }
 .v1-topology-canvas[data-space-pan="true"] .react-flow__viewport * { pointer-events: none; }
+.v1-drop-allowed { outline: 3px solid #168269; outline-offset: 3px; border-radius: .55rem; }
+.v1-drop-blocked { outline: 3px solid #a34e37; outline-offset: 3px; border-radius: .55rem; }
+.v1-drop-canvas { position: absolute; inset: 4px; border: 2px solid #168269; border-radius: .45rem; pointer-events: none; z-index: 2; }
+.v1-drop-label {
+  position: absolute; z-index: 4; bottom: 54px; left: 14px; max-width: calc(100% - 28px);
+  margin: 0; padding: .45rem .65rem; border: 1px solid #168269; border-radius: .4rem;
+  background: #e7f7ee; color: #155a49; font-size: .85rem; pointer-events: none;
+}
+.v1-drop-label[data-blocked="true"] { background: #fff1ef; color: #8c352b; border-color: #a34e37; }
 .v1-module-placement { position: absolute; inset: 0; z-index: 5; cursor: crosshair; }
 .v1-placement-hint {
   position: absolute; z-index: 2; bottom: 14px; right: 14px; max-width: calc(100% - 14rem);

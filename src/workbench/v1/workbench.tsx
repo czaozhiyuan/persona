@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'reac
 import { LayoutEditor } from '../../editors/layout/v1/layout-editor';
 import { HierarchyTree } from '../../editors/topology/v1/hierarchy-tree';
 import { hierarchyKey, inHierarchy } from '../../editors/topology/v1/hierarchy-view';
+import type { ApprovedMove } from '../../editors/topology/v1/reparent-drop';
 import { TopologyEditor } from '../../editors/topology/v1/topology-editor';
 import { createLinkBudget } from '../../engine/v1/link-budget';
 import { createOpticalBudgetForGraph } from '../../engine/v1/optical-budget';
@@ -185,6 +186,23 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     }
     selectObject(path, extend);
     openPage('canvas');
+  }
+
+  function revealReparented({ instancePath, affected }: ApprovedMove) {
+    function remapExpansion(previous: ReadonlySet<string>) {
+      const next = new Set<string>();
+      for (const key of previous) {
+        const path = JSON.parse(key) as InstancePath;
+        const moved = affected.find(item => inHierarchy(item.from, path));
+        next.add(moved ? hierarchyKey([...moved.to, ...path.slice(moved.from.length)]) : key);
+      }
+      for (let depth = 0; depth < instancePath.length; depth++) next.add(hierarchyKey(instancePath.slice(0, depth)));
+      return next;
+    }
+    setExpandedCanvas(remapExpansion);
+    setExpandedHierarchy(remapExpansion);
+    if (!inHierarchy(selection.modulePath, instancePath)) store.selectModule(instancePath.slice(0, -1));
+    selectObjects([instancePath]);
   }
 
   function enterModule(path: InstancePath) {
@@ -461,7 +479,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
                 store={store} state={state} module={active} pathResult={pathResult} graph={linkOptions.graph} rename={renameSelection}
                 expanded={expandedCanvas} setExpanded={setExpandedCanvas} budgetHighlight={budgetHighlight}
                 onPortBudget={selectBudgetPort} onDcBudget={showDc} onAddPort={setPortTarget} newPort={newPort}
-                onSelectObject={selectObject} onSelectObjects={selectObjects}
+                onSelectObject={selectObject} onSelectObjects={selectObjects} onReparented={revealReparented}
                 onAddInside={path => { enterModule(path); setLeftTab('library'); }} />}
           </div>
           <div className="v1-canvas-page v1-layout-scroll" inert={page !== 'canvas' || selection.view !== 'physical'}
