@@ -133,7 +133,9 @@ const transfer = byKind({
   dc: shape({ ...portPair, kind: oneOf('dc') }, { outputVoltageV: dcQuantity, efficiency: dcQuantity, capacity: dcCapacity }),
 });
 const definition = { ...identity, ports: list(port) };
+const footprint = { widthMm: number, depthMm: number };
 const component = shape({ ...definition, kind: oneOf('component') }, {
+  physicalFootprint: shape(footprint),
   parameters: list(parameter), transfers: list(transfer),
   switchStates: list(shape({ ...identity, routes: list(shape(portPair, opticalOptions)) })),
   dcSupply: shape({ portId: text }, { voltageV: dcQuantity, capacity: dcCapacity }),
@@ -151,7 +153,7 @@ const moduleDefinition = shape({ ...definition, kind: oneOf('module'), instances
   cableBundles: list(shape({ id: text, coreCount: number, cores: list(shape({ id: text, a: cableSide, b: cableSide })) })),
   portMappings: list(shape({ portId: text, target: localPort })),
   parameterMappings: list(shape({ parameterId: text, target: shape({ instanceId: text, parameterId: text }) })),
-  physicalEnclosure: shape({ widthMm: number, depthMm: number, heightMm: number }),
+  physicalEnclosure: shape({ ...footprint, heightMm: number }),
 });
 const profileValues = { rfGainRefDb: rfValue, pdPowerRefDbm: number };
 const profile = shape({ ...identity, ...profileValues }, {
@@ -177,7 +179,8 @@ const projectShape = shape({
   conversionProfiles: list(profile), namedLinks: list(link),
   instanceSettings: list(shape({ instancePath }, { name: text, parameterOverrides: dictionary(parameterValue), switchStateId: text })),
   layout: shape({}, {
-    physical: list(shape({ instancePath, enclosurePath: instancePath, xMm: number, yMm: number, rotationDeg: number })),
+    physical: list(shape({ instancePath, enclosurePath: instancePath, xMm: number, yMm: number, rotationDeg: number },
+      { footprint: shape(footprint) })),
     topology: list(shape({ instancePath, x: number, y: number })),
     topologyFrames: list(shape({ modulePath: instancePath, x: number, y: number, width: number, height: number })),
   }),

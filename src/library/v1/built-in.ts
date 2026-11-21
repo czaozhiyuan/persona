@@ -41,6 +41,7 @@ export const builtInDefinitions = [
   { kind: 'module', id: blankModuleId, name: '空白模块', ports: [], instances: [] },
   { kind: 'module', id: blankEnclosureId, name: '空机箱', ports: [], instances: [],
     physicalEnclosure: { widthMm: 440, depthMm: 350, heightMm: 44.45 } },
+  { kind: 'component', id: 'library-pcb', name: '电路板（PCB）', ports: [] },
   { kind: 'component', id: 'library-laser', name: '激光器', ports: [port('OPT_OUT', '光输出', 'OPTICAL', 'out')] },
   {
     kind: 'component', id: 'library-mzm', name: '调制器（MZM）',
