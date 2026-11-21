@@ -343,6 +343,18 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     if (internal && width && height) return { ...internal.internals.positionAbsolute, width, height };
   }
 
+  function expandedFrameAt(point: XYPosition) {
+    let hit: TopologyItem | undefined;
+    for (const item of items) {
+      if (!item.frame || item.key === rootKey
+        || (hit && item.item.instancePath.length < hit.item.instancePath.length)) continue;
+      const bounds = boundsOf(item);
+      if (bounds && point.x >= bounds.x && point.x <= bounds.x + bounds.width
+        && point.y >= bounds.y && point.y <= bounds.y + bounds.height) hit = item;
+    }
+    return hit;
+  }
+
   function pointerOnCanvas(event: MouseEvent | TouchEvent) {
     if (!flow.current || !canvas.current) return;
     const contact = 'clientX' in event ? event : event.touches[0] ?? event.changedTouches[0];
@@ -577,8 +589,16 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
         }
         setWireStart(undefined);
       }}
-      onPaneClick={() => {
-        if (!panWithSpace) { cancelWiring(); setSelectedEdgeKey(undefined); selectObjects([]); report(''); }
+      onPaneClick={event => {
+        if (panWithSpace) return;
+        cancelWiring();
+        setSelectedEdgeKey(undefined);
+        const point = pointerOnCanvas(event.nativeEvent);
+        // Frame backgrounds leave pointer events to the pane so box selection still works.
+        const frame = point && expandedFrameAt(point);
+        if (frame) selectObject(frame.item.instancePath, event.ctrlKey || event.shiftKey || event.metaKey);
+        else selectObjects([]);
+        report('');
       }}
       onEdgeClick={(_, edge) => { cancelWiring(); selectObjects([]); setSelectedEdgeKey(edge.id); report(''); }}
       onNodeClick={(event, node) => {
