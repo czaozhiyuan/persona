@@ -25,19 +25,21 @@ import { CableForm, ConnectionForm, MappingForm, TopologyTool, field } from './w
 import type { LocalPort, UpdateWiring } from './wiring-forms';
 import './topology.css';
 
-export function TopologyEditor({ store, state, module, pathResult, graph, rename, expanded, setExpanded, budgetHighlight, onPortBudget, onDcBudget, onAddPort, newPort }: {
+export function TopologyEditor({ store, state, module, pathResult, graph, rename, expanded, setExpanded, budgetHighlight, onPortBudget, onDcBudget, onAddPort, newPort, onAddInside }: {
   store: ProjectStore; state: ProjectStoreSnapshot; module: ModuleDefinition; pathResult?: PathResult; graph: SignalGraph; rename: () => void;
   expanded: ReadonlySet<string>; setExpanded: (value: ReadonlySet<string>) => void;
   budgetHighlight?: BudgetHighlight;
   onPortBudget: (action: 'optical' | 'from' | 'to', ref: EndpointRef) => void;
   onDcBudget: (scope: InstancePath) => void;
   onAddPort: (path: InstancePath) => void;
+  onAddInside: (path: InstancePath) => void;
   newPort?: EndpointRef;
 }) {
   const { project, selection } = state;
   const scope = selection.modulePath;
   const moduleName = store.resolveInstance(scope)?.instance?.name ?? module.name;
   const [message, setMessage] = useState('');
+  const [placingModule, setPlacingModule] = useState(false);
   const [groupMode, setGroupMode] = useState(false);
   const [groupPaths, setGroupPaths] = useState<readonly InstancePath[]>([]);
   const [groupDialog, setGroupDialog] = useState(false);
@@ -52,6 +54,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
   const availableTemplates = builtInDefinitions.filter(template => !definitions.has(template.id));
   const selectedItem = selection.instancePath && store.resolveInstance(selection.instancePath);
   const selected = selectedItem?.definition;
+  const selectedModule = selectedItem?.definition.kind === 'module' && selectedItem.instance ? selectedItem : undefined;
   const dcScope = selected?.kind === 'module' && selected.physicalEnclosure ? selection.instancePath
     : module.physicalEnclosure ? scope : undefined;
   const sharedLocations = structureScope(graph.instances, module.id);
@@ -90,6 +93,9 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
   function add(item: LibraryItem, position?: { x: number; y: number }) {
     const id = crypto.randomUUID();
     if (!commit(draft => insertLibraryItem(draft, item, module.id, scope, id, position))) return false;
+    setGroupMode(false);
+    setGroupPaths([]);
+    setPlacingModule(false);
     store.selectInstance([...scope, id]);
     return true;
   }
@@ -202,7 +208,8 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
         selectInstance={store.selectInstance} enterModule={store.selectModule}
         onAddPort={onAddPort} newPort={newPort}
         openPort={(path, portId) => { setMessage(''); setPortAction({ path, portId }); }}
-        add={add} deleteSelection={deleteSelection} rename={rename} report={setMessage} undo={store.undo} redo={store.redo}
+        add={add} placingModule={placingModule} cancelPlacement={() => { setPlacingModule(false); setMessage(''); }}
+        deleteSelection={deleteSelection} rename={rename} report={setMessage} undo={store.undo} redo={store.redo}
         move={(path, position, frame) => commit(draft => {
           const placed = moveTopologyNode(draft, path, position);
           return frame ? resizeTopologyFrame(placed, { modulePath: path.slice(0, -1), ...frame }) : placed;
@@ -234,10 +241,18 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
         <button type="button" onClick={() => expandTo(maxDepth + 1)}>展开全部</button>
         <output htmlFor="topology-depth">{visibleDepth} / {maxDepth}</output>
       </div>
+      {placingModule && <p className="v1-placement-hint" role="status">点击画布放置到「{moduleName}」，按 Esc 取消。</p>}
       {message && !preview && !portAction && !bindingPreview && !groupDialog && <p className="v1-topology-message error" role="alert">{message}</p>}
     </div>
     <div className="v1-topology-tools">
-      <button type="button" aria-pressed={groupMode} title="在空白处拖动框选，或逐个点击对象"
+      <button type="button" className="primary" aria-pressed={placingModule} onClick={() => {
+        setMessage('');
+        setPlacingModule(!placingModule);
+      }}>{placingModule ? '取消放置' : '＋ 新建模块'}</button>
+      {selectedModule && !placingModule && <button type="button" onClick={() => onAddInside(selectedModule.instancePath)}>
+        添加内部对象 · {selectedModule.instance?.name}
+      </button>}
+      <button type="button" disabled={placingModule} aria-pressed={groupMode} title="在空白处拖动框选，或逐个点击对象"
         onClick={() => changeGroupSelection(groupMode || !selection.instancePath ? [] : [selection.instancePath], !groupMode)}>
         框选 / 多选
       </button>

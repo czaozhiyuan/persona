@@ -427,7 +427,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
               <TopologyEditor key={JSON.stringify(['topology', projectSession, selection.modulePath])}
                 store={store} state={state} module={active} pathResult={pathResult} graph={linkOptions.graph} rename={renameSelection}
                 expanded={expandedCanvas} setExpanded={setExpandedCanvas} budgetHighlight={budgetHighlight}
-                onPortBudget={selectBudgetPort} onDcBudget={showDc} onAddPort={setPortTarget} newPort={newPort} />}
+                onPortBudget={selectBudgetPort} onDcBudget={showDc} onAddPort={setPortTarget} newPort={newPort}
+                onAddInside={path => { store.selectModule(path); setLeftTab('library'); }} />}
           </div>
           <div className="v1-canvas-page v1-layout-scroll" inert={page !== 'canvas' || selection.view !== 'physical'}
             aria-hidden={page !== 'canvas' || selection.view !== 'physical'}>

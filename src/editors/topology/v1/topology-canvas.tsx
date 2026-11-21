@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
 import type { PathResult } from '../../../engine/v1/path-resolver';
 import { signalPortKey } from '../../../engine/v1/signal-graph';
+import { blankModuleId, builtInDefinitions, isBlankTemplate } from '../../../library/v1/built-in';
 import { libraryDragType, readLibraryItem } from '../../../library/v1/insert-library-item';
 import type { LibraryItem } from '../../../library/v1/insert-library-item';
 import type { WiringSelection } from '../../../state/v1/remove-topology-object';
@@ -19,7 +20,7 @@ import { CanvasControls, canvasFitOptions, flowAriaLabels } from './canvas-contr
 import { hierarchyKey } from './hierarchy-view';
 import { projectPathHighlight } from './path-highlight';
 import type { BudgetHighlight } from './path-highlight';
-import { projectTopology, toLocalPosition } from './topology-projection';
+import { estimatedBlockSize, projectTopology, toLocalPosition } from './topology-projection';
 import { handleId, nodeId, portKey, projectWiring, scopedWiringProblem } from './topology-wiring';
 import type { WiringEdge } from './topology-wiring';
 import '@xyflow/react/dist/style.css';
@@ -106,6 +107,8 @@ type Props = {
   resize: (frame: Rect, placementAdjustments: readonly { path: InstancePath; position: XYPosition }[]) => void;
   connect: (scope: InstancePath, connection: Omit<Connection, 'id'>) => void;
   mapPort: (scope: InstancePath, mapping: PortMapping) => void;
+  placingModule: boolean;
+  cancelPlacement: () => void;
   add: (item: LibraryItem, position: XYPosition) => boolean;
   deleteSelection: (path: InstancePath, instanceId?: string, wire?: WiringSelection) => boolean;
   rename: () => void;
@@ -119,7 +122,7 @@ export function TopologyCanvas(props: Props) {
 }
 
 function EditableTopologyCanvas({ project, instances, modulePath, selectedInstance, pathResult, budgetHighlight, expanded, toggleModule, selectInstance,
-  enterModule, move, resize, connect, mapPort, add, deleteSelection, rename, report, undo, redo, openPort,
+  enterModule, move, resize, connect, mapPort, add, placingModule, cancelPlacement, deleteSelection, rename, report, undo, redo, openPort,
   groupMode, groupPaths, changeGroupSelection, onAddPort, newPort }: Props) {
   const flowStore = useStoreApi();
   const boxSelection = useRef<Set<string> | undefined>(undefined);
@@ -265,9 +268,36 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
       moduleExtent(parent.frame.base, frameInsets(parent.item.definition.ports))) : local;
   }
 
+  function placeAt(item: LibraryItem, screen: XYPosition) {
+    if (!flow.current) return;
+    const position = flow.current.screenToFlowPosition(screen);
+    const scope = nodeByKey.get(rootKey);
+    if (scope?.frame?.saved) {
+      const saved = [...project.moduleDefinitions, ...project.componentDefinitions].find(entry => entry.id === item.id);
+      const template = item.source === 'template' ? builtInDefinitions.find(entry => entry.id === item.id) : undefined;
+      const definition = template && isBlankTemplate(item.id) ? template : saved ?? template;
+      if (!definition) return;
+      const extent = moduleExtent(scope.frame.base, frameInsets(scope.item.definition.ports));
+      const { x, y } = keepNodeInside({ ...position, ...estimatedBlockSize(definition.ports) }, extent);
+      if (x !== position.x || y !== position.y) {
+        report('此处无法完整放入当前模块，请选择框内其他位置或先调整模块边框。');
+        return;
+      }
+    }
+    cancelWiring();
+    setSelectedEdgeKey(undefined);
+    add(item, position);
+  }
+
   useEffect(() => {
     function keyboard(event: KeyboardEvent) {
       if (event.defaultPrevented || canvas.current?.closest('[inert]') || document.querySelector('dialog[open]')) return;
+      if (event.key === 'Escape' && placingModule) {
+        event.preventDefault();
+        cancelWiring();
+        cancelPlacement();
+        return;
+      }
       if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable]')) return;
       if (event.key === 'Escape' && wireStart) {
         event.preventDefault();
@@ -311,8 +341,11 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
       if (!event.dataTransfer.types.includes(libraryDragType)) return;
       event.preventDefault();
       const item = readLibraryItem(event.dataTransfer);
-      if (item && flow.current) add(item, flow.current.screenToFlowPosition({ x: event.clientX, y: event.clientY }));
+      if (item) placeAt(item, { x: event.clientX, y: event.clientY });
     }}>
+    {placingModule && <div className="v1-module-placement" onClick={event => {
+      placeAt({ source: 'template', id: blankModuleId, name: '新建模块' }, { x: event.clientX, y: event.clientY });
+    }} />}
     <ReactFlow<CanvasNode, WiringEdge> nodes={nodes} edges={edges.map(edge => ({ ...edge, selected: selectedWiring === edge }))}
       nodeTypes={nodeTypes} ariaLabelConfig={flowAriaLabels} fitView fitViewOptions={canvasFitOptions}
       viewport={viewport} onViewportChange={changeViewport} onInit={instance => { flow.current = instance; }}
