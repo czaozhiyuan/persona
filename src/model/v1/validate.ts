@@ -1,6 +1,6 @@
 import type { Instance, InstancePath, ModuleDefinition, PhysicalFootprint, PortDefinition, Project } from './types';
 import type { ParameterDefinition } from './parameters';
-import { channelSetsOverlap, validateConversionProfile, validateDevice, validatePortConstraints } from './validate-device';
+import { channelSetsOverlap, validateDevice, validatePortConstraints } from './validate-device';
 import { parameterCanFeed, validateParameterDefinition, validateParameterValue } from './validate-parameters';
 import { validateModuleTopology, validateNamedLinks } from './validate-topology';
 import { indexById, requireValid } from './validation';
@@ -73,6 +73,7 @@ export function validateProject(project: Project): void {
     for (const port of ports.values()) {
       requireValid(portTypes.has(port.type) && (port.direction === 'in' || port.direction === 'out'),
         `定义「${definition.id}」的端口「${port.id}」类型或方向无效`);
+      requireValid(!port.opticalEmitter || definition.kind === 'component', `定义「${definition.id}」：请在实际器件的光输出端口设置光源。`);
       validatePortConstraints(port, parameters, `定义「${definition.id}」的端口「${port.id}」`);
     }
     portsByDefinition.set(definition.id, ports);
@@ -81,10 +82,6 @@ export function validateProject(project: Project): void {
         `器件「${definition.id}」的宽和深须为以 mm 计量的有限正数`);
       validateDevice(definition, ports, parameters);
     }
-  }
-  const profiles = indexById(project.conversionProfiles ?? [], '标定方案');
-  for (const profile of profiles.values()) {
-    validateConversionProfile(profile);
   }
 
   function validateOverrides(definition: Definition, overrides: Instance['parameterOverrides'], context: string) {
@@ -176,7 +173,7 @@ export function validateProject(project: Project): void {
     validateOverrides(definition, settings.parameterOverrides, context);
     occurrenceSettings.add(key);
   }
-  validateNamedLinks(project.namedLinks ?? [], profiles, definitionAtPath);
+  validateNamedLinks(project.namedLinks ?? [], definitionAtPath);
 
   const parentByPlacement = new Map<string, string>();
   for (const placement of project.layout?.physical ?? []) {

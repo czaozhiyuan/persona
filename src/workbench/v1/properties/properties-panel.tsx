@@ -11,7 +11,7 @@ import { structureScope } from '../structure-scope';
 import { editModule } from '../../../state/v1/topology-edits';
 import { AutosaveForm } from './autosave-form';
 import { PortFields, TransferFields } from './device-fields';
-import { choice, formatValue, numberField, ParameterField, readEmpirical, readParameter, textField } from './value-fields';
+import { choice, formatValue, numberField, ParameterField, readNumericParameter, readParameter, textField } from './value-fields';
 
 type Definition = ComponentDefinition | ModuleDefinition;
 const sourceLabels = { default: '定义默认值', override: '当前实例单独设置', mapped: '由上级设置' };
@@ -22,7 +22,7 @@ function readDefault(data: FormData, parameter: ParameterDefinition): ParameterD
   if (parameter.kind === 'enum') return { ...parameter, name, defaultValue: choice(data, 'value') || undefined };
   const min = numberField(data, 'min');
   const max = numberField(data, 'max');
-  return { ...parameter, name, defaultValue: readEmpirical(data, 'value', parameter.valueKind),
+  return { ...parameter, name, defaultValue: readNumericParameter(data, 'value', parameter),
     range: min === undefined && max === undefined ? undefined : { min, max } };
 }
 
@@ -258,6 +258,29 @@ export function PropertiesPanel({ store, occurrence, occurrences, jumpToParamete
             </div>}
           </AutosaveForm>
         </details>)}
+        {definition.kind === 'component' && <form onSubmit={event => {
+          event.preventDefault();
+          const data = new FormData(event.currentTarget);
+          const fromPortId = choice(data, 'input'), toPortId = choice(data, 'output');
+          const from = definition.ports.find(port => port.id === fromPortId);
+          const to = definition.ports.find(port => port.id === toPortId);
+          const kind = from?.type === 'RF' && to?.type === 'OPTICAL' ? 'eo'
+            : from?.type === 'OPTICAL' && to?.type === 'RF' ? 'oe' : undefined;
+          if (!kind) { setError('请选择射频输入与光输出，或光输入与射频输出。'); return; }
+          if (definition.transfers?.some(t => t.fromPortId === fromPortId && t.toPortId === toPortId)) {
+            setError('这两个端口已有传输。'); return;
+          }
+          changeDefinition(() => ({ ...definition, transfers: [...(definition.transfers ?? []), { kind, fromPortId, toPortId }] }));
+        }}>
+          {(['in', 'out'] as const).map(direction => <label key={direction}>{direction === 'in' ? '转换输入' : '转换输出'}
+            <select name={direction === 'in' ? 'input' : 'output'} required defaultValue="">
+              <option value="">请选择端口</option>
+              {definition.ports.filter(port => port.direction === direction && (port.type === 'RF' || port.type === 'OPTICAL'))
+                .map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true)}</option>)}
+            </select>
+          </label>)}
+          <button type="submit">添加电光或光电传输</button>
+        </form>}
         {definition.kind === 'component' && definition.transfers?.map((transfer, index) => <details key={index}>
           <summary>传输 · {transferLabels[transfer.kind]} · {portDisplayName(definition.ports.find(port => port.id === transfer.fromPortId)!, true)} → {portDisplayName(definition.ports.find(port => port.id === transfer.toPortId)!, true)}</summary>
           <TransferFields key={JSON.stringify(transfer)} transfer={transfer} definition={definition}

@@ -18,18 +18,20 @@ const available = (value: number, unit: 'dB' | 'dBm' | 'W') => ({ availability: 
 test('the complete workbench example produces the documented EO/OE, scan, RF and DC results', () => {
   const project = load('v1-project.json');
   const link = project.namedLinks!.find(item => item.id === 'full')!;
-  const conditions = { opticalSources: [laser], inputPowerDbm: -20 };
+  const conditions = { inputPowerDbm: 0 };
   const budget = createLinkBudget(project);
   const point = budget.calculateNamedLink(link, { ...conditions, frequencyGHz: 1 });
   assert.equal(point.kind, 'conversion');
-  assert.deepEqual(point.gainDb, available(-22, 'dB'));
-  assert.deepEqual(point.powerDbm, available(-42, 'dBm'));
-  assert.deepEqual(point.segments[0].pdPowerDbm, available(-5, 'dBm'));
+  assert.equal(point.powerDbm.availability, 'available');
+  assert.ok(Math.abs(point.powerDbm.value + 31.995203) < 1e-6);
+  assert.deepEqual(point.gainDb, available(point.powerDbm.value, 'dB'));
+  assert.equal(point.segments[0].pdPowerDbm.availability, 'available');
+  assert.ok(Math.abs(point.segments[0].pdPowerDbm.value) < 1e-9);
   assert.equal(point.nfDb.availability, 'unavailable');
   const scan = budget.scanNamedLink(link, { startGHz: 0, stopGHz: 67 }, conditions);
   assert.equal(scan.points.length, 68);
-  assert.equal(scan.points[0].gainDb.availability, 'unavailable');
-  assert.deepEqual(scan.points[67].gainDb, available(-16, 'dB'));
+  assert.deepEqual(scan.points[0].gainDb, point.gainDb);
+  assert.deepEqual(scan.points[67].gainDb, point.gainDb);
 
   const blocked = createLinkBudget(editInstanceSettings(project, ['TX_A', 'optical-switch'],
     settings => ({ ...settings, switchStateId: 'block' })));
@@ -62,5 +64,5 @@ test('independent transmitter example round-trips with an open port and single-e
   assert.deepEqual(createOpticalBudget(restored).calculateLocal({
     eo: { instancePath: ['TX_A', 'mzm'], fromPortId: 'RF_IN', toPortId: 'OUT' },
     to: { instancePath: ['TX_A'], portId: 'OPT_OUT' }, channelId: laser.channelId, sources: [laser],
-  }).powerDbm, available(-5, 'dBm'));
+  }).powerDbm, available(-3 - 10 * Math.log10(2) - 2, 'dBm'));
 });

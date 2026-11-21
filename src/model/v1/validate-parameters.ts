@@ -1,3 +1,4 @@
+import { parameterValueKinds } from './parameters';
 import { resolveOpticalChannel } from './channels';
 import type { EmpiricalValue, NumericRange, ParameterDefinition, ParameterValue } from './parameters';
 import { requireValid } from './validation';
@@ -43,7 +44,7 @@ export function validateParameterValue(definition: ParameterDefinition, value: P
     requireValid(typeof value === 'string' && definition.options.includes(value), `${context}: 枚举值无效`);
   } else {
     requireValid(typeof value !== 'string', `${context}: 应为经验值`);
-    validateEmpirical(value, [definition.valueKind], context, definition.range);
+    validateEmpirical(value, parameterValueKinds(definition), context, definition.range);
   }
 }
 
@@ -62,7 +63,7 @@ export function parameterCanFeed(source: ParameterDefinition, target: ParameterD
   if (source.kind === 'enum') {
     return target.kind === 'enum' && source.options.every(value => target.options.includes(value));
   }
-  return target.kind === 'numeric' && source.unit === target.unit && source.valueKind === target.valueKind
+  return target.kind === 'numeric' && source.unit === target.unit && parameterValueKinds(source).every(kind => parameterValueKinds(target).includes(kind))
     && (source.range?.min ?? -Infinity) >= (target.range?.min ?? -Infinity)
     && (source.range?.max ?? Infinity) <= (target.range?.max ?? Infinity);
 }

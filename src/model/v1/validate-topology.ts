@@ -1,8 +1,7 @@
-import type { ConversionProfile } from './device';
-import type { Connection, ConversionBoundary, LocalEndpointRef, NamedLink } from './topology';
+import type { Connection, LocalEndpointRef, NamedLink } from './topology';
 import type { ComponentDefinition, InstancePath, ModuleDefinition, PortDefinition, PortType } from './types';
 import { channelSetsOverlap } from './validate-device';
-import { validateChannelIds, validateEmpirical } from './validate-parameters';
+import { validateChannelIds } from './validate-parameters';
 import { indexById, requireValid } from './validation';
 
 const mediaTypes: Record<NonNullable<Connection['mediaKind']>, PortType> = {
@@ -64,7 +63,7 @@ export function validateModuleTopology(
 }
 
 export function validateNamedLinks(
-  links: readonly NamedLink[], profiles: ReadonlyMap<string, ConversionProfile>,
+  links: readonly NamedLink[],
   definitionAtPath: (path: InstancePath) => ComponentDefinition | ModuleDefinition | undefined,
 ): void {
   for (const link of indexById(links, '链路').values()) {
@@ -105,25 +104,5 @@ export function validateNamedLinks(
       }
     }
 
-    const boundaries = new Set<string>();
-    for (const binding of indexById(link.conversionBindings ?? [], `${context}的标定绑定`).values()) {
-      const bindingContext = `${context}的标定绑定「${binding.id}」`;
-      requireValid(profiles.has(binding.profileId), `${bindingContext}: 标定方案「${binding.profileId}」不存在`);
-      const validateBoundary = (side: 'eo' | 'oe', boundary: ConversionBoundary) => {
-        const definition = definitionAtPath(boundary.instancePath);
-        requireValid(definition?.kind === 'component' && definition.transfers?.some(transfer =>
-          transfer.kind === side && transfer.fromPortId === boundary.fromPortId && transfer.toPortId === boundary.toPortId),
-        `${bindingContext}: ${side === 'eo' ? '电光' : '光电'}转换边界无效`);
-        const key = JSON.stringify([side, boundary.instancePath, boundary.fromPortId, boundary.toPortId]);
-        requireValid(!boundaries.has(key), `${bindingContext}: 此转换边界已绑定`);
-        boundaries.add(key);
-      };
-      validateBoundary('eo', binding.eo);
-      validateBoundary('oe', binding.oe);
-      const { rfGainRefDb, pdPowerRefDbm, k } = binding.overrides ?? {};
-      if (rfGainRefDb !== undefined) validateEmpirical(rfGainRefDb, ['fixed', 'rfCurve'], bindingContext);
-      requireValid((pdPowerRefDbm === undefined || Number.isFinite(pdPowerRefDbm)) && (k === undefined || Number.isFinite(k)),
-        `${bindingContext}: 参考功率和经验系数 K 的覆盖值须为有限数值`);
-    }
   }
 }

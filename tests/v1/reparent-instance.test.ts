@@ -57,8 +57,7 @@ test('a single move disconnects external wires and remaps each shared occurrence
   const moved = store.getSnapshot().project;
   assert.equal(store.resolveInstance(['TX_B', 'mod', 'mzm'])?.instance?.name, 'B 调制器');
   assert.deepEqual(store.resolveInstance(['TX_B', 'mod', 'mzm'])?.parameters.get('biasProbe')?.value, { kind: 'fixed', value: 4 });
-  assert.deepEqual(store.resolveInstance(nested)?.parameters.get('operatingPointLoss')?.value, { kind: 'fixed', value: 2 });
-  assert.deepEqual(fullLink(moved).conversionBindings?.[0].eo.instancePath, nested);
+  assert.deepEqual(store.resolveInstance(nested)?.parameters.get('insertionLoss')?.value, { kind: 'fixed', value: 3 });
   assert.deepEqual(fullLink(moved).via, link.via?.filter(ref => !('connectionId' in ref)));
   const tx = moduleById(moved, 'tx'), inner = moduleById(moved, 'mod-def');
   assert.deepEqual(preview.wiring, { retained: 0, disconnected: 3 });
@@ -81,9 +80,8 @@ test('a single move disconnects external wires and remaps each shared occurrence
   assert.equal(store.getSnapshot().project, moved);
 
   const raised = roundTrip(moveInstance(moved, nested, ['TX_A']));
-  assert.deepEqual(fullLink(raised).conversionBindings?.[0].eo.instancePath, modulator);
   assert.equal(moduleById(raised, 'tx').connections?.some(wire => wire.id === 'laser-feed'), false);
-  assert.deepEqual(createProjectStore(raised).resolveInstance(modulator)?.parameters.get('operatingPointLoss')?.value, { kind: 'fixed', value: 2 });
+  assert.deepEqual(createProjectStore(raised).resolveInstance(modulator)?.parameters.get('insertionLoss')?.value, { kind: 'fixed', value: 3 });
 
   const switchState = editInstanceSettings(raised, ['TX_B', 'optical-switch'], settings => ({ ...settings, switchStateId: 'block' }));
   const switched = createProjectStore(roundTrip(moveInstance(switchState, ['TX_A', 'optical-switch'], target)));

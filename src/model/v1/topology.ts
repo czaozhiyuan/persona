@@ -1,5 +1,4 @@
 import type { OpticalChannelId } from './channels';
-import type { ConversionProfile } from './device';
 import type { ConnectionRef, EndpointRef, InstancePath } from './types';
 
 /** Relative to the owning module definition. Only direct child ports are addressable. */
@@ -39,14 +38,6 @@ export type ConversionBoundary = {
   toPortId: string;
 };
 
-export type ConversionBinding = {
-  id: string;
-  profileId: string;
-  eo: ConversionBoundary;
-  oe: ConversionBoundary;
-  overrides?: Partial<Pick<ConversionProfile, 'rfGainRefDb' | 'pdPowerRefDbm' | 'k'>>;
-};
-
 export type OpticalSource = { endpoint: EndpointRef; channelId: OpticalChannelId; powerDbm?: number };
 
 export type LinkTrial = {
@@ -62,6 +53,5 @@ export type NamedLink = {
   to?: EndpointRef;
   channelId?: OpticalChannelId;
   via?: readonly (ConnectionRef | CableCoreRef)[];
-  conversionBindings?: readonly ConversionBinding[];
   trial?: LinkTrial;
 };

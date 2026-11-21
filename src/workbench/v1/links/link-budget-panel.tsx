@@ -1,3 +1,4 @@
+import { loadedVoltages } from '../../../engine/v1/conversion-budget';
 import { useMemo, useState } from 'react';
 import type { createLinkBudget, LinkBudgetConditions, LinkBudgetPoint, RfScanRange } from '../../../engine/v1/link-budget';
 import type { EndpointRef } from '../../../model/v1/types';
@@ -16,12 +17,17 @@ function PointDetails({ point, labels: { showEndpoint, showPort }, locate }: {
   point: LinkBudgetPoint; labels: PortLabels; locate: (endpoint: EndpointRef) => void;
 }) {
   const issue = point.kind !== 'conversion' ? point.pathIssue : undefined;
+  const voltages = loadedVoltages(point.powerDbm);
   return <div className="v1-point-details" data-budget-status={point.status}>
-    <h4>{Number.isFinite(point.frequencyGHz) ? `${point.frequencyGHz} GHz` : '频率未设'} · {statusLabels[point.status]}</h4>
+    <h4>{Number.isFinite(point.frequencyGHz) ? `${point.frequencyGHz} GHz` : '频率未设'} · {point.frequencyGHz === 0 && '低频极限参考 · '}{point.kind === 'conversion' && '正交小信号幅度估算 · '}{statusLabels[point.status]}</h4>
     <dl className="v1-budget-metrics">
       {(['gainDb', 'powerDbm', 'nfDb'] as const).map(key => <div key={key}>
-        <dt>{scanMetrics[key]}</dt><dd data-metric={key}><Metric metric={point[key]} /></dd>
+        <dt>{key === 'gainDb' && point.kind === 'conversion' ? '小信号射频增益' : scanMetrics[key]}</dt><dd data-metric={key}><Metric metric={point[key]} /></dd>
       </div>)}
+      {point.kind === 'conversion' && <>
+        <div><dt>外部 50 Ω Vrms</dt><dd><Metric metric={voltages.vrms} /></dd></div>
+        <div><dt>外部 50 Ω Vpp</dt><dd><Metric metric={voltages.vpp} /></dd></div>
+      </>}
     </dl>
     {issue && <p role="status">{issue.reason}{issue.endpoint && ` · ${showEndpoint(issue.endpoint)}`}</p>}
     {point.kind === 'rf' && point.stages.length > 0 && <details>
@@ -36,16 +42,24 @@ function PointDetails({ point, labels: { showEndpoint, showPort }, locate }: {
       </tr>)}</tbody></table></div>
     </details>}
     {point.kind === 'conversion' && <>
+      {point.segments.some(segment => segment.extrapolated) && <p className="v1-budget-warning">超出小信号范围，结果为线性外推</p>}
       {point.diagnostics.length > 0 && <ul className="v1-budget-reasons">{point.diagnostics.map((item, index) => <li key={index}>
-        {item.code === 'missing_binding' || item.code === 'missing_gain' ? '缺少参数 · ' : ''}
-        {item.reason}{item.endpoint && ` · ${showEndpoint(item.endpoint)}`}{item.bindingId && ` · ${item.bindingId}`}
+        {item.code === 'missing_gain' ? '缺少参数 · ' : ''}
+        {item.reason}{item.endpoint && ` · ${showEndpoint(item.endpoint)}`}
       </li>)}</ul>}
+      {point.continuousWave && <dl className="v1-budget-metrics">
+        <div><dt>探测器平均信号光功率</dt><dd><Metric metric={point.continuousWave.optical.powerDbm} /></dd></div>
+        <div><dt>平均光电流</dt><dd><Metric metric={point.continuousWave.averageCurrent} /></dd></div>
+      </dl>}
       {point.segments.map(segment => <details key={segment.eoEdgeIndex}>
-        <summary>电光—光电标定段 · {showEndpoint(segment.pdInput)}{segment.channelId && ` · ${segment.channelId}`}</summary>
+        <summary>电光—光电转换段 · {showEndpoint(segment.pdInput)}{segment.channelId && ` · ${segment.channelId}`}</summary>
         <dl className="v1-budget-metrics">
+          <div><dt>调制深度 m</dt><dd><Metric metric={segment.modulationDepth} />{segment.extrapolated && ' · 线性外推'}</dd></div>
+          <div><dt>平均光电流</dt><dd><Metric metric={segment.averageCurrent} /></dd></div>
+          <div><dt>MZM 输入额定</dt><dd><Rating check={segment.inputRating} /></dd></div>
           <div><dt>探测器光功率</dt><dd data-metric="pd-power"><Metric metric={segment.pdPowerDbm} /></dd></div>
-          <div><dt>标定段增益</dt><dd data-metric="conversion-gain"><Metric metric={segment.gainDb} /></dd></div>
-          <div><dt>标定段输出射频功率</dt><dd><Metric metric={segment.rfOutputDbm} /></dd></div>
+          <div><dt>转换段增益</dt><dd data-metric="conversion-gain"><Metric metric={segment.gainDb} /></dd></div>
+          <div><dt>转换段输出射频功率</dt><dd><Metric metric={segment.rfOutputDbm} /></dd></div>
         </dl>
         {segment.optical?.stages.length ? <div className="v1-budget-table"><table><thead><tr>
           <th>光端口</th><th>通道</th><th>光功率</th><th>本级增益</th><th>输入额定</th>
@@ -56,7 +70,7 @@ function PointDetails({ point, labels: { showEndpoint, showPort }, locate }: {
         </tr>)}</tbody></table></div> : null}
       </details>)}
       {point.rfStages.length > 0 && <details>
-        <summary>标定段外的射频级</summary>
+        <summary>转换段外的射频级</summary>
         <div className="v1-budget-table"><table><thead><tr>
           <th>端口</th><th>本级增益</th><th>本级噪声系数</th><th>输出功率</th><th>输入额定</th>
         </tr></thead><tbody>{point.rfStages.map(stage => <tr key={stage.edgeIndex}>
@@ -124,7 +138,7 @@ export function LinkBudgetPanel({ link, budget, conditions, frequency, setFreque
           <label>查看频点<select name="scanPoint" value={selectedPoint.frequencyGHz}
             onChange={event => setScanFrequency(Number(event.target.value))}>
             {scan.points.map(point => <option key={point.frequencyGHz} value={point.frequencyGHz}>
-              {point.frequencyGHz} GHz · {statusLabels[point.status]}
+              {point.frequencyGHz} GHz · {statusLabels[point.status]}{point.kind === 'conversion' && point.segments.some(s => s.extrapolated) && ' · 线性外推'}
             </option>)}
           </select></label>
         </div>

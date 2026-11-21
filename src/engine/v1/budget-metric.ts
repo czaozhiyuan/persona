@@ -16,10 +16,16 @@ export function budgetValue<Unit extends NumericUnit>(unit: Unit, value: number)
     : unavailable(unit, '预算结果不是有限数值。');
 }
 
+/** Exact linear zero expressed in logarithmic units. */
+export function logZero<Unit extends 'dB' | 'dBm'>(unit: Unit): BudgetMetric<Unit> {
+  return { unit, availability: 'available', value: -Infinity };
+}
+
 export function addGain<Unit extends 'dB' | 'dBm'>(input: BudgetMetric<Unit>, gain: BudgetMetric<'dB'>): BudgetMetric<Unit> {
   if (input.availability === 'unavailable') return input;
-  return gain.availability === 'available' ? budgetValue(input.unit, input.value + gain.value)
-    : unavailable(input.unit, gain.reason);
+  if (gain.availability === 'unavailable') return unavailable(input.unit, gain.reason);
+  if (input.value === -Infinity || gain.value === -Infinity) return logZero(input.unit);
+  return budgetValue(input.unit, input.value + gain.value);
 }
 
 export type InputRatingCheck = { endpoint: EndpointRef; limits: InputRating } & (

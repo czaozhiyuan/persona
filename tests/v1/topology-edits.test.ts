@@ -28,7 +28,7 @@ test('shared MZM output deletion previews direct and scoped Link references and 
   const plan = planPortDeletion(before.project, 'mzm', 'OUT')!;
   assert.equal(store.getSnapshot(), before);
   assert.deepEqual(plan.impacts[0].paths, [['TX_A', 'mzm'], ['TX_B', 'mzm']]);
-  for (const kind of ['器件传输', '连接', '端口映射', '链路端点', '链路必经边', '标定绑定']) {
+  for (const kind of ['器件传输', '连接', '端口映射', '链路端点', '链路必经边']) {
     assert.ok(plan.impacts.some(impact => impact.kind === kind), kind);
   }
   assert.deepEqual(plan.impacts.find(impact => impact.kind === '连接')?.paths, [['TX_A'], ['TX_B']]);
@@ -36,10 +36,9 @@ test('shared MZM output deletion previews direct and scoped Link references and 
   const after = store.getSnapshot().project;
   assert.deepEqual(after.moduleDefinitions.find(module => module.id === 'tx')?.portMappings, []);
   assert.ok(after.moduleDefinitions.find(module => module.id === 'tx')?.ports.some(port => port.id === 'OPT_OUT'));
-  assert.equal(after.namedLinks?.find(link => link.id === 'full')?.conversionBindings?.length, 0);
   assert.deepEqual(after.namedLinks?.find(link => link.id === 'monitor'), {
     id: 'monitor', name: 'Monitor link', from: undefined, to: undefined, channelId: 'DWDM_CH28',
-    via: [{ scopePath: [], bundleId: 'mpo-12', coreId: 'wdm' }], conversionBindings: undefined,
+    via: [{ scopePath: [], bundleId: 'mpo-12', coreId: 'wdm' }],
   });
   store.undo();
   assert.equal(store.getSnapshot().project, before.project);
@@ -49,11 +48,9 @@ test('shared MZM output deletion previews direct and scoped Link references and 
 test('removing an EO supply or a switch port clears dependent routes, including supply-only invalidation', () => {
   const store = createProjectStore(topologyExample);
   const eo = planPortDeletion(store.getSnapshot().project, 'mzm', 'SUPPLY')!;
-  assert.ok(eo.impacts.some(impact => impact.kind === '标定绑定'));
   assert.equal(eo.impacts.some(impact => impact.kind === '端口映射'), false);
   assert.equal(store.commit(() => eo.project).ok, true);
   assert.deepEqual(store.getSnapshot().project.componentDefinitions.find(item => item.id === 'mzm')?.transfers, []);
-  assert.deepEqual(store.getSnapshot().project.namedLinks?.find(link => link.id === 'full')?.conversionBindings, []);
 
   const switches = createProjectStore(deviceExample);
   const plan = planPortDeletion(switches.getSnapshot().project, 'switch', 'OUT_A')!;

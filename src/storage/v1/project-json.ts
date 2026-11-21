@@ -4,7 +4,7 @@ import { assertProjectShape, ProjectStructureError } from './project-schema';
 export { ProjectStructureError } from './project-schema';
 
 export const PROJECT_FILE_FORMAT = 'persona-project';
-export const PROJECT_SCHEMA_VERSION = 1;
+export const PROJECT_SCHEMA_VERSION = 2;
 
 export class ProjectFileError extends Error {
   constructor(readonly stage: 'syntax' | 'format' | 'domain', message: string, options?: ErrorOptions) {
@@ -56,7 +56,9 @@ export function parseProjectJson(source: string): Project {
     throw new ProjectFileError('format', `$.format：必须为「${PROJECT_FILE_FORMAT}」`);
   }
   if (!Object.hasOwn(file, 'schemaVersion') || file.schemaVersion !== PROJECT_SCHEMA_VERSION) {
-    throw new ProjectFileError('format', `$.schemaVersion：仅支持版本 ${PROJECT_SCHEMA_VERSION}`);
+    const reason = file.schemaVersion === 1 ? '版本 1 使用旧参数格式，请在当前工作台重建器件参数。'
+      : `仅支持版本 ${PROJECT_SCHEMA_VERSION}。`;
+    throw new ProjectFileError('format', `$.schemaVersion：${reason}`);
   }
   for (const key of Object.keys(file)) {
     if (!['format', 'schemaVersion', 'project'].includes(key)) {

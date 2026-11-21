@@ -149,7 +149,6 @@ test('deleting the shared modulator clears parent wires, scoped via, endpoints a
   assert.deepEqual(linkFrom(result, 'full').via, [
     { scopePath: [], bundleId: 'mpo-12', coreId: 'wdm' }, sameIdInRoot, otherWire,
   ]);
-  assert.deepEqual(linkFrom(result, 'full').conversionBindings, []);
   assert.equal(linkFrom(result, 'draft').from, undefined);
   assert.equal(linkFrom(result, 'draft').to, undefined);
   const txModulator = (path: readonly string[]) => ['TX_A', 'TX_B'].includes(path[0]) && path[1] === 'mzm';

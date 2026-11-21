@@ -11,7 +11,7 @@
 .v1-links form > button { margin: .7rem .4rem 0 0; }
 .v1-link-diagnostics { margin: .7rem 0; padding: .65rem .8rem; border-radius: .35rem; background: #f9f0e0; color: #654522; }
 .v1-link-diagnostics[data-path-status="resolved"] { background: #e5f3eb; color: #245949; }
-.v1-link-diagnostics p, .v1-link-diagnostics ul, .v1-binding-matches { margin: .35rem 0 0; overflow-wrap: anywhere; }
+.v1-link-diagnostics p, .v1-link-diagnostics ul { margin: .35rem 0 0; overflow-wrap: anywhere; }
 .v1-link-budget { margin-top: .85rem; padding: .8rem; border: 1px solid #d2dfdb; border-radius: .4rem; background: #f8fbfa; }
 .v1-link-budget h3 { margin: 0; font-size: 1rem; }
 .v1-point-details h4 { margin: .8rem 0 .4rem; font-size: .87rem; color: #345951; }

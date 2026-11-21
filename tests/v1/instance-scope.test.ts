@@ -45,14 +45,14 @@ test('the TX_A switch changes only its own route and budget and survives undo an
 test('a mapped loss uses the controlling occurrence and undo restores the inherited value', () => {
   const store = createProjectStore(example());
   const value = { kind: 'fixed', value: 6 } as const;
-  const txLoss = (tx: string) => store.resolveInstance([tx, 'mzm'])?.parameters.get('operatingPointLoss');
+  const txLoss = (tx: string) => store.resolveInstance([tx, 'mzm'])?.parameters.get('insertionLoss');
   assert.equal(store.commit(project => editInstanceSettings(project, ['TX_A'], settings =>
-    ({ ...settings, parameterOverrides: { operatingPointLoss: value } }))).ok, true);
-  assert.deepEqual(txLoss('TX_A'), { value, source: { kind: 'mapped', instancePath: ['TX_A'], parameterId: 'operatingPointLoss' } });
-  assert.deepEqual(txLoss('TX_B')?.value, { kind: 'fixed', value: 2 });
-  assert.deepEqual(roundTrip(store).resolveInstance(['TX_A', 'mzm'])?.parameters.get('operatingPointLoss'), txLoss('TX_A'));
+    ({ ...settings, parameterOverrides: { insertionLoss: value } }))).ok, true);
+  assert.deepEqual(txLoss('TX_A'), { value, source: { kind: 'mapped', instancePath: ['TX_A'], parameterId: 'insertionLoss' } });
+  assert.deepEqual(txLoss('TX_B')?.value, { kind: 'fixed', value: 3 });
+  assert.deepEqual(roundTrip(store).resolveInstance(['TX_A', 'mzm'])?.parameters.get('insertionLoss'), txLoss('TX_A'));
   store.undo();
-  assert.deepEqual(txLoss('TX_A')?.value, { kind: 'fixed', value: 2 });
+  assert.deepEqual(txLoss('TX_A')?.value, { kind: 'fixed', value: 3 });
 });
 
 test('reuse takes default settings and a copy owns editable nested definitions and saved settings', () => {
@@ -69,7 +69,7 @@ test('reuse takes default settings and a copy owns editable nested definitions a
   assert.equal(instance('copy', 'optical-switch')?.instance?.switchStateId, 'block');
   assert.equal(instance('reuse', 'mzm')?.definition.id, instance('TX_A', 'mzm')?.definition.id);
   assert.notEqual(instance('copy', 'mzm')?.definition.id, instance('TX_A', 'mzm')?.definition.id);
-  assert.equal(instance('copy', 'mzm')?.parameters.get('operatingPointLoss')?.source.kind, 'mapped');
+  assert.equal(instance('copy', 'mzm')?.parameters.get('insertionLoss')?.source.kind, 'mapped');
   assert.equal(restored.commit(project => editModule(project, 'tx', definition =>
     ({ ...definition, ports: [...definition.ports, { id: 'NEW_PORT', type: 'RF', direction: 'out' }] }))).ok, true);
   for (const id of ['TX_A', 'TX_B', 'reuse']) {

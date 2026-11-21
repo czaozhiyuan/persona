@@ -1,5 +1,5 @@
 import { portDisplayName, portTypeLabels } from '../labels';
-import { useState } from 'react';
+import { receiverModes } from '../../../model/v1/device';
 import { resolveEmpiricalValue } from '../../../engine/v1/empirical-value';
 import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
 import type { ComponentDefinition, PortDefinition, PortDirection, PortType } from '../../../model/v1/types';
@@ -8,7 +8,7 @@ import { AutosaveForm } from './autosave-form';
 import { ChannelField } from './channel-field';
 import { InputRatingField, ratingUnits, readInputRating } from './input-rating-field';
 import { OutputVoltageField, readOutputVoltage } from './output-voltage-field';
-import { channelId, channelList, choice, opticalKinds, QuantityField, readQuantity, rfKinds } from './value-fields';
+import { channelId, channelList, choice, enumLabel, opticalKinds, QuantityField, readQuantity, rfKinds } from './value-fields';
 
 export function PortFields({ port, occurrence, save, remove }: {
   port: PortDefinition; occurrence: ResolvedInstance; save: (port: PortDefinition) => boolean; remove: () => void;
@@ -30,6 +30,8 @@ export function PortFields({ port, occurrence, save, remove }: {
     const next: PortDefinition = {
       ...port, name: choice(data, 'name').trim() || undefined, type, direction, channelIds,
       inputRating: sameRating ? previousRating : inputRating,
+      opticalEmitter: type === 'OPTICAL' && direction === 'out' && data.get('emitter') === 'yes'
+        ? { powerDbm: readQuantity(data, 'sourcePower', opticalKinds) } : undefined,
       outputVoltageV: type === 'DC_POWER' && direction === 'out' ? readOutputVoltage(data) : undefined,
     };
     const nextVersion = JSON.stringify(next);
@@ -51,6 +53,13 @@ function PortControls({ port, occurrence, remove }: { port: PortDefinition; occu
       <option value="in">输入</option><option value="out">输出</option>
     </select></label>
     {type === 'OPTICAL' && <ChannelField name="channels" label="适用通道（未选择表示不限）" value={port.channelIds} multiple />}
+    {type === 'OPTICAL' && direction === 'out' && occurrence.definition.kind === 'component' && <>
+      <label>光源端口<select name="emitter" defaultValue={port.opticalEmitter ? 'yes' : ''}>
+        <option value="">普通光输出</option><option value="yes">连续光源输出</option>
+      </select></label>
+      {port.opticalEmitter && <QuantityField name="sourcePower" label="平均信号光功率" unit="dBm" kinds={opticalKinds}
+        value={port.opticalEmitter.powerDbm} parameters={occurrence.definition.parameters ?? []} />}
+    </>}
     {ratings.length > 0 && <InputRatingField key={type} units={ratings} rating={port.inputRating} />}
     {type === 'DC_POWER' && direction === 'out' && <PortVoltage port={port} occurrence={occurrence} />}
     <div className="actions">
@@ -84,18 +93,16 @@ function readTransfer(data: FormData, transfer: Transfer): Transfer {
   switch (transfer.kind) {
     case 'rf': return { ...transfer, ...ports, gainDb: readQuantity(data, 'gain', rfKinds), nfDb: readQuantity(data, 'nf', rfKinds) };
     case 'optical': return { ...transfer, ...ports, channelIds: channelList(data, 'channels'), gainDb: readQuantity(data, 'gain', opticalKinds) };
-    case 'eo': {
-      const split = choice(data, 'eoLossMode') === 'split';
-      return { ...transfer, ...ports, channelIds: channelList(data, 'channels'),
-        supplyPortId: choice(data, 'supply') || undefined,
-        gainDb: split ? undefined : readQuantity(data, 'gain', opticalKinds),
-        opticalLoss: split ? {
-          intrinsicLossDb: readQuantity(data, 'intrinsicLoss', opticalKinds),
-          operatingPointLossDb: readQuantity(data, 'operatingPointLoss', opticalKinds),
-        } : undefined,
-      };
+    case 'eo': return { ...transfer, ...ports, channelIds: channelList(data, 'channels'), supplyPortId: choice(data, 'supply') || undefined,
+      insertionLossDb: readQuantity(data, 'insertionLoss', opticalKinds), vPi: readQuantity(data, 'vPi', rfKinds) };
+    case 'oe': {
+      const mode = choice(data, 'receiver');
+      const receiver = mode.startsWith('param:') ? { kind: 'parameter' as const, parameterId: mode.slice(6) }
+        : receiverModes.find(item => item === mode);
+      return { ...transfer, ...ports, channelIds: channelList(data, 'channels'), receiver,
+        responsivity: readQuantity(data, 'responsivity', opticalKinds), responseDb: readQuantity(data, 'responseDb', rfKinds),
+        loadedGain: readQuantity(data, 'loadedGain', rfKinds) };
     }
-    case 'oe': return { ...transfer, ...ports, channelIds: channelList(data, 'channels') };
     case 'wavelengthConversion': return { ...transfer, ...ports, fromChannelId: channelId(choice(data, 'fromChannel')),
       toChannelId: channelId(choice(data, 'toChannel')), gainDb: readQuantity(data, 'gain', opticalKinds) };
     case 'dc': return { ...transfer, ...ports };
@@ -108,7 +115,6 @@ export function TransferFields({ transfer, definition, save }: {
   const inputPorts = definition.ports.filter(port => port.direction === 'in');
   const outputPorts = definition.ports.filter(port => port.direction === 'out');
   const parameters = definition.parameters ?? [];
-  const [eoLossMode, setEoLossMode] = useState(transfer.kind === 'eo' && transfer.gainDb !== undefined ? 'net' : 'split');
   return <form onSubmit={event => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
@@ -135,16 +141,23 @@ export function TransferFields({ transfer, definition, save }: {
       <QuantityField name="nf" label="噪声系数" kinds={rfKinds} value={transfer.nfDb} parameters={parameters} />
     </>}
     {transfer.kind === 'eo' && <>
-      <label>光学损耗设置<select name="eoLossMode" value={eoLossMode} onChange={event => setEoLossMode(event.target.value)}>
-        <option value="split">独立插损</option>
-        <option value="net">带符号净增益</option>
+      <QuantityField name="insertionLoss" label="最大透过状态光插损" kinds={opticalKinds}
+        value={transfer.insertionLossDb} parameters={parameters} minimum={0} />
+      <QuantityField name="vPi" label="RF 半波电压 Vπ" unit="V" kinds={rfKinds}
+        value={transfer.vPi} parameters={parameters} minimum={Number.MIN_VALUE} />
+      <p>正交偏置自动计入 3.0103 dB 损耗。固定 Vπ 按平坦响应估算。</p>
+    </>}
+    {transfer.kind === 'oe' && <>
+      <label>接收结构<select name="receiver" defaultValue={typeof transfer.receiver === 'object'
+        ? 'param:' + transfer.receiver.parameterId : transfer.receiver ?? ''}>
+        <option value="">未设置</option>
+        {receiverModes.map(mode => <option key={mode} value={mode}>{enumLabel(mode)}</option>)}
+        {parameters.filter(p => p.kind === 'enum' && p.options.every(o => receiverModes.some(m => m === o))).map(p =>
+          <option key={p.id} value={'param:' + p.id}>引用参数 · {p.name}</option>)}
       </select></label>
-      {eoLossMode === 'split' ? <>
-        <QuantityField name="intrinsicLoss" label="固有插损" kinds={opticalKinds}
-          value={transfer.opticalLoss?.intrinsicLossDb} parameters={parameters} minimum={0} />
-        <QuantityField name="operatingPointLoss" label="控制点附加损耗" kinds={opticalKinds}
-          value={transfer.opticalLoss?.operatingPointLossDb} parameters={parameters} minimum={0} />
-      </> : <QuantityField name="gain" label="光学净增益" kinds={opticalKinds} value={transfer.gainDb} parameters={parameters} />}
+      <QuantityField name="responsivity" label="响应度" unit="A/W" kinds={opticalKinds} value={transfer.responsivity} parameters={parameters} minimum={0} />
+      <QuantityField name="responseDb" label="无源 PD 归一化幅频响应（未填按平坦 0 dB）" kinds={rfKinds} value={transfer.responseDb} parameters={parameters} />
+      <QuantityField name="loadedGain" label="有源接收机外接 50 Ω 的转换增益" unit="V/W" kinds={rfKinds} value={transfer.loadedGain} parameters={parameters} />
     </>}
     {(transfer.kind === 'optical' || transfer.kind === 'wavelengthConversion') &&
       <QuantityField name="gain" label="增益" kinds={opticalKinds} value={transfer.gainDb} parameters={parameters} />}

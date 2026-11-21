@@ -44,7 +44,7 @@ function unresolved(frequencyGHz: number, pathIssue: UnresolvedPoint['pathIssue'
 export function createLinkBudget(project: Project) {
   const resolver = createPathResolver(project);
   const evaluateRf = createRfPathBudget(resolver.graph);
-  const evaluateConversion = createConversionPathBudget(resolver.graph, project.conversionProfiles);
+  const evaluateConversion = createConversionPathBudget(resolver.graph);
 
   function resolveNamedLink(link: NamedLink, conditions: LinkBudgetConditions = {}): PathResult {
     return resolver.resolveNamedLink(link, {
@@ -57,7 +57,7 @@ export function createLinkBudget(project: Project) {
     if (path.status !== 'resolved' && !path.trace) {
       return frequencyGHz => unresolved(frequencyGHz, { status: path.status, reason: path.reason, endpoint: path.endpoint });
     }
-    if (path.trace?.conversions.length || path.trace?.bindings.length) {
+    if (path.trace?.conversions.length) {
       return frequencyGHz => ({ kind: 'conversion', ...evaluateConversion(path, { ...conditions, frequencyGHz }) });
     }
     const nonRf = path.trace?.steps.find(step => step.port.definition.type !== 'RF');

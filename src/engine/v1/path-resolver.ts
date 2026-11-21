@@ -1,6 +1,7 @@
+import { findOpticalSupply } from './optical-supply';
 import { resolveOpticalChannel } from '../../model/v1/channels';
 import type { OpticalChannelId } from '../../model/v1/channels';
-import type { CableCoreRef, ConversionBinding, NamedLink } from '../../model/v1/topology';
+import type { CableCoreRef, NamedLink } from '../../model/v1/topology';
 import type { ConnectionRef, EndpointRef, InstancePath, Project } from '../../model/v1/types';
 import { validateNamedLinks } from '../../model/v1/validate-topology';
 import { intersectCarrier, searchSignalPath } from './path-search';
@@ -15,7 +16,6 @@ export type PathOptions = {
 };
 
 type ConversionStep = { kind: 'eo' | 'oe'; edgeIndex: number };
-type BindingMatch = { binding: ConversionBinding; eoEdgeIndex?: number; oeEdgeIndex?: number; matched: boolean };
 type SupplyBranch = { edgeIndex: number; endpoint: EndpointRef } & (
   | { status: 'resolved'; path: SignalPath }
   | { status: 'missing' | 'ambiguous' | 'feedback_loop' | 'search_limit' }
@@ -23,7 +23,6 @@ type SupplyBranch = { edgeIndex: number; endpoint: EndpointRef } & (
 
 export type PathTrace = SignalPath & {
   readonly conversions: readonly ConversionStep[];
-  readonly bindings: readonly BindingMatch[];
   readonly supplies: readonly SupplyBranch[];
 };
 
@@ -48,7 +47,6 @@ function inside(scope: InstancePath, path: InstancePath): boolean {
 export function createPathResolver(project: Project) {
   const graph = buildSignalGraph(project);
   const scopes = new Map(graph.instances.map(instance => [JSON.stringify(instance.instancePath), instance.definition]));
-  const profiles = new Map(project.conversionProfiles?.map(profile => [profile.id, profile]));
   const edgeRefs = new Map<string, SignalEdge>();
   const outgoing = new Map<SignalPort, SignalEdge[]>();
   const incoming = new Map<SignalPort, SignalEdge[]>();
@@ -75,7 +73,7 @@ export function createPathResolver(project: Project) {
     return port;
   }
 
-  function traceSupplies(path: SignalPath, sources: ReadonlyMap<SignalPort, Carrier>, bindings: readonly ConversionBinding[]): PathResult {
+  function traceSupplies(path: SignalPath, sources: ReadonlyMap<SignalPort, Carrier>): PathResult {
     const steps = [...path.steps];
     const conversions: ConversionStep[] = [];
     const supplies: SupplyBranch[] = [];
@@ -86,10 +84,7 @@ export function createPathResolver(project: Project) {
       conversions.push({ kind, edgeIndex });
       if (!edge.supply) continue;
 
-      const supply = searchSignalPath({
-        starts: [...sources.keys()], startCarriers: sources, target: edge.supply, adjacent: outgoing, carrier: undefined,
-        targetCarrier: steps[edgeIndex + 1].channelIds, opticalOnly: true,
-      });
+      const supply = findOpticalSupply(graph, outgoing, edge.supply, steps[edgeIndex + 1].channelIds, sources);
       const endpoint = edge.supply.ref;
       if (supply.status !== 'resolved') {
         supplies.push({ edgeIndex, endpoint, status: supply.status === 'unreachable' ? 'missing' : supply.status });
@@ -102,20 +97,7 @@ export function createPathResolver(project: Project) {
         if (path.edges[i]?.channels.kind !== 'preserve') break;
       }
     }
-    const matches = bindings.map(binding => {
-      const indexOf = (kind: 'eo' | 'oe') => conversions.findIndex(step => {
-        if (step.kind !== kind) return false;
-        const edge = path.edges[step.edgeIndex];
-        const boundary = binding[kind];
-        return signalPortKey(edge.from.ref) === signalPortKey({ instancePath: boundary.instancePath, portId: boundary.fromPortId })
-          && edge.to.ref.portId === boundary.toPortId;
-      });
-      const eo = indexOf('eo');
-      const oe = indexOf('oe');
-      return { binding, eoEdgeIndex: conversions[eo]?.edgeIndex, oeEdgeIndex: conversions[oe]?.edgeIndex,
-        matched: eo >= 0 && oe === eo + 1 };
-    });
-    const trace = { steps, edges: path.edges, conversions, bindings: matches, supplies };
+    const trace = { steps, edges: path.edges, conversions, supplies };
     const failure = supplies.find(supply => supply.status !== 'resolved');
     if (failure) {
       const status = failure.status === 'missing' ? 'unreachable' : failure.status;
@@ -170,9 +152,10 @@ export function createPathResolver(project: Project) {
     const carrier: Carrier = request.channelId === undefined ? undefined : [request.channelId];
     const result = searchSignalPath({
       starts: [from], target: to, adjacent: outgoing, carrier, required, allRequired: (1n << BigInt(required.size)) - 1n,
+      startCarriers: from.definition.type === 'OPTICAL' && to.definition.type === 'RF' ? sources : undefined,
     });
     switch (result.status) {
-      case 'resolved': return traceSupplies(result.path, sources, link?.conversionBindings ?? []);
+      case 'resolved': return traceSupplies(result.path, sources);
       case 'ambiguous': return { status: 'ambiguous', reason: '有多条路径满足端点与路由约束。' };
       case 'feedback_loop': return { status: 'feedback_loop', endpoint: result.endpoint.ref, reason: '不支持所选路径中的反馈回路。' };
       case 'search_limit': return { status: 'search_limit', reason: '路径搜索超出资源上限。' };
@@ -198,7 +181,7 @@ export function createPathResolver(project: Project) {
 
   function resolveNamedLink(link: NamedLink, options: PathOptions = {}): PathResult {
     try {
-      validateNamedLinks([link], profiles, path => scopes.get(JSON.stringify(path)));
+      validateNamedLinks([link], path => scopes.get(JSON.stringify(path)));
     } catch (error) {
       return { status: 'invalid_reference', reason: (error as Error).message };
     }

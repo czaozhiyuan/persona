@@ -26,7 +26,6 @@ import type { LocalOpticalSettings } from './budgets/local-optical-panel';
 import { LibraryPanel } from './library-panel';
 import { LinkEditor } from './links/link-editor';
 import { createLinkOptions } from './links/link-options';
-import { ProfilePanel } from './properties/profile-panel';
 import { addDefinitionPort } from '../../state/v1/module-ports';
 import { AddPortDialog } from './properties/add-port-dialog';
 import { structureLocations, structureScope } from './structure-scope';
@@ -41,7 +40,7 @@ type Props = {
   newProject: () => Project;
 };
 
-type Page = 'canvas' | 'project' | 'profiles';
+type Page = 'canvas' | 'project';
 type BudgetPage = 'links' | 'optical' | 'dc';
 type SideTab = 'structure' | 'library';
 type Presentation = {
@@ -133,7 +132,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     if (pathResult?.status !== 'resolved' || !from || !to || !channelId || via?.length || pathResult.trace.conversions.length) return undefined;
     if (linkOptions.graph.ports.get(signalPortKey(to))?.definition.type !== 'OPTICAL') return undefined;
     const source = conditions.opticalSources?.find(item => signalPortKey(item.endpoint) === signalPortKey(from) && item.channelId === channelId);
-    return source && opticalBudget.calculateLocal({ source, to });
+    return opticalBudget.calculateLocal({ source: source ?? { endpoint: from, channelId }, to });
   }, [selectedLink, pathResult, conditions, linkOptions, opticalBudget]);
   const budgetHighlight = useMemo((): BudgetHighlight | undefined => {
     if (dock === 'links') return { endpoints: [selectedLink?.from, selectedLink?.to].filter(ref => ref !== undefined) };
@@ -608,7 +607,6 @@ export function Workbench({ store, loadExample, newProject }: Props) {
               <button type="button" onClick={showLinks}>查看链路预算</button>
               <button type="button" onClick={() => { setOpticalTarget(undefined); openBudget('optical'); }}>局部光功率</button>
               <button type="button" onClick={() => showDc()}>直流供电预算</button>
-              <button type="button" onClick={() => openPage('profiles')}>工程标定方案</button>
             </div>
           </details>
           <details name="workbench-menu" data-workbench-popup><summary>视图</summary>
@@ -731,7 +729,6 @@ export function Workbench({ store, loadExample, newProject }: Props) {
             </dl>
           </section>
         </div>}
-        {page === 'profiles' && <ProfilePanel key={JSON.stringify(['profiles', project.id])} store={store} profiles={project.conversionProfiles ?? []} />}
            </div>
         </div>}
           {showDock && dock && <BudgetDock title={budgetTitles[dock]} collapsed={collapsed} enlarged={enlarged}

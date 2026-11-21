@@ -1,5 +1,5 @@
 import type { OpticalChannelId } from './channels';
-import type { ConversionProfile, DcLoad, DcSupply, DcValue, InputRating, SwitchState, Transfer } from './device';
+import type { OpticalEmitter, DcLoad, DcSupply, DcValue, InputRating, SwitchState, Transfer } from './device';
 import type { ParameterDefinition, ParameterMapping, ParameterValue } from './parameters';
 import type { CableBundle, Connection, LocalEndpointRef, NamedLink } from './topology';
 
@@ -26,6 +26,7 @@ export type PortDefinition = {
   type: PortType;
   direction: PortDirection;
   channelIds?: readonly OpticalChannelId[];
+  opticalEmitter?: OpticalEmitter;
   inputRating?: InputRating;
   /** Declared voltage on a DC output. Supply and conversion roles are defined separately. */
   outputVoltageV?: DcValue;
@@ -128,7 +129,6 @@ export type Project = {
   rootModuleDefinitionId: string;
   componentDefinitions: readonly ComponentDefinition[];
   moduleDefinitions: readonly ModuleDefinition[];
-  conversionProfiles?: readonly ConversionProfile[];
   namedLinks?: readonly NamedLink[];
   instanceSettings?: readonly InstanceSettings[];
   layout?: LayoutState;

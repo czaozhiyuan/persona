@@ -7,9 +7,9 @@ const optical = (id: string, direction: PortDefinition['direction'], ...channelI
   ({ id, type: 'OPTICAL', direction, channelIds });
 const rf = (id: string, direction: PortDefinition['direction']): PortDefinition => ({ id, type: 'RF', direction });
 const fixed = (value: number) => ({ kind: 'fixed' as const, value });
-const txGain: NumericParameter = {
-  id: 'modulatorGain', name: 'Modulator gain', kind: 'numeric', unit: 'dB', valueKind: 'fixed',
-  range: { min: -20, max: 0 }, defaultValue: fixed(-3), overridable: true,
+const txLoss: NumericParameter = {
+  id: 'modulatorLoss', name: 'Maximum transmission insertion loss', kind: 'numeric', unit: 'dB', valueKind: 'fixed',
+  range: { min: 0, max: 20 }, defaultValue: fixed(3), overridable: true,
 };
 
 export const deviceExample = {
@@ -28,9 +28,9 @@ export const deviceExample = {
     {
       kind: 'component', id: 'mzm', name: 'Optically supplied MZM',
       ports: [rf('RF_IN', 'in'), optical('LASER_IN', 'in', ch30), optical('OPT_OUT', 'out', ch30)],
-      parameters: [txGain],
+      parameters: [txLoss],
       transfers: [{ kind: 'eo', fromPortId: 'RF_IN', toPortId: 'OPT_OUT', supplyPortId: 'LASER_IN',
-        channelIds: [ch30], gainDb: { kind: 'parameter', parameterId: txGain.id } }],
+        channelIds: [ch30], insertionLossDb: { kind: 'parameter', parameterId: txLoss.id } }],
     },
     {
       kind: 'component', id: 'pd850', name: '850 nm PD',
@@ -73,7 +73,7 @@ export const deviceExample = {
       kind: 'module', id: 'system', name: 'System', ports: [],
       instances: [
         { id: 'board', name: 'Transceiver board', definitionId: 'board',
-          parameterOverrides: { modulatorGain: fixed(-4), mode: 'normal' } },
+          parameterOverrides: { modulatorLoss: fixed(4), mode: 'normal' } },
         { id: 'rf', name: 'RF PCB', definitionId: 'rf-pcb' },
         { id: 'mux', name: 'MUX', definitionId: 'mux' },
         { id: 'demux', name: 'DEMUX', definitionId: 'demux' },
@@ -84,7 +84,7 @@ export const deviceExample = {
     {
       kind: 'module', id: 'board', name: 'Independent TX and RX board',
       ports: [optical('TX_OUT', 'out', ch30), optical('RX_IN', 'in', 'MM850')],
-      parameters: [txGain, { kind: 'enum', id: 'mode', name: 'Board mode', options: ['normal', 'standby'],
+      parameters: [txLoss, { kind: 'enum', id: 'mode', name: 'Board mode', options: ['normal', 'standby'],
         defaultValue: 'standby', overridable: true }],
       instances: [
         { id: 'TX_CH30', name: 'TX CH30', definitionId: 'tx30' },
@@ -94,14 +94,14 @@ export const deviceExample = {
         { portId: 'TX_OUT', target: { instanceId: 'TX_CH30', portId: 'OUT' } },
         { portId: 'RX_IN', target: { instanceId: 'RX_850', portId: 'IN' } },
       ],
-      parameterMappings: [{ parameterId: txGain.id, target: { instanceId: 'TX_CH30', parameterId: txGain.id } }],
+      parameterMappings: [{ parameterId: txLoss.id, target: { instanceId: 'TX_CH30', parameterId: txLoss.id } }],
     },
     {
       kind: 'module', id: 'tx30', name: 'CH30 transmitter', ports: [optical('OUT', 'out', ch30)],
-      parameters: [txGain],
+      parameters: [txLoss],
       instances: [{ id: 'mzm', name: 'MZM', definitionId: 'mzm' }],
       portMappings: [{ portId: 'OUT', target: { instanceId: 'mzm', portId: 'OPT_OUT' } }],
-      parameterMappings: [{ parameterId: txGain.id, target: { instanceId: 'mzm', parameterId: txGain.id } }],
+      parameterMappings: [{ parameterId: txLoss.id, target: { instanceId: 'mzm', parameterId: txLoss.id } }],
     },
     {
       kind: 'module', id: 'rx850', name: '850 nm receiver', ports: [optical('IN', 'in', 'MM850')],
@@ -109,8 +109,4 @@ export const deviceExample = {
       portMappings: [{ portId: 'IN', target: { instanceId: 'pd', portId: 'OPT_IN' } }],
     },
   ],
-  conversionProfiles: [{
-    id: 'measured-ch30', name: 'Example CH30 RF calibration', rfGainRefDb: fixed(-22), pdPowerRefDbm: -2,
-    applicability: { channelIds: [ch30], notes: 'Representative reference condition for an MZM / PD pair' },
-  }],
 } satisfies Project;

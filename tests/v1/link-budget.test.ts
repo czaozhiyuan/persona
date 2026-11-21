@@ -7,7 +7,7 @@ import { topologyExample } from '../../src/model/v1/topology-example';
 import type { NamedLink } from '../../src/model/v1/topology';
 import type { Project } from '../../src/model/v1/types';
 
-const [draft, , calibratedLink] = topologyExample.namedLinks;
+const [draft, , conversionLink] = topologyExample.namedLinks;
 const rfLink: NamedLink = {
   id: 'rf', name: 'Pure RF', from: { instancePath: ['rfSource'], portId: 'OUT' },
   to: { instancePath: ['amp'], portId: 'OUT' },
@@ -17,12 +17,15 @@ const opticalConditions: LinkBudgetConditions = {
   opticalSources: [{ endpoint: { instancePath: ['TX_A', 'laser'], portId: 'OUT' }, channelId: 'DWDM_CH28', powerDbm: 0 }],
 };
 
-function fixture(operatingPointLoss = 2, alternateRfBranch = false): Project {
+function fixture(insertionLoss = 2, alternateRfBranch = false): Project {
   const [root, tx, rx] = topologyExample.moduleDefinitions;
   return {
     ...topologyExample,
     componentDefinitions: [
-      ...topologyExample.componentDefinitions,
+      ...topologyExample.componentDefinitions.map(definition => definition.id !== 'mzm' ? definition : {
+        ...definition, transfers: definition.transfers!.map(transfer => ({ ...transfer,
+          vPi: { kind: 'rfCurve' as const, points: [[1, 4], [67, 6]] as const } })),
+      }),
       { kind: 'component', id: 'laser', name: 'Laser', ports: [{ id: 'OUT', type: 'OPTICAL', direction: 'out' }] },
       { kind: 'component', id: 'amp', name: 'RF amplifier',
         ports: [{ id: 'IN', type: 'RF', direction: 'in' }, { id: 'OUT', type: 'RF', direction: 'out' }],
@@ -33,7 +36,7 @@ function fixture(operatingPointLoss = 2, alternateRfBranch = false): Project {
       ...root,
       instances: [
         ...root.instances.map(item => item.id === 'TX_A' ? { ...item,
-          parameterOverrides: { operatingPointLoss: { kind: 'fixed' as const, value: operatingPointLoss } },
+          parameterOverrides: { insertionLoss: { kind: 'fixed' as const, value: insertionLoss } },
         } : item),
         { id: 'amp', name: 'Amp', definitionId: 'amp' },
         { id: 'rfSource', name: 'RF source', definitionId: 'rf-source' },
@@ -55,8 +58,6 @@ function fixture(operatingPointLoss = 2, alternateRfBranch = false): Project {
     }, {
       ...rx, portMappings: [{ portId: 'OPT_IN', target: { instanceId: 'pd', portId: 'IN' } }],
     }],
-    conversionProfiles: [{ id: 'reference', name: 'Measured span',
-      rfGainRefDb: { kind: 'rfCurve', points: [[1, -22], [67, -16]] }, pdPowerRefDbm: -5 }],
     namedLinks: [...topologyExample.namedLinks, rfLink],
   };
 }
@@ -76,7 +77,7 @@ test('inclusive fixed-step RF scans retain all 68 points and agree with single-p
   assert.equal(first.kind, 'rf');
   assert.equal(first.status, 'partial');
   assert.equal(first.gainDb.availability, 'unavailable');
-  assert.match(first.gainDb.reason, /超出经验曲线范围/);
+  assert.match(first.gainDb.reason, /超出曲线范围/);
   assert.equal(value(first.stages[0].powerDbm), -20);
   for (const frequencyGHz of [0, 1, 34, 67]) {
     assert.deepEqual(result.points[frequencyGHz], calculateNamedLink(rfLink, { ...conditions, frequencyGHz }));
@@ -115,38 +116,40 @@ test('invalid ranges are rejected while draft and ambiguous paths keep a diagnos
 });
 
 test('EO→OE scans keep optical power and diagnostics, use discrete channels and reflect new project snapshots', () => {
+  const gain = (loss: number, vPi: number, sourceDbm = 0) =>
+    20 * Math.log10(Math.PI * 10 ** ((sourceDbm - loss - 30) / 10) / 2 * 40 / vPi);
   const budget = createLinkBudget(fixture());
-  const scan = budget.scanNamedLink(calibratedLink, { startGHz: 0, stopGHz: 67 }, opticalConditions);
-  for (const [frequencyGHz, expectedGain] of [[0, undefined], [1, -22], [34, -19], [67, -16]] as const) {
+  const scan = budget.scanNamedLink(conversionLink, { startGHz: 0, stopGHz: 67 }, opticalConditions);
+  for (const [frequencyGHz, expectedGain] of [[0, undefined], [1, 4], [34, 5], [67, 6]] as const) {
     const point = scan.points[frequencyGHz];
-    assert.deepEqual(point, budget.calculateNamedLink(calibratedLink, { ...opticalConditions, frequencyGHz }));
+    assert.deepEqual(point, budget.calculateNamedLink(conversionLink, { ...opticalConditions, frequencyGHz }));
     assert.equal(point.kind, 'conversion');
     assert.equal(point.status, 'partial');
-    assert.equal(value(point.segments[0].pdPowerDbm), -5);
+    assert.equal(value(point.segments[0].pdPowerDbm), -2 - 10 * Math.log10(2));
     assert.equal(point.segments[0].channelId, 'DWDM_CH28');
     assert.equal(point.nfDb.availability, 'unavailable');
     assert.match(point.nfDb.reason, /未建模噪声系数/);
     if (expectedGain === undefined) {
       assert.equal(point.gainDb.availability, 'unavailable');
-      assert.match(point.gainDb.reason, /超出经验曲线范围/);
+      assert.match(point.gainDb.reason, /超出曲线范围/);
     } else {
-      assert.equal(value(point.gainDb), expectedGain);
+      assert.ok(Math.abs(value(point.gainDb) - gain(2, expectedGain)) < 1e-10);
     }
   }
-  const updated = createLinkBudget(fixture(3)).scanNamedLink(calibratedLink, { startGHz: 34, stopGHz: 34 }, opticalConditions).points[0];
+  const updated = createLinkBudget(fixture(3)).scanNamedLink(conversionLink, { startGHz: 34, stopGHz: 34 }, opticalConditions).points[0];
   assert.equal(updated.kind, 'conversion');
-  assert.equal(value(updated.segments[0].pdPowerDbm), -6);
-  assert.equal(value(updated.gainDb), -20.8);
-  assert.equal(value(budget.calculateNamedLink(calibratedLink, { ...opticalConditions, frequencyGHz: 34 }).gainDb), -19);
-  const changedChannel = budget.scanNamedLink({ ...calibratedLink, channelId: 'DWDM_CH30' },
+  assert.equal(value(updated.segments[0].pdPowerDbm), -3 - 10 * Math.log10(2));
+  assert.ok(Math.abs(value(updated.gainDb) - gain(3, 5)) < 1e-10);
+  assert.ok(Math.abs(value(budget.calculateNamedLink(conversionLink, { ...opticalConditions, frequencyGHz: 34 }).gainDb) - gain(2, 5)) < 1e-10);
+  const changedChannel = budget.scanNamedLink({ ...conversionLink, channelId: 'DWDM_CH30' },
     { startGHz: 34, stopGHz: 34 }, opticalConditions).points[0];
   assert.equal(changedChannel.kind, 'conversion');
   assert.equal(changedChannel.gainDb.availability, 'unavailable');
   assert.ok(changedChannel.diagnostics.some(diagnostic => diagnostic.code === 'optical_supply'));
-  const suppliedCh30 = budget.scanNamedLink({ ...calibratedLink, channelId: 'DWDM_CH30' }, { startGHz: 34, stopGHz: 34 },
+  const suppliedCh30 = budget.scanNamedLink({ ...conversionLink, channelId: 'DWDM_CH30' }, { startGHz: 34, stopGHz: 34 },
     { ...opticalConditions, opticalSources: [{ ...opticalConditions.opticalSources![0], channelId: 'DWDM_CH30', powerDbm: 5 }] }).points[0];
   assert.equal(suppliedCh30.kind, 'conversion');
   assert.equal(suppliedCh30.segments[0].channelId, 'DWDM_CH30');
-  assert.equal(value(suppliedCh30.segments[0].pdPowerDbm), 0);
-  assert.equal(value(suppliedCh30.gainDb), -10);
+  assert.equal(value(suppliedCh30.segments[0].pdPowerDbm), 5 + (-2 - 10 * Math.log10(2)));
+  assert.ok(Math.abs(value(suppliedCh30.gainDb) - gain(2, 5, 5)) < 1e-10);
 });

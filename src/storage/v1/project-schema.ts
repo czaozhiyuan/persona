@@ -1,3 +1,4 @@
+import { receiverModes } from '../../model/v1/device';
 import type { Project } from '../../model/v1/types';
 
 export class ProjectStructureError extends Error {
@@ -99,7 +100,6 @@ const rfCurve = shape({ kind: oneOf('rfCurve'), points: list(list(number, 2)) })
 const channelTable = shape({ kind: oneOf('channelTable'), values: dictionary(number) });
 const parameterRef = shape({ kind: oneOf('parameter'), parameterId: text });
 const empirical = byKind({ fixed, rfCurve, channelTable });
-const rfValue = byKind({ fixed, rfCurve });
 const rfQuantity = byKind({ fixed, rfCurve, parameter: parameterRef });
 const opticalQuantity = byKind({ fixed, channelTable, parameter: parameterRef });
 const dcQuantity = byKind({ fixed, parameter: parameterRef });
@@ -109,13 +109,13 @@ const parameterValue: Check = (value, path) => {
 };
 const parameter = byKind({
   numeric: shape({
-    ...identity, kind: oneOf('numeric'), unit: oneOf('dB', 'dBm', 'V', 'A', 'W', 'GHz', 'nm', 'ohm', 'ratio'),
-    valueKind: oneOf('fixed', 'rfCurve', 'channelTable'),
+    ...identity, kind: oneOf('numeric'), unit: oneOf('dB', 'dBm', 'V', 'A', 'W', 'GHz', 'nm', 'A/W', 'V/W', 'ohm', 'ratio'),
+    valueKind: oneOf('fixed', 'rfCurve', 'channelTable', 'rfValue', 'opticalValue'),
   }, { overridable: boolean, range: shape({}, limits), defaultValue: empirical }),
   enum: shape({ ...identity, kind: oneOf('enum'), options: list(text) }, { overridable: boolean, defaultValue: text }),
 });
 const port = shape({ id: text, type: oneOf('RF', 'OPTICAL', 'DC_POWER', 'CONTROL'), direction: oneOf('in', 'out') }, {
-  name: text, channelIds: channels, outputVoltageV: dcQuantity, inputRating: shape({ unit: oneOf('dBm', 'V', 'A', 'W') }, limits),
+  name: text, channelIds: channels, opticalEmitter: shape({}, { powerDbm: opticalQuantity }), outputVoltageV: dcQuantity, inputRating: shape({ unit: oneOf('dBm', 'V', 'A', 'W') }, limits),
 });
 const portPair = { fromPortId: text, toPortId: text };
 const opticalOptions = { channelIds: channels, gainDb: opticalQuantity };
@@ -126,10 +126,12 @@ const transfer = byKind({
     ...portPair, kind: oneOf('wavelengthConversion'), fromChannelId: text, toChannelId: text,
   }, { gainDb: opticalQuantity }),
   eo: shape({ ...portPair, kind: oneOf('eo') }, {
-    ...opticalOptions, supplyPortId: text,
-    opticalLoss: shape({}, { intrinsicLossDb: opticalQuantity, operatingPointLossDb: opticalQuantity }),
+    channelIds: channels, supplyPortId: text, insertionLossDb: opticalQuantity, vPi: rfQuantity,
   }),
-  oe: shape({ ...portPair, kind: oneOf('oe') }, { channelIds: channels }),
+  oe: shape({ ...portPair, kind: oneOf('oe') }, {
+    channelIds: channels, responsivity: opticalQuantity, responseDb: rfQuantity, loadedGain: rfQuantity,
+    receiver: (value, path) => typeof value === 'string' ? oneOf(...receiverModes)(value, path) : parameterRef(value, path),
+  }),
   dc: shape({ ...portPair, kind: oneOf('dc') }, { efficiency: dcQuantity, capacity: dcCapacity }),
 });
 const definition = { ...identity, ports: list(port) };
@@ -155,11 +157,6 @@ const moduleDefinition = shape({ ...definition, kind: oneOf('module'), instances
   parameterMappings: list(shape({ parameterId: text, target: shape({ instanceId: text, parameterId: text }) })),
   physicalEnclosure: shape({ ...footprint, heightMm: number }),
 });
-const profileValues = { rfGainRefDb: rfValue, pdPowerRefDbm: number };
-const profile = shape({ ...identity, ...profileValues }, {
-  k: number, applicability: shape({}, { channelIds: channels, notes: text }),
-});
-const boundary = shape({ instancePath, ...portPair });
 const connectionRef = shape({ scopePath: instancePath, connectionId: text });
 const cableCoreRef = shape({ scopePath: instancePath, bundleId: text, coreId: text });
 const requiredEdge: Check = (value, path) => {
@@ -171,14 +168,11 @@ const link = shape(identity, {
   from: endpoint, to: endpoint, channelId: text, via: list(requiredEdge),
   trial: shape({ frequencyGHz: number }, { inputPowerDbm: number,
     opticalSources: list(shape({ endpoint, channelId: text }, { powerDbm: number })) }),
-  conversionBindings: list(shape({ id: text, profileId: text, eo: boundary, oe: boundary }, {
-    overrides: shape({}, { ...profileValues, k: number }),
-  })),
 });
 const projectShape = shape({
   ...identity, rootModuleDefinitionId: text, componentDefinitions: list(component), moduleDefinitions: list(moduleDefinition),
 }, {
-  conversionProfiles: list(profile), namedLinks: list(link),
+  namedLinks: list(link),
   instanceSettings: list(shape({ instancePath }, { name: text, parameterOverrides: dictionary(parameterValue), switchStateId: text })),
   layout: shape({}, {
     physical: list(shape({ instancePath, enclosurePath: instancePath, xMm: number, yMm: number, rotationDeg: number },

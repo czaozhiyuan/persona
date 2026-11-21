@@ -23,12 +23,11 @@ test('the standalone example round-trips all project snapshots, references and l
   assert.equal(board?.parameterMappings?.[0].target.instanceId, 'TX_CH30');
   assert.equal(board?.portMappings?.length, 2);
   const devices = project.moduleDefinitions.find(module => module.id === 'deviceDemo-system')?.instances;
-  assert.deepEqual(devices?.find(instance => instance.id === 'board')?.parameterOverrides?.modulatorGain, { kind: 'fixed', value: -4 });
+  assert.deepEqual(devices?.find(instance => instance.id === 'board')?.parameterOverrides?.modulatorLoss, { kind: 'fixed', value: 4 });
   assert.deepEqual(devices?.filter(instance => instance.switchStateId).map(instance => instance.switchStateId), ['a', 'b']);
   const bundle = project.moduleDefinitions.find(module => module.id === 'system')?.cableBundles?.[0];
   assert.equal(bundle?.coreCount, 12);
   assert.deepEqual(bundle?.cores[2].b, { pin: 10 });
-  assert.equal(project.namedLinks?.find(link => link.id === 'full')?.conversionBindings?.[0].profileId, 'reference');
 });
 
 test('topology frames retain different bounds for instances of the same module', () => {
@@ -115,7 +114,7 @@ test('invalid imports give a location or domain issue and leave the current snap
   const current = parseProjectJson(source);
   assert.throws(() => parseProjectJson('{'), error => error instanceof ProjectFileError && error.stage === 'syntax');
   assert.throws(() => parseProjectJson(JSON.stringify(current)), { name: 'ProjectFileError', stage: 'format', message: /\$\.format/ });
-  assert.throws(() => parseProjectJson(source.replace('"schemaVersion": 1', '"schemaVersion": 2')), {
+  assert.throws(() => parseProjectJson(source.replace('"schemaVersion": 2', '"schemaVersion": 1')), {
     name: 'ProjectFileError', stage: 'format', message: /\$\.schemaVersion/,
   });
   assert.throws(() => parseProjectJson(source.replace('"coreCount": 12', '"coreCount": 1e999')), {

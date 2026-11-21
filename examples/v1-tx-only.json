@@ -1,9 +1,9 @@
 {
   "format": "persona-project",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "project": {
     "id": "v1-tx-only",
-    "name": "V1 独立发射机箱",
+    "name": "V1 独立发射机箱（示例参数）",
     "rootModuleDefinitionId": "system",
     "componentDefinitions": [
       {
@@ -53,19 +53,34 @@
         ],
         "parameters": [
           {
-            "id": "operatingPointLoss",
-            "name": "控制点附加损耗",
+            "id": "insertionLoss",
+            "name": "最大透过状态光插损",
             "kind": "numeric",
             "unit": "dB",
-            "valueKind": "fixed",
+            "valueKind": "opticalValue",
             "range": {
               "min": 0
             },
             "defaultValue": {
               "kind": "fixed",
-              "value": 2
+              "value": 3
             },
             "overridable": true
+          },
+          {
+            "id": "vPi",
+            "name": "RF 半波电压 Vπ",
+            "kind": "numeric",
+            "unit": "V",
+            "valueKind": "rfValue",
+            "defaultValue": {
+              "kind": "fixed",
+              "value": 5
+            },
+            "overridable": true,
+            "range": {
+              "min": 5e-324
+            }
           }
         ],
         "transfers": [
@@ -74,15 +89,13 @@
             "fromPortId": "RF_IN",
             "toPortId": "OUT",
             "supplyPortId": "SUPPLY",
-            "opticalLoss": {
-              "intrinsicLossDb": {
-                "kind": "fixed",
-                "value": 3
-              },
-              "operatingPointLossDb": {
-                "kind": "parameter",
-                "parameterId": "operatingPointLoss"
-              }
+            "insertionLossDb": {
+              "kind": "parameter",
+              "parameterId": "insertionLoss"
+            },
+            "vPi": {
+              "kind": "parameter",
+              "parameterId": "vPi"
             }
           }
         ]
@@ -100,7 +113,27 @@
             "channelIds": [
               "DWDM_CH28",
               "DWDM_CH30"
-            ]
+            ],
+            "opticalEmitter": {
+              "powerDbm": {
+                "kind": "parameter",
+                "parameterId": "power"
+              }
+            }
+          }
+        ],
+        "parameters": [
+          {
+            "id": "power",
+            "name": "信号光输出功率",
+            "kind": "numeric",
+            "unit": "dBm",
+            "valueKind": "opticalValue",
+            "defaultValue": {
+              "kind": "fixed",
+              "value": 8.0102999566
+            },
+            "overridable": true
           }
         ]
       },
@@ -132,7 +165,7 @@
                 "toPortId": "OUT",
                 "gainDb": {
                   "kind": "fixed",
-                  "value": 0
+                  "value": -2
                 }
               }
             ]
@@ -218,27 +251,27 @@
         ],
         "parameters": [
           {
-            "id": "operatingPointLoss",
-            "name": "控制点附加损耗",
+            "id": "insertionLoss",
+            "name": "最大透过状态光插损",
             "kind": "numeric",
             "unit": "dB",
-            "valueKind": "fixed",
+            "valueKind": "opticalValue",
             "range": {
               "min": 0
             },
             "defaultValue": {
               "kind": "fixed",
-              "value": 2
+              "value": 3
             },
             "overridable": true
           }
         ],
         "parameterMappings": [
           {
-            "parameterId": "operatingPointLoss",
+            "parameterId": "insertionLoss",
             "target": {
               "instanceId": "mzm",
-              "parameterId": "operatingPointLoss"
+              "parameterId": "insertionLoss"
             }
           }
         ],
@@ -288,7 +321,13 @@
       }
     ],
     "instanceSettings": [
-      { "instancePath": ["TX_A", "optical-switch"], "switchStateId": "pass" }
+      {
+        "instancePath": [
+          "TX_A",
+          "optical-switch"
+        ],
+        "switchStateId": "pass"
+      }
     ],
     "namedLinks": [
       {
