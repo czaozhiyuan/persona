@@ -3,11 +3,12 @@ import { useState } from 'react';
 import { resolveEmpiricalValue } from '../../../engine/v1/empirical-value';
 import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
 import type { ComponentDefinition, PortDefinition, PortDirection, PortType } from '../../../model/v1/types';
-import type { InputRating, Transfer } from '../../../model/v1/device';
+import type { Transfer } from '../../../model/v1/device';
 import { AutosaveForm } from './autosave-form';
 import { ChannelField } from './channel-field';
+import { InputRatingField, ratingUnits, readInputRating } from './input-rating-field';
 import { OutputVoltageField, readOutputVoltage } from './output-voltage-field';
-import { channelId, channelList, choice, numberField, opticalKinds, QuantityField, readQuantity, rfKinds } from './value-fields';
+import { channelId, channelList, choice, opticalKinds, QuantityField, readQuantity, rfKinds } from './value-fields';
 
 export function PortFields({ port, occurrence, save, remove }: {
   port: PortDefinition; occurrence: ResolvedInstance; save: (port: PortDefinition) => boolean; remove: () => void;
@@ -17,20 +18,18 @@ export function PortFields({ port, occurrence, save, remove }: {
     const type = choice(data, 'type') as PortType;
     const direction = choice(data, 'direction') as PortDirection;
     // The form still contains the previous rating controls during a type or direction change.
-    const unit = type === port.type && direction === port.direction
-      ? ratingUnits(type, direction).find(candidate => candidate === choice(data, 'ratingUnit')) : undefined;
-    const min = unit === undefined ? undefined : numberField(data, 'minimum');
-    const max = unit === undefined ? undefined : numberField(data, 'maximum');
+    const inputRating = type === port.type && direction === port.direction
+      ? readInputRating(data, ratingUnits(type, direction)) : undefined;
     const channels = type === 'OPTICAL' ? channelList(data, 'channels') : undefined;
     const previousChannels = port.channelIds;
     const channelIds = channels?.length === previousChannels?.length
       && channels?.every(channel => previousChannels?.includes(channel)) ? previousChannels : channels;
     const previousRating = port.inputRating;
-    const inputRating = unit === previousRating?.unit && min === previousRating?.min && max === previousRating?.max
-      ? previousRating
-      : unit !== undefined && (min !== undefined || max !== undefined) ? { unit, min, max } : undefined;
+    const sameRating = inputRating?.unit === previousRating?.unit
+      && inputRating?.min === previousRating?.min && inputRating?.max === previousRating?.max;
     const next: PortDefinition = {
-      ...port, name: choice(data, 'name').trim() || undefined, type, direction, channelIds, inputRating,
+      ...port, name: choice(data, 'name').trim() || undefined, type, direction, channelIds,
+      inputRating: sameRating ? previousRating : inputRating,
       outputVoltageV: type === 'DC_POWER' && direction === 'out' ? readOutputVoltage(data) : undefined,
     };
     const nextVersion = JSON.stringify(next);
@@ -38,11 +37,6 @@ export function PortFields({ port, occurrence, save, remove }: {
   }}>
     <PortControls port={port} occurrence={occurrence} remove={remove} />
   </AutosaveForm>;
-}
-
-function ratingUnits(type: PortType, direction: PortDirection): readonly InputRating['unit'][] {
-  if (direction !== 'in' || type === 'CONTROL') return [];
-  return type === 'DC_POWER' ? ['V', 'A', 'W'] : ['dBm'];
 }
 
 function PortControls({ port, occurrence, remove }: { port: PortDefinition; occurrence: ResolvedInstance; remove: () => void }) {
@@ -57,22 +51,7 @@ function PortControls({ port, occurrence, remove }: { port: PortDefinition; occu
       <option value="in">输入</option><option value="out">输出</option>
     </select></label>
     {type === 'OPTICAL' && <ChannelField name="channels" label="适用通道（未选择表示不限）" value={port.channelIds} multiple />}
-    {ratings.length > 0 && <fieldset key={type}>
-      <legend>输入额定范围（可选）</legend>
-      <label>单位<select name="ratingUnit" defaultValue={ratings.includes(port.inputRating?.unit as InputRating['unit'])
-        ? port.inputRating?.unit : ratings[0]} onChange={event => {
-        if (event.currentTarget.value === port.inputRating?.unit) return;
-        // Clear the uncontrolled bounds before the parent form reads and validates them.
-        event.currentTarget.form?.querySelectorAll<HTMLInputElement>('input[name="minimum"], input[name="maximum"]')
-          .forEach(input => { input.value = ''; });
-      }}>
-        {ratings.map(unit => <option key={unit}>{unit}</option>)}
-      </select></label>
-      <div className="v1-property-pair">
-        <label>下限<input name="minimum" type="number" step="any" defaultValue={port.inputRating?.min} /></label>
-        <label>上限<input name="maximum" type="number" step="any" defaultValue={port.inputRating?.max} /></label>
-      </div>
-    </fieldset>}
+    {ratings.length > 0 && <InputRatingField key={type} units={ratings} rating={port.inputRating} />}
     {type === 'DC_POWER' && direction === 'out' && <PortVoltage port={port} occurrence={occurrence} />}
     <div className="actions">
       <button type="button" onClick={remove}>预览删除端口</button>
