@@ -525,7 +525,7 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
       minZoom={0.001} maxZoom={2} deleteKeyCode={null} connectionMode={ConnectionMode.Loose}
       zIndexMode="manual" selectNodesOnDrag={false}
       selectionKeyCode={null} multiSelectionKeyCode={null} selectionOnDrag={!panWithSpace}
-      panActivationKeyCode={null} panOnDrag={panWithSpace ? true : [1]} zoomOnDoubleClick={false}
+      panActivationKeyCode={null} panOnDrag={panWithSpace ? true : [1, 2]} zoomOnDoubleClick={false}
       onSelectionStart={() => {
         cancelWiring();
         setSelectedEdgeKey(undefined);
