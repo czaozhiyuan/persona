@@ -4,8 +4,9 @@ import { deviceExample } from '../../src/model/v1/device-example';
 import { exampleProject } from '../../src/model/v1/example';
 import { topologyExample } from '../../src/model/v1/topology-example';
 import type { Project } from '../../src/model/v1/types';
+import { parseProjectJson, serializeProjectJson } from '../../src/storage/v1/project-json';
 import { createProjectStore } from '../../src/state/v1/project-store';
-import { editModule, editModuleWiring, moveTopologyNode, planPortDeletion } from '../../src/state/v1/topology-edits';
+import { editModule, editModuleWiring, moveTopologyNodes, planPortDeletion } from '../../src/state/v1/topology-edits';
 
 test('shared MZM output deletion previews direct and scoped Link references and undoes as one edit', () => {
   const withConnection = editModule(topologyExample, 'tx', module => ({
@@ -78,13 +79,21 @@ test('a half-open fibre retains its core reference until the core itself is dele
     [{ scopePath: ['TX_A'], connectionId: 'rf-feed' }]);
 });
 
-test('a committed logical move leaves topology relationships and physical layout intact', () => {
+test('one logical batch move preserves topology relationships and physical layout through history and JSON', () => {
   const store = createProjectStore(exampleProject);
-  assert.equal(store.commit(draft => moveTopologyNode(draft, ['TX_A'], { x: 120, y: 240 })).ok, true);
+  const moves = [
+    { instancePath: ['TX_A'], x: 120, y: 240 },
+    { instancePath: ['TX_B'], x: 520, y: 240 },
+  ];
+  assert.equal(store.commit(draft => moveTopologyNodes(draft, moves)).ok, true);
   const after = store.getSnapshot().project;
   assert.deepEqual(after.moduleDefinitions, exampleProject.moduleDefinitions);
   assert.deepEqual(after.layout?.physical, exampleProject.layout.physical);
-  assert.deepEqual(after.layout?.topology?.find(item => item.instancePath[0] === 'TX_A'), { instancePath: ['TX_A'], x: 120, y: 240 });
+  assert.deepEqual(after.layout?.topology?.slice(-2), moves);
   store.undo();
   assert.deepEqual(store.getSnapshot().project, exampleProject);
+  assert.equal(store.getSnapshot().canUndo, false);
+  store.redo();
+  const restored = parseProjectJson(serializeProjectJson(store.getSnapshot().project));
+  assert.deepEqual(restored.layout, after.layout);
 });

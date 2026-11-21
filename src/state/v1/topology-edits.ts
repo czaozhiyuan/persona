@@ -29,10 +29,17 @@ export function editModuleWiring(project: Project, moduleId: string, change: (mo
   return { ...updated, namedLinks };
 }
 
+type TopologyMove = { instancePath: InstancePath; x: number; y: number };
+
+export function moveTopologyNodes(project: Project, moves: readonly TopologyMove[]): Project {
+  if (!moves.length) return project;
+  const paths = new Set(moves.map(move => JSON.stringify(move.instancePath)));
+  const topology = (project.layout?.topology ?? []).filter(placement => !paths.has(JSON.stringify(placement.instancePath)));
+  return { ...project, layout: { ...project.layout, topology: [...topology, ...moves] } };
+}
+
 export function moveTopologyNode(project: Project, instancePath: InstancePath, position: { x: number; y: number }): Project {
-  const topology = (project.layout?.topology ?? []).filter(placement =>
-    placement.instancePath.length !== instancePath.length || placement.instancePath.some((id, i) => id !== instancePath[i]));
-  return { ...project, layout: { ...project.layout, topology: [...topology, { instancePath, x: position.x, y: position.y }] } };
+  return moveTopologyNodes(project, [{ instancePath, x: position.x, y: position.y }]);
 }
 
 export function resizeTopologyFrame(project: Project, frame: TopologyFrame): Project {

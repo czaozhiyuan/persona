@@ -1,5 +1,5 @@
-import { Background, ConnectionMode, ReactFlow, ReactFlowProvider, useStoreApi, useUpdateNodeInternals } from '@xyflow/react';
-import type { Connection as FlowConnection, Node, NodeProps, OnConnectStartParams, ReactFlowInstance, Rect, Viewport, XYPosition } from '@xyflow/react';
+import { Background, ConnectionMode, getNodesBounds, ReactFlow, ReactFlowProvider, useKeyPress, useStoreApi, useUpdateNodeInternals } from '@xyflow/react';
+import type { Connection as FlowConnection, CoordinateExtent, Node, NodeProps, OnConnectStartParams, ReactFlowInstance, Rect, Viewport, XYPosition } from '@xyflow/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
 import type { PathResult } from '../../../engine/v1/path-resolver';
@@ -9,7 +9,7 @@ import { libraryDragType, readLibraryItem } from '../../../library/v1/insert-lib
 import type { LibraryItem } from '../../../library/v1/insert-library-item';
 import type { WiringSelection } from '../../../state/v1/remove-topology-object';
 import type { Connection } from '../../../model/v1/topology';
-import type { EndpointRef, InstancePath, PortDefinition, PortMapping, Project } from '../../../model/v1/types';
+import type { EndpointRef, InstancePath, PortDefinition, PortMapping, Project, TopologyFrame, TopologyPlacement } from '../../../model/v1/types';
 import { structureScope } from '../../../workbench/v1/structure-scope';
 import { BlockPorts } from './block-ports';
 import { frameHeader, frameInsets, ModuleFrame } from './module-frame';
@@ -17,10 +17,11 @@ import { keepNodeInside, moduleExtent } from './frame-geometry';
 import { FrameResizeHandles } from './frame-resize-handles';
 import { keepGraphVisible } from './viewport';
 import { CanvasControls, canvasFitOptions, flowAriaLabels } from './canvas-controls';
-import { hierarchyKey } from './hierarchy-view';
+import { hierarchyKey, sharedParent } from './hierarchy-view';
 import { projectPathHighlight } from './path-highlight';
 import type { BudgetHighlight } from './path-highlight';
-import { estimatedBlockSize, projectTopology, toLocalPosition } from './topology-projection';
+import { estimatedBlockSize, projectTopology } from './topology-projection';
+import type { TopologyItem } from './topology-projection';
 import { handleId, nodeId, portKey, projectWiring, scopedWiringProblem } from './topology-wiring';
 import type { WiringEdge } from './topology-wiring';
 import '@xyflow/react/dist/style.css';
@@ -45,6 +46,12 @@ type FrameNode = Node<NodeData & {
   resize?: Parameters<typeof FrameResizeHandles>[0];
 }, 'moduleFrame'>;
 type CanvasNode = DeviceNode | FrameNode;
+type DragSession = {
+  anchor: TopologyItem;
+  members: readonly TopologyItem[];
+  constraint?: { bounds: Rect; extent: CoordinateExtent };
+  frame?: TopologyFrame;
+};
 
 function ExpandButton({ data, expanded }: { data: NodeData; expanded: boolean }) {
   const label = `${expanded ? '收起' : '展开'}模块 ${data.name}`;
@@ -93,18 +100,17 @@ type Props = {
   selectedInstance?: InstancePath;
   onAddPort: (path: InstancePath) => void;
   newPort?: EndpointRef;
-  groupMode: boolean;
-  groupPaths: readonly InstancePath[];
-  changeGroupSelection: (paths: readonly InstancePath[], active?: boolean) => void;
+  selectedPaths: readonly InstancePath[];
+  selectObject: (path: InstancePath, extend: boolean) => void;
+  selectObjects: (paths: readonly InstancePath[]) => void;
   pathResult?: PathResult;
   budgetHighlight?: BudgetHighlight;
   expanded: ReadonlySet<string>;
   toggleModule: (path: InstancePath) => void;
   openPort: (path: InstancePath, portId: string) => void;
-  selectInstance: (path?: InstancePath) => void;
   enterModule: (path: InstancePath) => void;
-  move: (path: InstancePath, position: XYPosition, frame?: Rect) => void;
-  resize: (frame: Rect, placementAdjustments: readonly { path: InstancePath; position: XYPosition }[]) => void;
+  move: (placements: readonly TopologyPlacement[], frame?: TopologyFrame) => void;
+  resize: (frame: Rect, placementAdjustments: readonly TopologyPlacement[]) => void;
   connect: (scope: InstancePath, connection: Omit<Connection, 'id'>) => void;
   mapPort: (scope: InstancePath, mapping: PortMapping) => void;
   placingModule: boolean;
@@ -121,19 +127,22 @@ export function TopologyCanvas(props: Props) {
   return <ReactFlowProvider><EditableTopologyCanvas {...props} /></ReactFlowProvider>;
 }
 
-function EditableTopologyCanvas({ project, instances, modulePath, selectedInstance, pathResult, budgetHighlight, expanded, toggleModule, selectInstance,
-  enterModule, move, resize, connect, mapPort, add, placingModule, cancelPlacement, deleteSelection, rename, report, undo, redo, openPort,
-  groupMode, groupPaths, changeGroupSelection, onAddPort, newPort }: Props) {
-  const flowStore = useStoreApi();
-  const boxSelection = useRef<Set<string> | undefined>(undefined);
-  const grouped = new Set(groupPaths.map(hierarchyKey));
+function EditableTopologyCanvas({ project, instances, modulePath, selectedInstance, selectedPaths, pathResult, budgetHighlight, expanded,
+  toggleModule, selectObject, selectObjects, enterModule, move, resize, connect, mapPort, add, placingModule, cancelPlacement,
+  deleteSelection, rename, report, undo, redo, openPort, onAddPort, newPort }: Props) {
+  const flowStore = useStoreApi<CanvasNode, WiringEdge>();
+  const boxSelection = useRef<readonly InstancePath[] | undefined>(undefined);
+  const panWithSpace = useKeyPress('Space', { actInsideInputWithModifier: false });
+  const selectedKeys = new Set(selectedPaths.map(hierarchyKey));
+  const mixedSelection = selectedPaths.length > 1 && !sharedParent(selectedPaths);
   const [wireStart, setWireStart] = useState<string>();
   const cancelled = useRef(false);
   const connected = useRef(false);
   const [viewport, setViewport] = useState<Viewport>();
   const [resizePreview, setResizePreview] = useState<Rect>();
   const [measured, setMeasured] = useState<ReadonlyMap<string, { width: number; height: number }>>(new Map());
-  const [drag, setDrag] = useState<{ key: string; position: XYPosition }>();
+  const dragSession = useRef<DragSession | undefined>(undefined);
+  const [drag, setDrag] = useState<ReadonlyMap<string, XYPosition>>();
   const [selectedEdgeKey, setSelectedEdgeKey] = useState<string>();
   const canvas = useRef<HTMLDivElement>(null);
   const flow = useRef<ReactFlowInstance<CanvasNode, WiringEdge>>(null);
@@ -208,7 +217,7 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
   const active = selectedInstance && hierarchyKey(selectedInstance);
   const selectedNode = active && nodeByKey.get(active);
   const selectedWiring = !selectedNode && edges.find(edge => edge.id === selectedEdgeKey);
-  useEffect(() => { if (selectedInstance) setSelectedEdgeKey(undefined); }, [selectedInstance]);
+  useEffect(() => { if (selectedPaths.length) setSelectedEdgeKey(undefined); }, [selectedPaths.length, selectedInstance]);
 
   const deepest = items.reduce((max, node) => Math.max(max, node.item.instancePath.length), modulePath.length);
   const selectedBranch = selectedInstance?.[modulePath.length];
@@ -227,7 +236,7 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
       foldedPath: !frame && !!item.instance && parentHighlight?.folded.has(item.instance.id),
       wireState: wireStart ? (port, inner) => wireState(id, port, inner) : undefined,
       openPort: portId => { cancelWiring(); openPort(path, portId); },
-      addPort: !groupMode && (active ?? rootKey) === key ? () => { cancelWiring(); onAddPort(path); } : undefined,
+      addPort: selectedPaths.length < 2 && (active ?? rootKey) === key ? () => { cancelWiring(); onAddPort(path); } : undefined,
       newPortId: newPort && hierarchyKey(newPort.instancePath) === key ? newPort.portId : undefined,
       toggle: !boundary && definition.kind === 'module' ? () => {
         cancelWiring();
@@ -235,14 +244,15 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
         toggleModule(path);
       } : undefined,
     };
-    const placement = { id, ariaLabel: name, position: drag?.key === key ? drag.position : node.position,
-      parentId: parentKey === undefined ? undefined : nodeId(parentKey), selected: (active === key || grouped.has(key)) && !boundary };
+    const placement = { id, ariaLabel: name, position: drag?.get(key) ?? node.position,
+      parentId: parentKey === undefined ? undefined : nodeId(parentKey), selected: selectedKeys.has(key),
+      draggable: !boundary && !panWithSpace && !(mixedSelection && selectedKeys.has(key)) };
     // Keep sibling blocks accessible where an expanded branch overlaps their stored positions.
     // React Flow drops internal measurements when a controlled node is replaced.
     if (!frame) return { ...placement, type: 'device', measured: measured.get(key),
       zIndex: 2 + (deepest - path.length) * 2 + Number(path[modulePath.length] === selectedBranch), data };
     const direct = scopes.get(key)?.members ?? [];
-    return { ...placement, type: 'moduleFrame', draggable: !boundary && !groupMode, dragHandle: '.v1-frame-title',
+    return { ...placement, type: 'moduleFrame', dragHandle: '.v1-frame-title',
       selectable: !boundary, focusable: !boundary, zIndex: path.length - deepest - 2,
       measured: { width: frame.display.width, height: frame.display.height },
       style: { width: frame.display.width, height: frame.display.height, pointerEvents: 'none' },
@@ -253,19 +263,81 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
             width: child.frame.display.width, height: child.frame.display.height } : child.bounds),
           finish: next => resize(next, direct.filter(child =>
             child.preferred.x !== child.bounds.x || child.preferred.y !== child.bounds.y)
-            .map(child => ({ path: child.item.instancePath, position: child.bounds }))),
+            .map(child => ({ instancePath: child.item.instancePath, x: child.bounds.x, y: child.bounds.y }))),
         } : undefined,
       },
     };
   });
 
-  function clampPosition(key: string, position: XYPosition) {
-    const node = nodeByKey.get(key)!;
-    const parentKey = hierarchyKey(node.item.instancePath.slice(0, -1));
-    const parent = nodeByKey.get(parentKey);
-    const local = toLocalPosition(position, node.offset);
-    return parent?.frame ? keepNodeInside({ ...node.bounds, ...local },
-      moduleExtent(parent.frame.base, frameInsets(parent.item.definition.ports))) : local;
+  function startDrag(node: CanvasNode, moving: CanvasNode[]) {
+    const anchor = nodeByKey.get(node.data.key);
+    if (!anchor || !node.data.path.length) return;
+    const members = moving.flatMap(item => {
+      const projected = nodeByKey.get(item.data.key);
+      return projected ? [projected] : [];
+    });
+    const parentPath = node.data.path.slice(0, -1);
+    const parent = nodeByKey.get(hierarchyKey(parentPath));
+    const frame = parent?.frame;
+    dragSession.current = { anchor, members,
+      constraint: parent && frame ? {
+        bounds: getNodesBounds(members.map(item => ({ id: item.key, position: item.bounds, measured: item.bounds, data: {} }))),
+        extent: moduleExtent(frame.base, frameInsets(parent.item.definition.ports)),
+      } : undefined,
+      frame: frame && !frame.saved ? { modulePath: parentPath, ...frame.base } : undefined };
+    if (!selectedKeys.has(anchor.key)) selectObject(anchor.item.instancePath, false);
+  }
+
+  function dragDelta(session: DragSession, position: XYPosition): XYPosition {
+    const dx = position.x - session.anchor.position.x;
+    const dy = position.y - session.anchor.position.y;
+    if (!session.constraint) return { x: dx, y: dy };
+    // Clamp the whole bounding box so siblings keep their spacing at the frame edge.
+    const { bounds, extent } = session.constraint;
+    const clamped = keepNodeInside({ ...bounds, x: bounds.x + dx, y: bounds.y + dy }, extent);
+    return { x: clamped.x - bounds.x, y: clamped.y - bounds.y };
+  }
+
+  function previewDrag(node: CanvasNode) {
+    const session = dragSession.current;
+    if (!session) return;
+    const { x, y } = dragDelta(session, node.position);
+    setDrag(new Map(session.members.map(item => [item.key, { x: item.position.x + x, y: item.position.y + y }])));
+  }
+
+  function cancelDrag() {
+    dragSession.current = undefined;
+    setDrag(undefined);
+  }
+
+  function finishDrag(node: CanvasNode) {
+    const session = dragSession.current;
+    cancelDrag();
+    if (!session) return;
+    const { x, y } = dragDelta(session, node.position);
+    if (x || y) move(session.members.map(item => ({
+      instancePath: item.item.instancePath, x: item.bounds.x + x, y: item.bounds.y + y,
+    })), session.frame);
+  }
+
+  function readBoxSelection() {
+    const { userSelectionRect: rect, userSelectionActive, nodeLookup, transform: [x, y, zoom] } = flowStore.getState();
+    if (!userSelectionActive || !rect) return;
+    const left = (rect.x - x) / zoom;
+    const top = (rect.y - y) / zoom;
+    const right = left + rect.width / zoom;
+    const bottom = top + rect.height / zoom;
+    boxSelection.current = [...nodeLookup.values()].flatMap(node => {
+      const { positionAbsolute: p } = node.internals;
+      const { width, height } = node.measured;
+      return node.selectable !== false && width && height
+        && p.x >= left && p.y >= top && p.x + width <= right && p.y + height <= bottom ? [node.data.path] : [];
+    });
+  }
+
+  function cancelBoxSelection() {
+    boxSelection.current = undefined;
+    flowStore.setState({ userSelectionActive: false, userSelectionRect: null, nodesSelectionActive: false });
   }
 
   function placeAt(item: LibraryItem, screen: XYPosition) {
@@ -303,9 +375,16 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
         event.preventDefault();
         cancelWiring();
         report('');
-      } else if (event.key === 'Escape' && groupMode) {
+      } else if (event.key === 'Escape') {
         event.preventDefault();
-        changeGroupSelection([], false);
+        cancelBoxSelection();
+        cancelDrag();
+        setSelectedEdgeKey(undefined);
+        selectObjects([]);
+        report('');
+      } else if (event.key === 'Enter' && event.target instanceof HTMLElement && event.target.matches('.react-flow__node')) {
+        const node = flow.current?.getNode(event.target.dataset.id ?? '');
+        if (node && node.selectable !== false) selectObject(node.data.path, event.ctrlKey || event.shiftKey || event.metaKey);
       } else if (event.key === 'F2' && selectedNode && selectedNode.key !== rootKey) {
         event.preventDefault();
         rename();
@@ -331,7 +410,11 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     return () => window.removeEventListener('keydown', keyboard);
   });
 
-  return <div ref={canvas} className="v1-topology-canvas" aria-label="逻辑拓扑画布"
+  return <div ref={canvas} className="v1-topology-canvas" aria-label="逻辑拓扑画布" tabIndex={-1}
+    data-space-pan={panWithSpace}
+    onPointerDownCapture={event => { if (panWithSpace) event.currentTarget.focus({ preventScroll: true }); }}
+    onPointerUpCapture={event => { if (event.button === 0) readBoxSelection(); }}
+    onPointerCancel={() => { cancelBoxSelection(); cancelDrag(); }}
     onDragOver={event => {
       if (!event.dataTransfer.types.includes(libraryDragType)) return;
       event.preventDefault();
@@ -343,23 +426,25 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
       const item = readLibraryItem(event.dataTransfer);
       if (item) placeAt(item, { x: event.clientX, y: event.clientY });
     }}>
-    {placingModule && <div className="v1-module-placement" onClick={event => {
+    {placingModule && !panWithSpace && <div className="v1-module-placement" onClick={event => {
       placeAt({ source: 'template', id: blankModuleId, name: '新建模块' }, { x: event.clientX, y: event.clientY });
     }} />}
     <ReactFlow<CanvasNode, WiringEdge> nodes={nodes} edges={edges.map(edge => ({ ...edge, selected: selectedWiring === edge }))}
       nodeTypes={nodeTypes} ariaLabelConfig={flowAriaLabels} fitView fitViewOptions={canvasFitOptions}
       viewport={viewport} onViewportChange={changeViewport} onInit={instance => { flow.current = instance; }}
       minZoom={0.001} maxZoom={2} deleteKeyCode={null} connectionMode={ConnectionMode.Loose}
-      zIndexMode="manual" nodesDraggable={!groupMode} selectionOnDrag={groupMode} panOnDrag={groupMode ? [1, 2] : true}
+      zIndexMode="manual" selectNodesOnDrag={false}
+      selectionKeyCode={null} multiSelectionKeyCode={null} selectionOnDrag={!panWithSpace}
+      panActivationKeyCode={null} panOnDrag={panWithSpace ? true : [1]} zoomOnDoubleClick={false}
       onSelectionStart={() => {
         cancelWiring();
         setSelectedEdgeKey(undefined);
-        boxSelection.current = new Set(nodes.filter(node => node.selected).map(node => node.data.key));
+        boxSelection.current = undefined;
       }}
       onSelectionEnd={() => {
-        const keys = boxSelection.current;
+        const paths = boxSelection.current;
         boxSelection.current = undefined;
-        if (keys) changeGroupSelection(items.filter(item => item.key !== rootKey && keys.has(item.key)).map(item => item.item.instancePath));
+        if (paths) selectObjects(paths);
         queueMicrotask(() => flowStore.setState({ nodesSelectionActive: false }));
       }}
       connectionLineStyle={cancelled.current ? { opacity: 0 } : undefined}
@@ -381,32 +466,21 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
         setWireStart(undefined);
       }}
       onPaneClick={() => {
-        cancelWiring(); setSelectedEdgeKey(undefined); selectInstance(); report('');
-        if (groupMode) changeGroupSelection([]);
+        if (!panWithSpace) { cancelWiring(); setSelectedEdgeKey(undefined); selectObjects([]); report(''); }
       }}
-      onEdgeClick={(_, edge) => { if (!groupMode) { cancelWiring(); selectInstance(); setSelectedEdgeKey(edge.id); report(''); } }}
+      onEdgeClick={(_, edge) => { cancelWiring(); selectObjects([]); setSelectedEdgeKey(edge.id); report(''); }}
       onNodeClick={(event, node) => {
-        if (node.data.key === rootKey || (event.target instanceof Element && event.target.closest('.react-flow__handle'))) return;
+        if (event.target instanceof Element && event.target.closest('.react-flow__handle')) return;
         cancelWiring();
         setSelectedEdgeKey(undefined);
-        if (groupMode || event.ctrlKey || event.metaKey) {
-          const initial = groupMode ? groupPaths : selectedInstance ? [selectedInstance] : [];
-          const picked = initial.some(path => hierarchyKey(path) === node.data.key);
-          changeGroupSelection(picked ? initial.filter(path => hierarchyKey(path) !== node.data.key) : [...initial, node.data.path]);
-        } else selectInstance(node.data.path);
+        selectObject(node.data.path, event.ctrlKey || event.shiftKey || event.metaKey);
         report('');
       }}
       onNodeDoubleClick={(event, node) => {
         if (event.target instanceof Element && event.target.closest('.react-flow__handle')) return;
-        if (!groupMode && node.data.toggle) enterModule(node.data.path);
+        if (node.data.toggle) enterModule(node.data.path);
       }}
       onNodesChange={changes => {
-        for (const change of changes) {
-          if (change.type !== 'select' || !boxSelection.current) continue;
-          const key = decodeURIComponent(change.id);
-          if (change.selected) boxSelection.current.add(key);
-          else boxSelection.current.delete(key);
-        }
         const dimensions = changes.flatMap(change => {
           if (change.type !== 'dimensions' || !change.dimensions) return [];
           const key = decodeURIComponent(change.id);
@@ -423,23 +497,9 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
           return next ?? current;
         });
       }}
-      onNodeDrag={(_, node) => {
-        const projected = nodeByKey.get(node.data.key);
-        if (!projected) return;
-        const position = clampPosition(projected.key, node.position);
-        setDrag({ key: projected.key, position: { x: position.x - projected.offset.x, y: position.y - projected.offset.y } });
-      }}
-      onNodeDragStop={(_, node) => {
-        setDrag(undefined);
-        const projected = nodeByKey.get(node.data.key);
-        if (!projected || !node.data.path.length) return;
-        const position = clampPosition(projected.key, node.position);
-        const { bounds } = projected;
-        if (position.x !== bounds.x || position.y !== bounds.y) {
-          const frame = nodeByKey.get(hierarchyKey(node.data.path.slice(0, -1)))?.frame;
-          move(node.data.path, position, frame && !frame.saved ? frame.base : undefined);
-        }
-      }}>
+      onNodeDragStart={(_, node, moving) => startDrag(node, moving)}
+      onNodeDrag={(_, node) => previewDrag(node)}
+      onNodeDragStop={(_, node) => finishDrag(node)}>
       <Background />
       <CanvasControls canLocate={!!(selectedNode || selectedWiring)} locate={() => {
         const ids = selectedNode ? [nodeId(selectedNode.key)] : selectedWiring ? [selectedWiring.source, selectedWiring.target] : [];

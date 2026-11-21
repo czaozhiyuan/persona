@@ -13,19 +13,19 @@ import { connectBoundaryPort, exposeModulePort, renamePort } from '../../../stat
 import type { WiringSelection } from '../../../state/v1/remove-topology-object';
 import type { EndpointRef, InstancePath, ModuleDefinition, Project } from '../../../model/v1/types';
 import type { ProjectStore, ProjectStoreSnapshot } from '../../../state/v1/project-store';
-import { editModule, editModuleWiring, moveTopologyNode, resizeTopologyFrame } from '../../../state/v1/topology-edits';
+import { editModule, editModuleWiring, moveTopologyNodes, resizeTopologyFrame } from '../../../state/v1/topology-edits';
 import { PortActionsDialog } from './port-actions-dialog';
 import { PortBindingDialog } from './port-binding-dialog';
 import type { BindingPreview } from './port-binding-dialog';
 import { PortDeletionDialog } from './port-deletion-dialog';
 import type { BudgetHighlight } from './path-highlight';
 import { TopologyCanvas } from './topology-canvas';
-import { displayDepth, hierarchyKey, inHierarchy } from './hierarchy-view';
+import { displayDepth, hierarchyKey, inHierarchy, sharedParent } from './hierarchy-view';
 import { CableForm, ConnectionForm, MappingForm, TopologyTool, field } from './wiring-forms';
 import type { LocalPort, UpdateWiring } from './wiring-forms';
 import './topology.css';
 
-export function TopologyEditor({ store, state, module, pathResult, graph, rename, expanded, setExpanded, budgetHighlight, onPortBudget, onDcBudget, onAddPort, newPort, onAddInside }: {
+export function TopologyEditor({ store, state, module, pathResult, graph, rename, expanded, setExpanded, budgetHighlight, onPortBudget, onDcBudget, onAddPort, newPort, onAddInside, onSelectObject, onSelectObjects }: {
   store: ProjectStore; state: ProjectStoreSnapshot; module: ModuleDefinition; pathResult?: PathResult; graph: SignalGraph; rename: () => void;
   expanded: ReadonlySet<string>; setExpanded: (value: ReadonlySet<string>) => void;
   budgetHighlight?: BudgetHighlight;
@@ -33,6 +33,8 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
   onDcBudget: (scope: InstancePath) => void;
   onAddPort: (path: InstancePath) => void;
   onAddInside: (path: InstancePath) => void;
+  onSelectObject: (path: InstancePath, extend: boolean) => void;
+  onSelectObjects: (paths: readonly InstancePath[]) => void;
   newPort?: EndpointRef;
 }) {
   const { project, selection } = state;
@@ -40,8 +42,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
   const moduleName = store.resolveInstance(scope)?.instance?.name ?? module.name;
   const [message, setMessage] = useState('');
   const [placingModule, setPlacingModule] = useState(false);
-  const [groupMode, setGroupMode] = useState(false);
-  const [groupPaths, setGroupPaths] = useState<readonly InstancePath[]>([]);
+  const selectedPaths = selection.instancePaths ?? (selection.instancePath ? [selection.instancePath] : []);
   const [groupDialog, setGroupDialog] = useState(false);
   const maxDepth = displayDepth(graph.instances, scope);
   const visibleDepth = displayDepth(graph.instances, scope, expanded);
@@ -71,21 +72,12 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
     return result.ok;
   }
 
-  function changeGroupSelection(paths: readonly InstancePath[], active = true) {
-    setGroupMode(active);
-    setGroupPaths(paths);
-    store.selectInstance(undefined);
-    setMessage('');
-  }
-
-  const groupScope = groupPaths[0]?.slice(0, -1);
+  const groupPaths = selection.instancePaths ?? [];
+  const commonParent = sharedParent(groupPaths);
+  const groupScope = commonParent && inHierarchy(scope, commonParent) ? commonParent : undefined;
   const groupOwner = groupScope && store.resolveInstance(groupScope);
   const groupLocations = groupOwner ? structureScope(graph.instances, groupOwner.definition.id) : [];
   function openGroupDialog() {
-    if (!groupScope || groupPaths.some(path => hierarchyKey(path.slice(0, -1)) !== hierarchyKey(groupScope))) {
-      setMessage('请选择同一直接父模块下的对象。');
-      return;
-    }
     setMessage('');
     setGroupDialog(true);
   }
@@ -93,8 +85,6 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
   function add(item: LibraryItem, position?: { x: number; y: number }) {
     const id = crypto.randomUUID();
     if (!commit(draft => insertLibraryItem(draft, item, module.id, scope, id, position))) return false;
-    setGroupMode(false);
-    setGroupPaths([]);
     setPlacingModule(false);
     store.selectInstance([...scope, id]);
     return true;
@@ -121,15 +111,15 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
 
   function applyExpansion(next: Set<string>) {
     setExpanded(next);
-    const selected = selection.instancePath;
-    if (!selected || !inHierarchy(scope, selected)) return;
-    for (let length = scope.length + 1; length < selected.length; length++) {
-      const ancestor = selected.slice(0, length);
-      if (!next.has(hierarchyKey(ancestor))) {
-        store.selectInstance(ancestor);
-        break;
+    const visiblePaths = selectedPaths.map(path => {
+      if (!inHierarchy(scope, path)) return path;
+      for (let length = scope.length + 1; length < path.length; length++) {
+        const ancestor = path.slice(0, length);
+        if (!next.has(hierarchyKey(ancestor))) return ancestor;
       }
-    }
+      return path;
+    });
+    if (visiblePaths.some((path, index) => path !== selectedPaths[index])) store.selectInstances(visiblePaths);
   }
 
   function toggleModule(path: InstancePath) {
@@ -204,20 +194,18 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
     <div className="v1-hierarchy-workspace">
       <TopologyCanvas project={project} instances={graph.instances} modulePath={scope} selectedInstance={selection.instancePath}
         pathResult={pathResult} budgetHighlight={budgetHighlight} expanded={expanded} toggleModule={toggleModule}
-        groupMode={groupMode} groupPaths={groupPaths} changeGroupSelection={changeGroupSelection}
-        selectInstance={store.selectInstance} enterModule={store.selectModule}
+        selectedPaths={selectedPaths} selectObject={onSelectObject} selectObjects={onSelectObjects}
+        enterModule={store.selectModule}
         onAddPort={onAddPort} newPort={newPort}
         openPort={(path, portId) => { setMessage(''); setPortAction({ path, portId }); }}
         add={add} placingModule={placingModule} cancelPlacement={() => { setPlacingModule(false); setMessage(''); }}
         deleteSelection={deleteSelection} rename={rename} report={setMessage} undo={store.undo} redo={store.redo}
-        move={(path, position, frame) => commit(draft => {
-          const placed = moveTopologyNode(draft, path, position);
-          return frame ? resizeTopologyFrame(placed, { modulePath: path.slice(0, -1), ...frame }) : placed;
+        move={(moves, frame) => commit(draft => {
+          const placed = moveTopologyNodes(draft, moves);
+          return frame ? resizeTopologyFrame(placed, frame) : placed;
         })}
-        resize={(frame, adjustments) => commit(draft => {
-          const placed = adjustments.reduce((current, { path, position }) => moveTopologyNode(current, path, position), draft);
-          return resizeTopologyFrame(placed, { modulePath: scope, ...frame });
-        })}
+        resize={(frame, adjustments) => commit(draft =>
+          resizeTopologyFrame(moveTopologyNodes(draft, adjustments), { modulePath: scope, ...frame }))}
         connect={(path, connection) => editScope(path, current => ({
           ...current, connections: [...(current.connections ?? []), { ...connection, id: crypto.randomUUID() }],
         }))}
@@ -252,13 +240,9 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
       {selectedModule && !placingModule && <button type="button" onClick={() => onAddInside(selectedModule.instancePath)}>
         添加内部对象 · {selectedModule.instance?.name}
       </button>}
-      <button type="button" disabled={placingModule} aria-pressed={groupMode} title="在空白处拖动框选，或逐个点击对象"
-        onClick={() => changeGroupSelection(groupMode || !selection.instancePath ? [] : [selection.instancePath], !groupMode)}>
-        框选 / 多选
-      </button>
-      {groupMode && <>
-        <button type="button" disabled={groupPaths.length < 2} onClick={openGroupDialog}>组成模块</button>
-        <span className="v1-group-count" role="status">已选 {groupPaths.length} 个</span>
+      {!placingModule && groupPaths.length > 1 && <>
+        {groupScope && <button type="button" onClick={openGroupDialog}>组成模块</button>}
+        <span className="v1-group-count" role="status">已选 {groupPaths.length} 个{!groupScope && ' · 整体移动和成组需要同一直接父模块'}</span>
       </>}
       {dcScope && <button type="button" className="v1-dc-entry" onClick={() => onDcBudget(dcScope)}>查看供电/功耗</button>}
       {sharedLocations.length > 0 && <details data-workbench-popup>
@@ -326,7 +310,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
         </form>
       </TopologyTool>
       <TopologyTool title="对外端口">
-        <button type="button" onClick={() => onAddPort(selection.instancePath ?? scope)}>
+        <button type="button" disabled={groupPaths.length > 1} onClick={() => onAddPort(selection.instancePath ?? scope)}>
           ＋ 添加端口 · {selectedItem?.instance?.name ?? selectedItem?.definition.name ?? module.name}
         </button>
         {portRemoval(module.id, '删除对外端口')}
@@ -348,7 +332,6 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
         const name = field(new FormData(event.currentTarget), 'name');
         const id = crypto.randomUUID();
         if (commit(draft => groupModule(draft, groupPaths, name, id, crypto.randomUUID()))) {
-          changeGroupSelection([], false);
           setGroupDialog(false);
           store.selectInstance([...groupScope, id]);
         }

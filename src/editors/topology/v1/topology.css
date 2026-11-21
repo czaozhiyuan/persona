@@ -89,6 +89,7 @@
 .v1-module-pins.right .v1-frame-inner-handle { left: calc(100% - 3px); }
 .v1-module-pins.right .v1-frame-outer-handle { left: calc(100% + 3px); }
 .v1-topology-canvas { position: absolute; inset: 0; overflow: hidden; background: #f6faf9; isolation: isolate; }
+.v1-topology-canvas[data-space-pan="true"] .react-flow__viewport * { pointer-events: none; }
 .v1-module-placement { position: absolute; inset: 0; z-index: 5; cursor: crosshair; }
 .v1-placement-hint {
   position: absolute; z-index: 2; bottom: 14px; right: 14px; max-width: calc(100% - 14rem);

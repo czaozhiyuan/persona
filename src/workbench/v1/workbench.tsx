@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { LayoutEditor } from '../../editors/layout/v1/layout-editor';
 import { HierarchyTree } from '../../editors/topology/v1/hierarchy-tree';
-import { hierarchyKey } from '../../editors/topology/v1/hierarchy-view';
+import { hierarchyKey, inHierarchy } from '../../editors/topology/v1/hierarchy-view';
 import { TopologyEditor } from '../../editors/topology/v1/topology-editor';
 import { createLinkBudget } from '../../engine/v1/link-budget';
 import { createOpticalBudgetForGraph } from '../../engine/v1/optical-budget';
@@ -72,7 +72,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const activeOccurrence = store.resolveInstance(selection.modulePath);
   const active = activeOccurrence?.definition;
   const selected = selection.instancePath && store.resolveInstance(selection.instancePath);
-  const properties = selected || activeOccurrence;
+  const selectedPaths = selection.instancePaths ?? (selection.instancePath ? [selection.instancePath] : []);
+  const properties = selection.instancePaths ? undefined : selected || activeOccurrence;
   const targetPortOwner = portTarget && store.resolveInstance(portTarget);
   const layout = selection.view === 'topology' ? project.layout?.topology : project.layout?.physical;
   const linkOptions = useMemo(() => createLinkOptions(project), [project]);
@@ -140,9 +141,12 @@ export function Workbench({ store, loadExample, newProject }: Props) {
       for (let depth = 0; depth <= selection.modulePath.length; depth++) {
         next.add(hierarchyKey(selection.modulePath.slice(0, depth)));
       }
+      for (const path of selection.instancePaths ?? (selection.instancePath ? [selection.instancePath] : [])) {
+        for (let depth = 0; depth < path.length; depth++) next.add(hierarchyKey(path.slice(0, depth)));
+      }
       return next.size === current.size ? current : next;
     });
-  }, [selection.modulePath]);
+  }, [selection.modulePath, selection.instancePath, selection.instancePaths]);
 
   function toggleBranch(path: InstancePath) {
     setExpandedHierarchy(current => {
@@ -154,14 +158,38 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     });
   }
 
-  function navigate(path: InstancePath, isModule: boolean) {
-    if (isModule) {
-      store.selectModule(path);
-      store.selectInstance(undefined);
-    } else {
-      store.selectModule(path.slice(0, -1));
-      store.selectInstance(path);
+  function selectObjects(paths: readonly InstancePath[]) {
+    store.selectInstances(paths);
+    if (paths.length) setPropertiesOpen(true);
+  }
+
+  function selectObject(path: InstancePath, extend: boolean) {
+    if (!extend || !path.length) {
+      selectObjects([path]);
+      return;
     }
+    const current = store.getSnapshot().selection;
+    const paths = (current.instancePaths ?? (current.instancePath ? [current.instancePath] : [])).filter(item => item.length);
+    const key = hierarchyKey(path);
+    selectObjects(paths.some(item => hierarchyKey(item) === key)
+      ? paths.filter(item => hierarchyKey(item) !== key) : [...paths, path]);
+  }
+
+  function selectTreeObject(path: InstancePath, extend: boolean) {
+    if (inHierarchy(selection.modulePath, path)) {
+      setExpandedCanvas(previous => {
+        const next = new Set(previous);
+        for (let depth = selection.modulePath.length + 1; depth < path.length; depth++) next.add(hierarchyKey(path.slice(0, depth)));
+        return next.size === previous.size ? previous : next;
+      });
+    }
+    selectObject(path, extend);
+    openPage('canvas');
+  }
+
+  function enterModule(path: InstancePath) {
+    store.selectModule(path);
+    store.selectInstance(undefined);
     openPage('canvas');
   }
 
@@ -319,7 +347,11 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   }
 
   function navigatePort(path: InstancePath, portId: string) {
-    navigate(path, store.resolveInstance(path)?.definition.kind === 'module');
+    if (store.resolveInstance(path)?.definition.kind === 'module') enterModule(path);
+    else {
+      enterModule(path.slice(0, -1));
+      store.selectInstance(path);
+    }
     store.setView('topology');
     setPropertiesOpen(true);
     requestAnimationFrame(() => {
@@ -414,7 +446,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
           </div>
           <div id="workbench-structure" className="v1-side-scroll" hidden={leftTab !== 'structure'}>
             <HierarchyTree instances={linkOptions.graph.instances} modulePath={selection.modulePath}
-              selected={selection.instancePath} expanded={expandedHierarchy} toggle={toggleBranch} navigate={navigate} navigatePort={navigatePort} />
+              selected={selectedPaths} expanded={expandedHierarchy} toggle={toggleBranch} select={selectTreeObject}
+              enter={enterModule} navigatePort={navigatePort} />
           </div>
           <div id="workbench-library" className="v1-side-scroll" hidden={leftTab !== 'library'}>
             {active?.kind === 'module' && <LibraryPanel key={projectSession} store={store} state={state} module={active} />}
@@ -428,7 +461,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
                 store={store} state={state} module={active} pathResult={pathResult} graph={linkOptions.graph} rename={renameSelection}
                 expanded={expandedCanvas} setExpanded={setExpandedCanvas} budgetHighlight={budgetHighlight}
                 onPortBudget={selectBudgetPort} onDcBudget={showDc} onAddPort={setPortTarget} newPort={newPort}
-                onAddInside={path => { store.selectModule(path); setLeftTab('library'); }} />}
+                onSelectObject={selectObject} onSelectObjects={selectObjects}
+                onAddInside={path => { enterModule(path); setLeftTab('library'); }} />}
           </div>
           <div className="v1-canvas-page v1-layout-scroll" inert={page !== 'canvas' || selection.view !== 'physical'}
             aria-hidden={page !== 'canvas' || selection.view !== 'physical'}>
@@ -522,6 +556,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
               onClick={() => setPropertiesOpen(open => !open)}>属性</button>
           </div>
           <div id="workbench-properties" className="v1-side-scroll" hidden={!propertiesOpen}>
+            {selection.instancePaths && <p className="panel" role="status">已选中 {selection.instancePaths.length} 个对象。选中单个对象可编辑属性。</p>}
             {properties && <PropertiesPanel key={JSON.stringify([projectSession, properties.instancePath])}
               store={store} occurrence={properties} occurrences={linkOptions.graph.instances} jumpToParameter={jumpToParameter} onAddPort={setPortTarget} />}
           </div>

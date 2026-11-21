@@ -5,6 +5,12 @@ export const hierarchyKey = (path: InstancePath): string => JSON.stringify(path)
 export const inHierarchy = (scope: InstancePath, path: InstancePath): boolean =>
   path.length >= scope.length && scope.every((id, index) => id === path[index]);
 
+export function sharedParent(paths: readonly InstancePath[]): InstancePath | undefined {
+  if (!paths[0]?.length) return;
+  const parent = paths[0].slice(0, -1);
+  return paths.every(path => path.length === parent.length + 1 && inHierarchy(parent, path)) ? parent : undefined;
+}
+
 export function hierarchyChildren(instances: readonly ResolvedInstance[]) {
   const children = new Map<string, ResolvedInstance[]>();
   for (const item of instances) {
