@@ -1,8 +1,9 @@
 import { useState } from 'react';
+import { insertCanvasItem } from '../../editors/topology/v1/topology-layout-edits';
 import { PortDeletionDialog } from '../../editors/topology/v1/port-deletion-dialog';
 import { resolveHierarchy } from '../../engine/v1/hierarchy';
 import { builtInDefinitions, isBlankTemplate } from '../../library/v1/built-in';
-import { insertLibraryItem, libraryDragType } from '../../library/v1/insert-library-item';
+import { libraryDragType } from '../../library/v1/insert-library-item';
 import type { LibraryItem } from '../../library/v1/insert-library-item';
 import { previewTemplateUpdate } from '../../library/v1/project-snapshots';
 import type { DragEvent } from 'react';
@@ -90,7 +91,7 @@ export function LibraryPanel({ store, state, module }: Props) {
   function add(item: LibraryItem) {
     if (!item.name) { setFeedback({ error: true, text: '名称不能为空。' }); return; }
     const id = crypto.randomUUID();
-    const result = store.commit(draft => insertLibraryItem(draft, item, module.id, selection.modulePath, id));
+    const result = store.commit(draft => insertCanvasItem(draft, item, module.id, selection.modulePath, id));
     if (result.ok) store.selectInstance([...selection.modulePath, id]);
     setPreview(undefined);
     setFeedback(result.ok ? { text: `已添加「${item.name}」。`, snapshot: store.getSnapshot().project }

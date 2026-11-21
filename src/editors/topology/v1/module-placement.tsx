@@ -1,14 +1,13 @@
 import { useRef, useState } from 'react';
 import type { XYPosition } from '@xyflow/react';
 
-type Preview = { zoom: number; allowed: boolean };
 const clickSlop = 5;
 
-export function ModulePlacement({ previewAt, place }: {
-  previewAt: (screen: XYPosition) => Preview | undefined;
+export function ModulePlacement({ zoom, place }: {
+  zoom: () => number | undefined;
   place: (screen: XYPosition) => void;
 }) {
-  const [preview, setPreview] = useState<(XYPosition & Preview) | undefined>();
+  const [preview, setPreview] = useState<(XYPosition & { zoom: number }) | undefined>();
   const press = useRef<XYPosition | undefined>(undefined);
   const isClick = (x: number, y: number) => press.current && Math.hypot(x - press.current.x, y - press.current.y) <= clickSlop;
   function leave() {
@@ -16,13 +15,13 @@ export function ModulePlacement({ previewAt, place }: {
     setPreview(undefined);
   }
 
-  return <div className="v1-module-placement" data-blocked={preview?.allowed === false} aria-hidden="true"
+  return <div className="v1-module-placement" aria-hidden="true"
     onPointerMove={event => {
       const { clientX: x, clientY: y } = event;
       if (!isClick(x, y)) press.current = undefined;
-      const next = previewAt({ x, y });
+      const scale = zoom();
       const rect = event.currentTarget.getBoundingClientRect();
-      setPreview(next && { ...next, x: x - rect.left, y: y - rect.top });
+      setPreview(scale === undefined ? undefined : { zoom: scale, x: x - rect.left, y: y - rect.top });
     }}
     onPointerDown={event => {
       if (event.isPrimary && event.button === 0) press.current = { x: event.clientX, y: event.clientY };
@@ -40,7 +39,7 @@ export function ModulePlacement({ previewAt, place }: {
       <strong>新建模块</strong>
     </div>}
     {preview && <span className="v1-module-placement-label" style={{ left: preview.x, top: preview.y }}>
-      {preview.allowed ? '单击放置' : '此处无法放置'}
+      单击放置
     </span>}
   </div>;
 }

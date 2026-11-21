@@ -4,7 +4,6 @@ import { useState } from 'react';
 import type { PathResult } from '../../../engine/v1/path-resolver';
 import type { SignalGraph } from '../../../engine/v1/signal-graph';
 import { builtInDefinitions } from '../../../library/v1/built-in';
-import { insertLibraryItem } from '../../../library/v1/insert-library-item';
 import type { LibraryItem } from '../../../library/v1/insert-library-item';
 import { removeTopologyInstance, removeWiring } from '../../../state/v1/remove-topology-object';
 import type { LocalEndpointRef } from '../../../model/v1/topology';
@@ -20,6 +19,7 @@ import { PortBindingDialog } from './port-binding-dialog';
 import type { BindingPreview } from './port-binding-dialog';
 import { PortDeletionDialog } from './port-deletion-dialog';
 import type { BudgetHighlight } from './path-highlight';
+import { insertCanvasItem } from './topology-layout-edits';
 import { TopologyCanvas } from './topology-canvas';
 import { displayDepth, hierarchyKey, inHierarchy, sharedParent } from './hierarchy-view';
 import { CableForm, ConnectionForm, MappingForm, TopologyTool, field } from './wiring-forms';
@@ -94,7 +94,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
 
   function add(item: LibraryItem, position?: { x: number; y: number }) {
     const id = crypto.randomUUID();
-    if (!commit(draft => insertLibraryItem(draft, item, module.id, scope, id, position))) return false;
+    if (!commit(draft => insertCanvasItem(draft, item, module.id, scope, id, position))) return false;
     setPlacingModule(false);
     store.selectInstance([...scope, id]);
     return true;
@@ -111,12 +111,16 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
     return true;
   }
 
-  function deleteSelection(path: InstancePath, instanceId?: string, wire?: WiringSelection) {
+  function deleteInstance(path: InstancePath, preserve: (project: Project, parentId: string) => Project) {
+    const parent = store.resolveInstance(path.slice(0, -1))?.definition;
+    if (parent?.kind !== 'module') return;
+    commit(draft => preserve(removeTopologyInstance(draft, parent.id, path.at(-1)!), parent.id));
+  }
+
+  function deleteWiring(path: InstancePath, wire: WiringSelection) {
+    if (wire.kind === 'mapping') return requestBinding(path, wire.id);
     const definition = store.resolveInstance(path)?.definition;
-    if (definition?.kind !== 'module') return false;
-    if (instanceId) return commit(draft => removeTopologyInstance(draft, definition.id, instanceId));
-    if (wire?.kind === 'mapping') return requestBinding(path, wire.id);
-    return !!wire && commit(draft => removeWiring(draft, definition.id, wire));
+    return definition?.kind === 'module' && commit(draft => removeWiring(draft, definition.id, wire));
   }
 
   function applyExpansion(next: Set<string>) {
@@ -210,7 +214,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
         onAddPort={onAddPort} newPort={newPort}
         openPort={(path, portId) => { setMessage(''); setPortAction({ path, portId }); }}
         add={add} placingModule={placingModule} cancelPlacement={() => { setPlacingModule(false); setMessage(''); }}
-        deleteSelection={deleteSelection} rename={rename} copyModule={copyModule} pasteModule={pasteModule} report={setMessage} undo={store.undo} redo={store.redo}
+        deleteInstance={deleteInstance} deleteWiring={deleteWiring} rename={rename} copyModule={copyModule} pasteModule={pasteModule} report={setMessage} undo={store.undo} redo={store.redo}
         move={(moves, frame) => commit(draft => {
           const placed = moveTopologyNodes(draft, moves);
           return frame ? resizeTopologyFrame(placed, frame) : placed;
