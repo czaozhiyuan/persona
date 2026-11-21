@@ -1,10 +1,22 @@
-import { Fragment } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { DragEvent } from 'react';
 import { portDisplayName, portTypeLabels } from '../../../workbench/v1/labels';
 import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
-import type { InstancePath } from '../../../model/v1/types';
+import type { InstancePath, Project } from '../../../model/v1/types';
+import { planInstanceMove } from '../../../state/v1/reparent-instance';
+import { structureLocations } from '../../../workbench/v1/structure-scope';
+import type { ApprovedMove } from './reparent-drop';
 import { hierarchyChildren, hierarchyKey } from './hierarchy-view';
 
+const dragType = 'application/x-persona-hierarchy-instance';
+
+type Hover = { key: string; label: string; locations: readonly string[]; plan?: ApprovedMove; error?: string };
+type TreeDrag = { base: Project; source: InstancePath; hover?: Hover };
+
 type Props = {
+  project: Project;
+  focusMoved?: InstancePath;
+  move: (base: Project, plan: ApprovedMove) => string | undefined;
   instances: readonly ResolvedInstance[];
   modulePath: InstancePath;
   selected: readonly InstancePath[];
@@ -15,7 +27,58 @@ type Props = {
   navigatePort: (path: InstancePath, portId: string) => void;
 };
 
-export function HierarchyTree({ instances, modulePath, selected, expanded, toggle, select, enter, navigatePort }: Props) {
+export function HierarchyTree({ project, focusMoved, move, instances, modulePath, selected, expanded, toggle, select, enter, navigatePort }: Props) {
+  const tree = useRef<HTMLDivElement>(null);
+  const drag = useRef<TreeDrag | undefined>(undefined);
+  const [hover, setHover] = useState<Hover>();
+  const [notice, setNotice] = useState<string>();
+  const renderedHover = useRef<Hover | undefined>(undefined);
+  useLayoutEffect(() => { renderedHover.current = hover; }, [hover]);
+  useEffect(() => {
+    if (!focusMoved) return;
+    const row = tree.current?.querySelector(`[data-hierarchy-key="${CSS.escape(hierarchyKey(focusMoved))}"]`);
+    row?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [focusMoved]);
+
+  function endDrag() {
+    drag.current = undefined;
+    setHover(undefined);
+  }
+
+  function clearHover() {
+    if (drag.current) drag.current.hover = undefined;
+    setHover(undefined);
+  }
+
+  function dragOver(event: DragEvent<HTMLLIElement>, item: ResolvedInstance) {
+    const session = drag.current;
+    if (!session || !event.dataTransfer.types.includes(dragType)) return;
+    event.preventDefault();
+    const key = hierarchyKey(item.instancePath);
+    if (session.hover?.key !== key) {
+      const plan = item.definition.kind === 'module' ? planInstanceMove(session.base, session.source, item.instancePath) : undefined;
+      const name = item.instance?.name ?? item.definition.name;
+      const up = item.instancePath.length === session.source.length - 2;
+      session.hover = {
+        key, label: `${up ? '移到上一级' : '移入'}：${name}`,
+        plan: plan?.ok ? plan : undefined,
+        error: plan ? (plan.ok ? undefined : plan.message) : '请选择一个模块条目。',
+        locations: plan?.ok && plan.affected.length > 1 ? structureLocations(instances, plan.affected.map(item => item.from)) : [],
+      };
+      setHover(session.hover);
+    }
+    event.dataTransfer.dropEffect = session.hover.plan ? 'move' : 'none';
+  }
+
+  function drop(event: DragEvent<HTMLLIElement>, path: InstancePath) {
+    const session = drag.current;
+    if (!session || !event.dataTransfer.types.includes(dragType)) return;
+    event.preventDefault();
+    const rendered = renderedHover.current;
+    const preview = rendered?.key === hierarchyKey(path) && rendered === session.hover ? rendered : undefined;
+    setNotice(preview?.plan ? move(session.base, preview.plan) : preview?.error ?? '请等目标显示移动预览后再松手。');
+    endDrag();
+  }
   const children = hierarchyChildren(instances);
   const root = instances[0];
   const pending = root ? [root] : [];
@@ -29,19 +92,44 @@ export function HierarchyTree({ instances, modulePath, selected, expanded, toggl
       for (const child of [...(children.get(hierarchyKey(occurrence.instancePath)) ?? [])].reverse()) pending.push(child);
     }
   }
-  return <div className="v1-hierarchy-tree" aria-label="工程结构">
+  return <div ref={tree} className="v1-hierarchy-tree" aria-label="工程结构"
+    onDragLeave={event => {
+      if (drag.current && !(event.relatedTarget instanceof Element && event.currentTarget.contains(event.relatedTarget))) clearHover();
+    }}
+    onDragOver={event => {
+      if (drag.current && event.target instanceof Element && !event.target.closest('[data-hierarchy-key]')) clearHover();
+    }}>
+    {(hover || notice) && <div className="v1-tree-drop-overlay">
+      <div className="v1-tree-drop-notice" role={notice ? 'alert' : 'status'} data-blocked={!!(hover?.error || notice)}>
+        {notice ?? hover?.error ?? hover?.label}
+        {!!hover?.locations.length && <div>共享结构影响范围：{hover.locations.join('、')}</div>}
+      </div>
+    </div>}
     <ul>
-      {rows.map(({ instancePath, instance, definition }) => {
+      {rows.map(item => {
+        const { instancePath, instance, definition } = item;
         const key = hierarchyKey(instancePath);
         const name = instance?.name ?? definition.name;
         const open = expanded.has(key);
         const module = definition.kind === 'module';
         const hasChildren = !!children.get(key)?.length || (module && definition.ports.length > 0);
-        return <Fragment key={key}><li style={{ paddingInlineStart: 4 + instancePath.length * 14 }}>
+        return <Fragment key={key}><li data-hierarchy-key={key}
+          data-drop={hover?.key === key ? (hover.error ? 'blocked' : 'allowed') : undefined}
+          style={{ paddingInlineStart: 4 + instancePath.length * 14 }}
+          onDragOver={event => dragOver(event, item)} onDrop={event => drop(event, instancePath)}>
           {hasChildren ? <button type="button" className="v1-hierarchy-disclosure" aria-expanded={open}
             aria-label={`${open ? '折叠' : '展开'} ${name}`} onClick={() => toggle(instancePath)}>{open ? '▾' : '▸'}</button>
             : <span className="v1-hierarchy-disclosure" />}
           <button type="button" className="v1-hierarchy-entry" title={`${name} · ${definition.name}`}
+            draggable={!!instance}
+            onDragStart={event => {
+              if (!instance) return;
+              drag.current = { base: project, source: instancePath };
+              setNotice(undefined);
+              event.dataTransfer.effectAllowed = 'move';
+              event.dataTransfer.setData(dragType, key);
+            }}
+            onDragEnd={endDrag}
             aria-label={`选中 ${name}`}
             aria-current={key === active ? 'location' : undefined} aria-pressed={selectedKeys.has(key)}
             onClick={event => select(instancePath, event.ctrlKey || event.shiftKey || event.metaKey)}
