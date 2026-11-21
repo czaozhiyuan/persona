@@ -3,10 +3,13 @@ import type { EndpointRef, InstancePath } from '../../model/v1/types';
 
 export function remapLinkReferences(link: NamedLink, path: (path: InstancePath) => InstancePath,
   endpoint: (endpoint: EndpointRef) => EndpointRef,
-  required: (ref: NonNullable<NamedLink['via']>[number]) => NonNullable<NamedLink['via']>[number]): NamedLink {
+  required: (ref: NonNullable<NamedLink['via']>[number]) => NonNullable<NamedLink['via']>[number] | undefined): NamedLink {
   return {
     ...link, from: link.from && endpoint(link.from), to: link.to && endpoint(link.to),
-    via: link.via?.map(required),
+    via: link.via?.flatMap(ref => {
+      const next = required(ref);
+      return next ? [next] : [];
+    }),
     conversionBindings: link.conversionBindings?.map(binding => ({
       ...binding,
       eo: { ...binding.eo, instancePath: path(binding.eo.instancePath) },

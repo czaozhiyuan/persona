@@ -10,7 +10,7 @@ import type { LinkTrial, NamedLink } from '../../model/v1/topology';
 import { signalPortKey } from '../../engine/v1/signal-graph';
 import type { EndpointRef, InstancePath, PortDefinition, Project } from '../../model/v1/types';
 import { planDissolveModule } from '../../state/v1/dissolve-module';
-import { planInstanceMove } from '../../state/v1/reparent-instance';
+import { moveWiringSummary, planInstanceMove } from '../../state/v1/reparent-instance';
 import { moveTopologyNode } from '../../state/v1/topology-edits';
 import type { ProjectStore } from '../../state/v1/project-store';
 import { parseProjectJson, serializeProjectJson } from '../../storage/v1/project-json';
@@ -661,6 +661,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
       {moveUp && <dialog className="v1-topology-dialog" aria-labelledby="move-up-title"
         ref={dialog => { if (dialog && !dialog.open) dialog.showModal(); }} onCancel={() => setMoveUp(undefined)}>
         <h3 id="move-up-title">移到上一级：{moveUp.destination}</h3>
+        {moveUp.plan.ok && <p>{moveWiringSummary(moveUp.plan.wiring)}</p>}
         {moveUp.plan.ok && moveUp.plan.affected.length > 1 && <p>共享结构影响范围：{
           structureLocations(linkOptions.graph.instances, moveUp.plan.affected.map(item => item.from)).join('、')
         }</p>}

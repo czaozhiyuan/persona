@@ -7,7 +7,7 @@ import { signalPortKey } from '../../../engine/v1/signal-graph';
 import { blankModuleId, builtInDefinitions, isBlankTemplate } from '../../../library/v1/built-in';
 import { libraryDragType, readLibraryItem } from '../../../library/v1/insert-library-item';
 import type { LibraryItem } from '../../../library/v1/insert-library-item';
-import { planInstanceMove } from '../../../state/v1/reparent-instance';
+import { moveWiringSummary, planInstanceMove } from '../../../state/v1/reparent-instance';
 import { defaultTopologyPosition } from '../../../state/v1/topology-position';
 import type { WiringSelection } from '../../../state/v1/remove-topology-object';
 import type { Connection } from '../../../model/v1/topology';
@@ -657,6 +657,7 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
       {!dropPreview.node && <div className="v1-drop-canvas" aria-hidden="true" />}
       <p className="v1-drop-label" role="status" data-blocked={!!dropPreview.error}>
         {dropPreview.error ?? dropPreview.label}
+        {dropPreview.plan && ` · ${moveWiringSummary(dropPreview.plan.wiring)}`}
         {dropPreview.plan && dropPreview.plan.affected.length > 1 && ` · 影响 ${dropPreview.plan.affected.length} 处实例`}
       </p>
     </>}

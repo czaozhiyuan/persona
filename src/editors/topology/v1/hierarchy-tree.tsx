@@ -3,7 +3,7 @@ import type { DragEvent } from 'react';
 import { portDisplayName, portTypeLabels } from '../../../workbench/v1/labels';
 import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
 import type { InstancePath, Project } from '../../../model/v1/types';
-import { planInstanceMove } from '../../../state/v1/reparent-instance';
+import { moveWiringSummary, planInstanceMove } from '../../../state/v1/reparent-instance';
 import { structureLocations } from '../../../workbench/v1/structure-scope';
 import type { ApprovedMove } from './reparent-drop';
 import { hierarchyChildren, hierarchyKey } from './hierarchy-view';
@@ -102,6 +102,7 @@ export function HierarchyTree({ project, focusMoved, move, instances, modulePath
     {(hover || notice) && <div className="v1-tree-drop-overlay">
       <div className="v1-tree-drop-notice" role={notice ? 'alert' : 'status'} data-blocked={!!(hover?.error || notice)}>
         {notice ?? hover?.error ?? hover?.label}
+        {hover?.plan && !notice && <div>{moveWiringSummary(hover.plan.wiring)}</div>}
         {!!hover?.locations.length && <div>共享结构影响范围：{hover.locations.join('、')}</div>}
       </div>
     </div>}
