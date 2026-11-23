@@ -17,7 +17,7 @@ import { planDissolveModule } from '../../state/v1/dissolve-module';
 import { moveWiringSummary, planInstanceMove } from '../../state/v1/reparent-instance';
 import { moveTopologyNodes, resizeTopologyFrame } from '../../state/v1/topology-edits';
 import type { ProjectStore } from '../../state/v1/project-store';
-import { parseProjectJson, serializeProjectJson } from '../../storage/v1/project-json';
+import { parseProjectJson, projectErrorMessage, serializeProjectJson } from '../../storage/v1/project-json';
 import type { BudgetHighlight } from '../../editors/topology/v1/path-highlight';
 import { BudgetDock, enclosureContains } from './budgets/budget-dock';
 import { projectFileName, sameTrial } from './budgets/trial-conditions';
@@ -402,7 +402,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     try {
       replaceProject(load());
     } catch (error) {
-      setError(`打开工程失败：${(error as Error).message}`);
+      setError(`打开工程失败：${projectErrorMessage(error)}`);
     }
   }
 
@@ -415,7 +415,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
       if (!window.confirm(`打开「${candidate.name}」会替换当前工程并清除编辑历史。是否继续？`)) return;
       replaceProject(candidate);
     } catch (error) {
-      if (attempt === importAttempt.current) setError(`无法打开「${file.name}」：${(error as Error).message}`);
+      if (attempt === importAttempt.current) setError(`无法打开「${file.name}」：${projectErrorMessage(error)}`);
     }
   }
 
@@ -439,7 +439,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
         window.setTimeout(() => URL.revokeObjectURL(url), 0);
       }
     } catch (error) {
-      setError(`保存工程失败：${(error as Error).message}`);
+      setError(`保存工程失败：${projectErrorMessage(error)}`);
     }
   }
 
@@ -694,7 +694,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
                 const path = [...selection.modulePath, instance.id];
                 const occurrence = store.resolveInstance(path);
                 const isModule = occurrence?.definition.kind === 'module';
-                const name = occurrence?.instance?.name ?? instance.name;
+                const name = linkOptions.showName(path);
                 const isSelected = selected?.instancePath.length === path.length
                   && path.every((id, index) => id === selected.instancePath[index]);
                 return (
@@ -727,7 +727,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
             </form>
             <p>工程 JSON 保存拓扑、参数、布局、链路和主动保存的试算条件。临时供光输入与预算结果留在本次会话，结果由当前工程重新计算。</p>
             <dl>
-              <div><dt>选中实例</dt><dd>{selected?.instance?.name ?? '未选择'}</dd></div>
+              <div><dt>选中实例</dt><dd>{selected ? linkOptions.showPath(selected.instancePath) : '未选择'}</dd></div>
               <div><dt>布局记录</dt><dd>{layout?.length ?? 0}</dd></div>
             </dl>
           </section>
@@ -737,7 +737,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
           {showDock && dock && <BudgetDock title={budgetTitles[dock]} collapsed={collapsed} enlarged={enlarged}
             toggle={() => setCollapsed(value => !value)} enlarge={() => setEnlarged(value => !value)}
             close={() => setDock(undefined)}>
-            {dock === 'links' && <LinkEditor key={JSON.stringify([selectedLink?.id, !savedLink && draftLink?.from, !savedLink && draftLink?.to])} store={store} project={project}
+            {dock === 'links' && <LinkEditor key={JSON.stringify([selectedLink?.id, !savedLink && draftLink?.from, !savedLink && draftLink?.to])} store={store}
               options={linkOptions} opticalLink={opticalLink} draft={!savedLink && !!draftLink} selected={selectedLink} result={pathResult} budget={budget}
               conditions={conditions} opticalResult={linkedOpticalResult} trialSaved={sameTrial(savedLink?.trial, conditions)}
               saveTrial={saveTrial} choose={chooseLink} locate={locateBudgetPort}

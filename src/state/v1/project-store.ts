@@ -1,6 +1,6 @@
 import { resolveHierarchy } from '../../engine/v1/hierarchy';
 import type { InstancePath, Project } from '../../model/v1/types';
-import { validateProjectSnapshot } from '../../storage/v1/project-json';
+import { projectErrorMessage, validateProjectSnapshot } from '../../storage/v1/project-json';
 
 type View = 'topology' | 'physical';
 
@@ -82,7 +82,7 @@ export function createProjectStore(initialProject: Project) {
     try {
       project = prepareProject(edit(structuredClone(snapshot.project)));
     } catch (error) {
-      return { ok: false, message: (error as Error).message };
+      return { ok: false, message: projectErrorMessage(error, snapshot.project) };
     }
     undoStack.push(snapshot.project);
     redoStack.length = 0;
@@ -95,7 +95,7 @@ export function createProjectStore(initialProject: Project) {
     try {
       project = prepareProject(candidate);
     } catch (error) {
-      return { ok: false, message: (error as Error).message };
+      return { ok: false, message: projectErrorMessage(error, snapshot.project) };
     }
     undoStack.length = 0;
     redoStack.length = 0;

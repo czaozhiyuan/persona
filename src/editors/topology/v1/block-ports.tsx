@@ -10,8 +10,8 @@ export const blockPortRows = (ports: readonly PortDefinition[]) => {
   return Math.max(left, ports.length - left);
 };
 
-export function PortLabel({ port, open }: { port: PortDefinition; open?: (id: string) => void }) {
-  const label = portDisplayName(port);
+export function PortLabel({ port, ports, open }: { port: PortDefinition; ports: readonly PortDefinition[]; open?: (id: string) => void }) {
+  const label = portDisplayName(port, false, ports);
   return open ? <button type="button" className="v1-port-label nodrag nopan" title={label}
     aria-label={`操作端口 ${label}`} aria-haspopup="dialog"
     onClick={event => { event.stopPropagation(); open(port.id); }}
@@ -31,10 +31,10 @@ export function BlockPorts({ ports, highlighted, newPortId, handleId, editable =
     {portSides.map(side => <div className={`v1-block-column ${side}`} key={side}>
       {ports.filter(port => boundaryPortSide(port.direction) === side).map(port =>
         <div className={`v1-topology-port${highlighted.has(port.id) ? ' is-on-path' : ''}${port.id === newPortId ? ' is-new-port' : ''}`} key={port.id}
-          title={`${port.id} · ${portTypeLabels[port.type]}`} data-port-direction={port.direction} data-wire={wireState?.(port.id)}>
+          title={`${portDisplayName(port, false, ports)} · ${portTypeLabels[port.type]}`} data-port-direction={port.direction} data-wire={wireState?.(port.id)}>
           <Handle id={handleId(port.id)} type={port.direction === 'in' ? 'target' : 'source'}
             position={side === 'left' ? Position.Left : Position.Right} className={port.type} style={{ background: signalColor(port.type) }} isConnectable={editable} />
-          <PortLabel port={port} open={openPort} />
+          <PortLabel port={port} ports={ports} open={openPort} />
         </div>)}
     </div>)}
   </div>;

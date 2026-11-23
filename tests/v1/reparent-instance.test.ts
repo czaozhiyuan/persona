@@ -214,7 +214,7 @@ test('an unsupported structural move reports its cause and leaves the snapshot a
   }));
   const scenarios = [
     { project: shared, source: modulator, destination: target, reason: /另被.*额外调制模块/ },
-    { project: localCollision, source: modulator, destination: target, reason: /已有实例 ID.*mzm/ },
+    { project: localCollision, source: modulator, destination: target, reason: /已有实例「已有调制器」.*内部引用冲突/ },
     { project: initial, source: [], destination: target, reason: /根模块不能移动/ },
     { project: initial, source: ['TX_A'], destination: target, reason: /自身或其后代/ },
     { project: initial, source: modulator, destination: ['RX_A'], reason: /同层.*直接上一级/ },
@@ -233,7 +233,7 @@ test('an unsupported structural move reports its cause and leaves the snapshot a
 
   const preview = planInstanceMoves(mixed, [['TX_A'], ['RX_A']], ['mod']);
   assert.ok(!preview.ok);
-  assert.match(preview.message, /mpo-12.*wdm.*无法安全拆分/);
+  assert.match(preview.message, /纤芯（A:1 \/ B:12）.*无法安全拆分/);
   const store = createProjectStore(mixed);
   const before = store.getSnapshot();
   assert.equal(store.commit(draft => moveInstances(draft, [['TX_A'], ['RX_A']], ['mod'])).ok, false);

@@ -1,3 +1,4 @@
+import { readableError } from '../../model/v1/display-names';
 import type { Project } from '../../model/v1/types';
 import { validateProject } from '../../model/v1/validate';
 import { assertProjectShape, ProjectStructureError } from './project-schema';
@@ -7,10 +8,15 @@ export const PROJECT_FILE_FORMAT = 'persona-project';
 export const PROJECT_SCHEMA_VERSION = 2;
 
 export class ProjectFileError extends Error {
-  constructor(readonly stage: 'syntax' | 'format' | 'domain', message: string, options?: ErrorOptions) {
+  constructor(readonly stage: 'syntax' | 'format' | 'domain', message: string, options?: ErrorOptions, readonly displayMessage?: string) {
     super(message, options);
     this.name = 'ProjectFileError';
   }
+}
+
+export function projectErrorMessage(error: unknown, project?: Project): string {
+  return error instanceof ProjectFileError && error.displayMessage
+    ? error.displayMessage : readableError(error instanceof Error ? error.message : String(error), project);
 }
 
 /** Checks an in-memory snapshot without changing it. */
@@ -19,7 +25,8 @@ export function validateProjectSnapshot(value: unknown): asserts value is Projec
   try {
     validateProject(value);
   } catch (error) {
-    throw new ProjectFileError('domain', `$.project: ${(error as Error).message}`, { cause: error });
+    const message = `$.project: ${(error as Error).message}`;
+    throw new ProjectFileError('domain', message, { cause: error }, readableError(message, value));
   }
 }
 

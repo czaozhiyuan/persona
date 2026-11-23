@@ -14,7 +14,7 @@ export function resolveEmpiricalValue<Unit extends NumericUnit>(unit: Unit, decl
   if (declaration.kind === 'parameter') {
     const resolved = instance?.parameters.get(declaration.parameterId)?.value;
     if (!resolved || typeof resolved === 'string') {
-      return unavailable(unit, `参数「${declaration.parameterId}」没有有效数值。`);
+      return unavailable(unit, `参数「${instance?.definition.parameters?.find(p => p.id === declaration.parameterId)?.name ?? '未找到的参数'}」没有有效数值。`);
     }
     value = resolved;
   } else {

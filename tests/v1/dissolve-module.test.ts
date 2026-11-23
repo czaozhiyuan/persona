@@ -98,7 +98,7 @@ test('empty modules dissolve and unconvertible aliases, physical containers and 
   for (const [project, path, reason] of [
     [base, ['TX_A'], /物理机箱/], [missing, ['TX_A', 'group'], /RF_IN.*没有内部映射/],
     [localParameter, ['TX_A', 'group'], /模块参数.*本层来源/],
-    [collision, ['TX_A', 'group'], /实例 ID.*laser/], [base, [], /根模块不能解散/],
+    [collision, ['TX_A', 'group'], /实例引用冲突.*激光器/], [base, [], /根模块不能解散/],
   ] as const) {
     const store = createProjectStore(project);
     const before = store.getSnapshot();

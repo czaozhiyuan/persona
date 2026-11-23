@@ -1,3 +1,4 @@
+import { portDisplayName } from '../../model/v1/display-names';
 import { resolveHierarchy } from '../../engine/v1/hierarchy';
 import type { LocalEndpointRef } from '../../model/v1/topology';
 import type { EndpointRef, InstancePath, ModuleDefinition, Project, TopologyPlacement } from '../../model/v1/types';
@@ -18,7 +19,7 @@ function dissolve(project: Project, source: InstancePath) {
   const slotId = source.at(-1)!;
   const outerIds = new Set(parent.instances.filter(item => item.id !== slotId).map(item => item.id));
   const conflict = container.instances.find(item => outerIds.has(item.id) || item.id === slotId);
-  if (conflict) throw new Error(`上一级已有实例 ID「${conflict.id}」，无法安全提升「${conflict.name}」。`);
+  if (conflict) throw new Error(`上一级已有实例引用冲突，无法安全提升「${conflict.name}」。`);
 
   const occurrences = [...hierarchy.walkInstances()].filter(item => item.definition.id === parent.id);
   const containerScopes = new Map(occurrences.map(({ instancePath }) => [key([...instancePath, slotId]), instancePath]));
@@ -27,7 +28,7 @@ function dissolve(project: Project, source: InstancePath) {
   const enclosed = layout?.physical?.find(item => isContainer(item.enclosurePath));
   if (enclosed) {
     const name = hierarchy.resolveInstance(enclosed.instancePath)?.instance?.name;
-    throw new Error(`待解散模块仍是「${name ?? enclosed.instancePath.join(' / ')}」的物理机箱，请先调整物理放置。`);
+    throw new Error(`待解散模块仍是「${name ?? '未找到的对象'}」的物理机箱，请先调整物理放置。`);
   }
 
   const definitions = new Map([...project.moduleDefinitions, ...project.componentDefinitions].map(item => [item.id, item]));
@@ -38,10 +39,10 @@ function dissolve(project: Project, source: InstancePath) {
   function unwrap(ref: LocalEndpointRef): LocalEndpointRef {
     if (ref.instanceId !== slotId) return ref;
     const target = mappings.get(ref.portId);
-    if (!target) throw new Error(`对外端口「${ref.portId}」仍被引用，但没有内部映射，无法解散。`);
+    if (!target) throw new Error(`对外端口「${portDisplayName(ports.get(ref.portId)!, true)}」仍被引用，但没有内部映射，无法解散。`);
     const inner = definitions.get(children.get(target.instanceId)!.definitionId)!.ports.find(port => port.id === target.portId)!;
     if (!unrestrictedAlias(ports.get(ref.portId)!, inner)) {
-      throw new Error(`对外端口「${ref.portId}」带有光通道、额定限制或输出电压，解散会改变原有信号条件。`);
+      throw new Error(`对外端口「${portDisplayName(ports.get(ref.portId)!, true)}」带有光通道、额定限制或输出电压，解散会改变原有信号条件。`);
     }
     adjustedPorts.add(ref.portId);
     return target;

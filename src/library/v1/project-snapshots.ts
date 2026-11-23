@@ -1,5 +1,5 @@
 import type { ComponentDefinition, Instance, ModuleDefinition, Project } from '../../model/v1/types';
-import { validateProjectSnapshot } from '../../storage/v1/project-json';
+import { projectErrorMessage, validateProjectSnapshot } from '../../storage/v1/project-json';
 import { describeDefinitionChanges } from './definition-changes';
 
 export type LibraryDefinition = ComponentDefinition | ModuleDefinition;
@@ -26,14 +26,14 @@ function installDefinitions(project: Project, library: readonly LibraryDefinitio
     const template = templates.get(key);
     const current = existing(key);
     if (template && current && template.kind !== current.kind) {
-      throw new Error(`定义 ID 冲突：${key} 的工程定义类型与库模板不同。`);
+      throw new Error(`定义 ID 冲突：「${current.name}」的工程定义类型与库模板不同。`);
     }
     if (current && !(replace && key === id)) {
       // The existing snapshot already owns its dependency closure.
       reused.push(current);
       continue;
     }
-    if (!template) throw new Error(`库模板缺少定义：${key}。`);
+    if (!template) throw new Error(`库模板缺少依赖定义，无法安装。`);
     const copy = structuredClone(template);
     if (!current) added.push(copy);
     if (copy.kind === 'component') components.set(key, copy);
@@ -43,7 +43,7 @@ function installDefinitions(project: Project, library: readonly LibraryDefinitio
         copy.instances = copy.instances.map(instance => {
           const saved = previous.get(instance.id);
           if (saved && saved.definitionId !== instance.definitionId) {
-            throw new Error(`模块 ${key} 的内部实例 ${instance.id} 改用了其他定义，无法保持原引用。`);
+            throw new Error(`模块「${current.name}」的内部实例「${saved.name}」 改用了其他定义，无法保持原引用。`);
           }
           return saved ?? instance;
         });
@@ -90,6 +90,6 @@ export function previewTemplateUpdate(project: Project, library: readonly Librar
     return { ok: true as const, project: candidate.project, changes: candidate.changes,
       definitionChanges: describeDefinitionChanges(current, candidate.root) };
   } catch (error) {
-    return { ok: false as const, message: (error as Error).message, removedPorts };
+    return { ok: false as const, message: projectErrorMessage(error, project), removedPorts };
   }
 }

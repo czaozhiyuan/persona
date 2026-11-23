@@ -1,3 +1,4 @@
+import { portDisplayName } from '../../model/v1/display-names';
 import { resolveHierarchy } from '../../engine/v1/hierarchy';
 import type { CableCoreRef, CableCore, LocalEndpointRef } from '../../model/v1/topology';
 import type { ConnectionRef, EndpointRef, InstancePath, ModuleDefinition, Project, TopologyFrame } from '../../model/v1/types';
@@ -57,9 +58,10 @@ export type PortDeletionImpact = {
 };
 
 export function planPortDeletion(project: Project, definitionId: string, portId: string) {
+  const hierarchy = resolveHierarchy(project);
   const instances = new Map<string, string>();
   const pathsByDefinition = new Map<string, InstancePath[]>();
-  for (const occurrence of resolveHierarchy(project).walkInstances()) {
+  for (const occurrence of hierarchy.walkInstances()) {
     const { definition, instancePath } = occurrence;
     instances.set(JSON.stringify(instancePath), definition.id);
     const paths = pathsByDefinition.get(definition.id) ?? [];
@@ -74,20 +76,36 @@ export function planPortDeletion(project: Project, definitionId: string, portId:
   function report(kind: ImpactKind, name: string, scope: string, path?: InstancePath) {
     impacts.push({ kind, name, definitionId: scope, paths: path === undefined ? pathsByDefinition.get(scope) ?? [] : [path] });
   }
-  report('端口', removedPort.name ? `${removedPort.name}（${portId}）` : portId, definitionId);
+  report('端口', portDisplayName(removedPort), definitionId);
 
-  function endpointLabel(module: ModuleDefinition, ref: LocalEndpointRef) {
+  function reportEndpoints(kind: ImpactKind, scope: string, describe: (path?: InstancePath) => string) {
+    const paths = pathsByDefinition.get(scope) ?? [];
+    if (!paths.length) return report(kind, describe(), scope);
+    const groups = new Map<string, InstancePath[]>();
+    for (const path of paths) {
+      const label = describe(path);
+      const group = groups.get(label);
+      if (group) group.push(path);
+      else groups.set(label, [path]);
+    }
+    for (const [name, locations] of groups) impacts.push({ kind, name, definitionId: scope, paths: locations });
+  }
+
+  function endpointLabel(module: ModuleDefinition, ref: LocalEndpointRef, path?: InstancePath) {
     const instance = module.instances.find(instance => instance.id === ref.instanceId)!;
-    const port = definitions.get(instance.definitionId)?.ports.find(port => port.id === ref.portId);
-    return `${instance.name} · ${port?.name ?? ref.portId}`;
+    const name = path && hierarchy.resolveInstance([...path, instance.id])?.instance?.name;
+    const ports = definitions.get(instance.definitionId)?.ports;
+    const port = ports?.find(port => port.id === ref.portId);
+    return `${name || instance.name} · ${port ? portDisplayName(port, false, ports) : '未找到的端口'}`;
   }
 
   const componentDefinitions = project.componentDefinitions.map(component => {
     if (component.id !== definitionId) return component;
+    const portName = (id: string) => portDisplayName(component.ports.find(p => p.id === id)!, false, component.ports);
     const clearSupply = component.dcSupply?.portId === portId;
     const clearLoad = component.dcLoad?.portId === portId;
-    if (clearSupply) report('直流电源', portId, component.id);
-    if (clearLoad) report('直流负载', portId, component.id);
+    if (clearSupply) report('直流电源', portDisplayName(removedPort), component.id);
+    if (clearLoad) report('直流负载', portDisplayName(removedPort), component.id);
     return {
       ...component,
       ports: component.ports.filter(port => port.id !== portId),
@@ -96,13 +114,13 @@ export function planPortDeletion(project: Project, definitionId: string, portId:
       transfers: component.transfers?.filter(transfer => {
         const removed = transfer.fromPortId === portId || transfer.toPortId === portId
           || (transfer.kind === 'eo' && transfer.supplyPortId === portId);
-        if (removed) report('器件传输', `${transfer.kind}: ${transfer.fromPortId} → ${transfer.toPortId}`, component.id);
+        if (removed) report('器件传输', `${portName(transfer.fromPortId)} → ${portName(transfer.toPortId)}`, component.id);
         return !removed;
       }),
       switchStates: component.switchStates?.map(state => ({
         ...state, routes: state.routes.filter(route => {
           const removed = route.fromPortId === portId || route.toPortId === portId;
-          if (removed) report('开关路由', `${state.id}: ${route.fromPortId} → ${route.toPortId}`, component.id);
+          if (removed) report('开关路由', `${state.name} · ${portName(route.fromPortId)} → ${portName(route.toPortId)}`, component.id);
           return !removed;
         }),
       })),
@@ -121,22 +139,24 @@ export function planPortDeletion(project: Project, definitionId: string, portId:
       ports: module.id === definitionId ? module.ports.filter(port => port.id !== portId) : module.ports,
       connections: module.connections?.filter(connection => {
         const removed = hits(connection.from) || hits(connection.to);
-        if (removed) report('连接', `${endpointLabel(module, connection.from)} → ${endpointLabel(module, connection.to)}`, module.id);
+        if (removed) reportEndpoints('连接', module.id, path =>
+          `${endpointLabel(module, connection.from, path)} → ${endpointLabel(module, connection.to, path)}`);
         return !removed;
       }),
       portMappings: module.portMappings?.filter(mapping => {
         const removed = (module.id === definitionId && mapping.portId === portId) || hits(mapping.target);
         if (removed) {
           const port = module.ports.find(port => port.id === mapping.portId)!;
-          report('端口映射', `${port.name ?? port.id} ↔ ${endpointLabel(module, mapping.target)}`, module.id);
+          reportEndpoints('端口映射', module.id, path =>
+            `${portDisplayName(port, false, module.ports)} ↔ ${endpointLabel(module, mapping.target, path)}`);
         }
         return !removed;
       }),
-      cableBundles: module.cableBundles?.map(bundle => ({
+      cableBundles: module.cableBundles?.map((bundle, index) => ({
         ...bundle, cores: bundle.cores.map(core => ({
           ...core,
-          a: clearAttachment(core.a, `${bundle.id} / ${core.id} A:${core.a.pin}`),
-          b: clearAttachment(core.b, `${bundle.id} / ${core.id} B:${core.b.pin}`),
+          a: clearAttachment(core.a, `线缆 ${index + 1} · A:${core.a.pin}`),
+          b: clearAttachment(core.b, `线缆 ${index + 1} · B:${core.b.pin}`),
         })),
       })),
     };
@@ -147,7 +167,7 @@ export function planPortDeletion(project: Project, definitionId: string, portId:
   const namedLinks = project.namedLinks?.map(link => {
     const clearEndpoint = (label: string, endpoint?: EndpointRef) => {
       if (!endpoint || endpoint.portId !== portId || scopeId(endpoint.instancePath) !== definitionId) return endpoint;
-      report('链路端点', `${link.id} / ${label}`, definitionId, endpoint.instancePath);
+      report('链路端点', `${link.name} / ${label}`, definitionId, endpoint.instancePath);
       return undefined;
     };
     return {
@@ -156,13 +176,16 @@ export function planPortDeletion(project: Project, definitionId: string, portId:
       via: link.via?.filter(ref => {
         const scope = scopeId(ref.scopePath);
         if (hasVia(modules.get(scope)!, ref)) return true;
-        const id = 'bundleId' in ref ? `${ref.bundleId} / ${ref.coreId}` : ref.connectionId;
-        report('链路必经边', `${link.id} / ${id}`, scope, ref.scopePath);
+        const original = definitions.get(scope);
+        const wire = original?.kind === 'module' && 'connectionId' in ref && original.connections?.find(w => w.id === ref.connectionId);
+        const edge = wire && original?.kind === 'module'
+          ? `${endpointLabel(original, wire.from, ref.scopePath)} → ${endpointLabel(original, wire.to, ref.scopePath)}` : '受影响的纤芯';
+        report('链路必经边', `${link.name} / ${edge}`, scope, ref.scopePath);
         return false;
       }),
       ...(link.trial && { trial: { ...link.trial, opticalSources: link.trial.opticalSources?.filter(({ endpoint }) => {
         const removed = endpoint.portId === portId && scopeId(endpoint.instancePath) === definitionId;
-        if (removed) report('链路端点', `${link.id} / 试算光源`, definitionId, endpoint.instancePath);
+        if (removed) report('链路端点', `${link.name} / 试算光源`, definitionId, endpoint.instancePath);
         return !removed;
       }) } }),
     };

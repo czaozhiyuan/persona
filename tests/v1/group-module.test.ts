@@ -120,7 +120,7 @@ test('whole MPO cables can move, crossing ones retain core IDs, and mixed intern
   const store = createProjectStore(mixed);
   const before = store.getSnapshot();
   assert.match((store.commit(draft => groupModule(draft, [['TX_A'], ['RX_A']], '成组', 'group', 'group-def')) as { message: string }).message,
-    /mpo-12.*组内纤芯.*组外/);
+    /线束 1 .*组内纤芯.*组外/);
   assert.match((store.commit(draft => groupModule(draft, [child('laser'), ['TX_B', 'laser']], '混合', 'group', 'group-def')) as { message: string }).message,
     /同一直接父模块/);
   assert.equal(store.getSnapshot(), before);

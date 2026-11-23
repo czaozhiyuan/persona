@@ -1,10 +1,7 @@
 import type { ResolvedInstance } from '../../engine/v1/hierarchy';
 import type { InstancePath } from '../../model/v1/types';
-
-function occurrenceName(path: InstancePath, names: ReadonlyMap<string, string>): string {
-  return path.length ? path.map((id, index) => names.get(JSON.stringify(path.slice(0, index + 1))) ?? id).join(' / ')
-    : names.get('[]') ?? '系统';
-}
+import { createPathNames } from '../../engine/v1/path-names';
+export { createPathNames };
 
 export function structureScope(instances: readonly ResolvedInstance[], definitionId: string): readonly string[] {
   const paths = instances.filter(item => item.definition.id === definitionId).map(item => item.instancePath);
@@ -12,10 +9,5 @@ export function structureScope(instances: readonly ResolvedInstance[], definitio
 }
 
 export function structureLocations(instances: readonly ResolvedInstance[], paths: readonly InstancePath[]): readonly string[] {
-  const names = new Map(instances.map(item => [JSON.stringify(item.instancePath), item.instance?.name ?? item.definition.name]));
-  const labels = paths.map(path => occurrenceName(path, names));
-  const counts = new Map<string, number>();
-  for (const label of labels) counts.set(label, (counts.get(label) ?? 0) + 1);
-  return paths.map((path, index) => counts.get(labels[index]) === 1 ? labels[index]
-    : `${labels[index]} (${path.join(' / ')})`);
+  return paths.map(createPathNames(instances).showPath);
 }

@@ -1,3 +1,4 @@
+import { portDisplayName } from '../labels';
 import { hasReceiverValue, loadedResponse, receiverMode } from '../../../engine/v1/receiver-response';
 import type { Detector } from '../../../engine/v1/receiver-response';
 import { resolveEmpiricalValue } from '../../../engine/v1/empirical-value';
@@ -39,7 +40,8 @@ export function ReceiverPreview({ pd, instance, query, showPorts }: {
   pd: Detector; instance: ResolvedInstance; query: ReceiverQuery; showPorts: boolean;
 }) {
   const mode = receiverMode(pd.receiver, instance);
-  const ports = showPorts && <span>{pd.fromPortId} → {pd.toPortId} · </span>;
+  const portName = (id: string) => portDisplayName(instance.definition.ports.find(port => port.id === id)!, false, instance.definition.ports);
+  const ports = showPorts && <span>{portName(pd.fromPortId)} → {portName(pd.toPortId)} · </span>;
   if (!mode) return <p className="v1-property-effective">{ports}先选择接收结构。</p>;
   const active = mode === 'active50';
   const rho = resolveEmpiricalValue('A/W', pd.responsivity, query, instance);

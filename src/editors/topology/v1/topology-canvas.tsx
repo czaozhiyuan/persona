@@ -13,7 +13,7 @@ import { defaultTopologyPosition } from '../../../state/v1/topology-position';
 import type { WiringSelection } from '../../../state/v1/remove-topology-object';
 import type { Connection } from '../../../model/v1/topology';
 import type { EndpointRef, InstancePath, PortDefinition, PortMapping, Project, TopologyFrame, TopologyPlacement } from '../../../model/v1/types';
-import { structureScope } from '../../../workbench/v1/structure-scope';
+import { createPathNames, structureScope } from '../../../workbench/v1/structure-scope';
 import { BlockPorts } from './block-ports';
 import { frameHeader, frameInsets, ModuleFrame } from './module-frame';
 import { keepNodeInside, moduleExtent } from './frame-geometry';
@@ -274,6 +274,7 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
 
   const deepest = items.reduce((max, node) => Math.max(max, node.item.instancePath.length), modulePath.length);
   const selectedBranch = selectedInstance?.[modulePath.length];
+  const { showName } = useMemo(() => createPathNames(instances), [instances]);
   const nodes: CanvasNode[] = items.map(node => {
     const { item, key, parentKey, frame } = node;
     const path = item.instancePath;
@@ -281,7 +282,7 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     const parentHighlight = highlights.get(hierarchyKey(path.slice(0, -1)));
     const highlight = boundary ? highlights.get(rootKey) : parentHighlight;
     const { definition } = item;
-    const name = item.instance?.name ?? definition.name;
+    const name = showName(path);
     const id = nodeId(key);
     const data: NodeData = { key, path, name, ports: definition.ports,
       pathPorts: new Set(definition.ports.filter(port =>
@@ -617,7 +618,7 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     }}>
     {placingModule && !panWithSpace && <ModulePlacement
       zoom={() => flow.current?.getZoom()}
-      place={screen => placeAt({ source: 'template', id: blankModuleId, name: '新建模块' }, screen)} />}
+      place={screen => placeAt({ source: 'template', id: blankModuleId, name: '新建模块', automaticName: true }, screen)} />}
     <ReactFlow<CanvasNode, WiringEdge> nodes={nodes} edges={edges.map(edge => ({ ...edge, selected: selectedWiring === edge }))}
       nodeTypes={nodeTypes} edgeTypes={edgeTypes} ariaLabelConfig={flowAriaLabels} fitView={!initialViewport} defaultViewport={initialViewport} fitViewOptions={canvasFitOptions}
       viewport={viewport} onViewportChange={changeViewport} onInit={instance => { flow.current = instance; }}

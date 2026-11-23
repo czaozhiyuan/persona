@@ -40,7 +40,7 @@ test('invalid edits and invalid replacements preserve the current snapshot and h
     return draft;
   });
   assert.equal(failure.ok, false);
-  assert.match(failure.message, /根定义「missing」/);
+  assert.match(failure.message, /根定义「未找到的对象或端口」/);
   assert.equal(store.replaceProject({ ...exampleProject, rootModuleDefinitionId: 'missing' }).ok, false);
   assert.equal(store.getSnapshot(), before);
   assert.equal(notifications, 0);

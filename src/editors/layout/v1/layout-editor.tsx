@@ -1,3 +1,4 @@
+import { createPathNames } from '../../../workbench/v1/structure-scope';
 import { useMemo, useState } from 'react';
 import { resolveHierarchy } from '../../../engine/v1/hierarchy';
 import type { InstancePath, PhysicalEnclosure, PhysicalFootprint, PhysicalPlacement } from '../../../model/v1/types';
@@ -62,15 +63,17 @@ export function LayoutEditor({ store, state, onDcBudget }: {
     const enclosures: (LayoutOccurrence & { enclosure: PhysicalEnclosure })[] = [];
     const placeable = new Map<string, LayoutOccurrence>();
     const nearest = new Map<string, string>();
-    for (const { instancePath, instance, definition } of resolveHierarchy(project).walkInstances()) {
+    const instances = [...resolveHierarchy(project).walkInstances()];
+    const { showPath, showName } = createPathNames(instances);
+    for (const { instancePath, instance, definition } of instances) {
       const key = pathKey(instancePath);
       const enclosure = definition.kind === 'module' ? definition.physicalEnclosure : undefined;
       const suggested = definition.kind === 'component' ? definition.physicalFootprint : undefined;
       const home = instancePath.length ? nearest.get(pathKey(instancePath.slice(0, -1))) : undefined;
       if (enclosure || home !== undefined) nearest.set(key, enclosure ? key : home!);
       if (!enclosure && definition.kind !== 'component') continue;
-      const name = instance?.name ?? definition.name;
-      const item = { instancePath, key, name, home, label: `${name} · ${instancePath.join(' / ') || '系统根层级'}`, enclosure, suggested };
+      const name = showName(instancePath);
+      const item = { instancePath, key, name, home, label: showPath(instancePath), enclosure, suggested };
       if (instance) placeable.set(key, item);
       if (enclosure) enclosures.push({ ...item, enclosure });
     }
@@ -195,7 +198,7 @@ export function LayoutEditor({ store, state, onDcBudget }: {
         <label>已放置对象
           <select value={selected?.key ?? ''} onChange={event => select(objects.find(item => item.key === event.target.value)?.instancePath)}>
             <option value="">请选择</option>
-            {objects.map(item => <option key={item.key} value={item.key}>{item.name}</option>)}
+            {objects.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}
           </select>
         </label>
         {selected && <form className="v1-layout-placement" key={JSON.stringify(selected.placement)} onSubmit={event => {
