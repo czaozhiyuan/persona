@@ -51,7 +51,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .toolbar summary { border-radius: .25rem; list-style: none; padding: .35rem .4rem; cursor: pointer; }
 .toolbar summary::-webkit-details-marker { display: none; }
 .toolbar summary::after { content: '▾'; margin-left: .25rem; color: #a8c6bf; font-size: .7em; }
-.v1-project-actions { flex-wrap: wrap; margin-inline-end: auto; }
+.v1-project-actions { flex: none; flex-wrap: wrap; max-width: 100%; margin-inline-end: auto; }
 .v1-project-actions button { min-height: 1.9rem; padding: .25rem .45rem; border-radius: .25rem; white-space: nowrap; }
 .v1-project-actions button:hover, .toolbar summary:hover, .toolbar details[open] > summary, .toolbar .actions button:hover:not(:disabled) { background: #294745; }
 .v1-main-menu details { position: relative; }
