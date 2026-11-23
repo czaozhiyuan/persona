@@ -1,7 +1,9 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { dragFrame, keepNodeInside, moduleExtent } from '../../src/editors/topology/v1/frame-geometry';
 import { hierarchyKey } from '../../src/editors/topology/v1/hierarchy-view';
+import { frameInsets } from '../../src/editors/topology/v1/module-frame';
 import { insertCanvasItem, preserveDeletionLayout } from '../../src/editors/topology/v1/topology-layout-edits';
 import { projectTopology } from '../../src/editors/topology/v1/topology-projection';
 import { resolveHierarchy } from '../../src/engine/v1/hierarchy';
@@ -33,6 +35,23 @@ const measured = new Map<string, { width: number; height: number }>();
 const projectView = (project: Project) =>
   projectTopology(project, [...resolveHierarchy(project).walkInstances()], [], expanded, measured);
 const item = (view: ReturnType<typeof projectView>, path: InstancePath) => view.nodeByKey.get(hierarchyKey(path))!;
+
+test('dragging children and shrinking frame edges reserve 45 on port sides and 28 on empty sides', () => {
+  const input = { id: 'OPT_IN', type: 'OPTICAL', direction: 'in' } as const;
+  const output = { id: 'RF_OUT', type: 'RF', direction: 'out' } as const;
+  const frame = { x: 10, y: 20, width: 900, height: 300 };
+  const child = { x: 250, y: 120, width: 400, height: 80 };
+  for (const [ports, left, right] of [[[], 28, 28], [[input], 45, 28], [[output], 28, 45], [[input, output], 45, 45]] as const) {
+    const insets = frameInsets(ports);
+    const extent = moduleExtent(frame, insets);
+    assert.equal(keepNodeInside({ ...child, x: -1000 }, extent).x - frame.x, left);
+    assert.equal(frame.x + frame.width - keepNodeInside({ ...child, x: 1000 }, extent).x - child.width, right);
+    const west = dragFrame(frame, 'w', { x: 1000, y: 0 }, [child], insets);
+    const east = dragFrame(frame, 'e', { x: -1000, y: 0 }, [child], insets);
+    assert.equal(child.x - west.x, left);
+    assert.equal(east.x + east.width - child.x - child.width, right);
+  }
+});
 
 test('deletion preserves affected visible frames per occurrence and surviving default slots in one edit', () => {
   const store = createProjectStore(fixture);
