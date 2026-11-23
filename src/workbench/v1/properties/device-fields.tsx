@@ -1,4 +1,7 @@
 import { portDisplayName, portTypeLabels } from '../labels';
+import { useState } from 'react';
+import { receiverMode } from '../../../engine/v1/receiver-response';
+import { usesReceiverField } from './receiver-properties';
 import { receiverModes } from '../../../model/v1/device';
 import { resolveEmpiricalValue } from '../../../engine/v1/empirical-value';
 import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
@@ -88,6 +91,11 @@ function PortVoltage({ port, occurrence }: { port: PortDefinition; occurrence: R
   </>;
 }
 
+function readReceiver(value: string) {
+  return value.startsWith('param:') ? { kind: 'parameter' as const, parameterId: value.slice(6) }
+    : receiverModes.find(mode => mode === value);
+}
+
 function readTransfer(data: FormData, transfer: Transfer): Transfer {
   const ports = { fromPortId: choice(data, 'from'), toPortId: choice(data, 'to') };
   switch (transfer.kind) {
@@ -96,12 +104,10 @@ function readTransfer(data: FormData, transfer: Transfer): Transfer {
     case 'eo': return { ...transfer, ...ports, channelIds: channelList(data, 'channels'), supplyPortId: choice(data, 'supply') || undefined,
       insertionLossDb: readQuantity(data, 'insertionLoss', opticalKinds), vPi: readQuantity(data, 'vPi', rfKinds) };
     case 'oe': {
-      const mode = choice(data, 'receiver');
-      const receiver = mode.startsWith('param:') ? { kind: 'parameter' as const, parameterId: mode.slice(6) }
-        : receiverModes.find(item => item === mode);
-      return { ...transfer, ...ports, channelIds: channelList(data, 'channels'), receiver,
-        responsivity: readQuantity(data, 'responsivity', opticalKinds), responseDb: readQuantity(data, 'responseDb', rfKinds),
-        loadedGain: readQuantity(data, 'loadedGain', rfKinds) };
+      return { ...transfer, ...ports, channelIds: channelList(data, 'channels'), receiver: readReceiver(choice(data, 'receiver')),
+        responsivity: data.has('responsivityKind') ? readQuantity(data, 'responsivity', opticalKinds) : transfer.responsivity,
+        responseDb: data.has('responseDbKind') ? readQuantity(data, 'responseDb', rfKinds) : transfer.responseDb,
+        loadedGain: data.has('loadedGainKind') ? readQuantity(data, 'loadedGain', rfKinds) : transfer.loadedGain };
     }
     case 'wavelengthConversion': return { ...transfer, ...ports, fromChannelId: channelId(choice(data, 'fromChannel')),
       toChannelId: channelId(choice(data, 'toChannel')), gainDb: readQuantity(data, 'gain', opticalKinds) };
@@ -109,9 +115,18 @@ function readTransfer(data: FormData, transfer: Transfer): Transfer {
   }
 }
 
-export function TransferFields({ transfer, definition, save }: {
+export function TransferFields({ transfer, definition, occurrences = [], save }: {
+  occurrences?: readonly ResolvedInstance[];
   transfer: Transfer; definition: ComponentDefinition; save: (read: () => Transfer) => void;
 }) {
+  const receiver = transfer.kind === 'oe' ? transfer.receiver : undefined;
+  const [selection, setSelection] = useState(typeof receiver === 'object' ? 'param:' + receiver.parameterId : receiver ?? '');
+  const reference = readReceiver(selection);
+  const modes = typeof reference === 'object'
+    ? new Set(occurrences.filter(item => item.definition.id === definition.id).map(item => receiverMode(reference, item)))
+    : new Set([reference]);
+  const [mode] = modes;
+  const mixed = modes.size > 1;
   const inputPorts = definition.ports.filter(port => port.direction === 'in');
   const outputPorts = definition.ports.filter(port => port.direction === 'out');
   const parameters = definition.parameters ?? [];
@@ -148,16 +163,18 @@ export function TransferFields({ transfer, definition, save }: {
       <p>正交偏置自动计入 3.0103 dB 损耗。固定 Vπ 按平坦响应估算。</p>
     </>}
     {transfer.kind === 'oe' && <>
-      <label>接收结构<select name="receiver" defaultValue={typeof transfer.receiver === 'object'
-        ? 'param:' + transfer.receiver.parameterId : transfer.receiver ?? ''}>
+      <label>接收结构<select name="receiver" value={selection} onChange={event => setSelection(event.target.value)}>
         <option value="">未设置</option>
         {receiverModes.map(mode => <option key={mode} value={mode}>{enumLabel(mode)}</option>)}
         {parameters.filter(p => p.kind === 'enum' && p.options.every(o => receiverModes.some(m => m === o))).map(p =>
           <option key={p.id} value={'param:' + p.id}>引用参数 · {p.name}</option>)}
       </select></label>
-      <QuantityField name="responsivity" label="响应度" unit="A/W" kinds={opticalKinds} value={transfer.responsivity} parameters={parameters} minimum={0} />
-      <QuantityField name="responseDb" label="无源 PD 归一化幅频响应（未填按平坦 0 dB）" kinds={rfKinds} value={transfer.responseDb} parameters={parameters} />
-      <QuantityField name="loadedGain" label="有源接收机外接 50 Ω 的转换增益" unit="V/W" kinds={rfKinds} value={transfer.loadedGain} parameters={parameters} />
+      {mixed && <p>字段是否参与计算由实例接收结构决定。</p>}
+      {!mode && !mixed && <p>先选择接收结构。{reference && '请设置引用参数的有效值。'}</p>}
+      <QuantityField hidden={!mixed && !usesReceiverField(mode, 'responsivity')} name="responsivity"
+        label={mode === 'active50' && !mixed ? '响应度（可选，仅用于平均光电流）' : '响应度'} unit="A/W" kinds={opticalKinds} value={transfer.responsivity} parameters={parameters} minimum={0} />
+      <QuantityField hidden={!mixed && !usesReceiverField(mode, 'responseDb')} name="responseDb" label="无源 PD 归一化幅频响应（可选，未填按 0 dB 假定平坦）" kinds={rfKinds} value={transfer.responseDb} parameters={parameters} />
+      <QuantityField hidden={!mixed && !usesReceiverField(mode, 'loadedGain')} name="loadedGain" label="有源 RF 预算必填 · 加载转换增益 C(f)（外接 50 Ω）" unit="V/W" kinds={rfKinds} value={transfer.loadedGain} parameters={parameters} />
     </>}
     {(transfer.kind === 'optical' || transfer.kind === 'wavelengthConversion') &&
       <QuantityField name="gain" label="增益" kinds={opticalKinds} value={transfer.gainDb} parameters={parameters} />}

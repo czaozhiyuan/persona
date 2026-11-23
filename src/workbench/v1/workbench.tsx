@@ -6,6 +6,7 @@ import { hierarchyKey, inHierarchy } from '../../editors/topology/v1/hierarchy-v
 import type { ApprovedMove, ReparentLayout } from '../../editors/topology/v1/reparent-drop';
 import type { CanvasView } from '../../editors/topology/v1/canvas-controls';
 import { TopologyEditor } from '../../editors/topology/v1/topology-editor';
+import { isRfFrequency } from '../../engine/v1/rf-budget';
 import { createLinkBudget } from '../../engine/v1/link-budget';
 import { createOpticalBudgetForGraph } from '../../engine/v1/optical-budget';
 import type { LinkTrial, NamedLink } from '../../model/v1/topology';
@@ -115,6 +116,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const budget = useMemo(() => createLinkBudget(project), [project]);
   const savedLink = project.namedLinks?.find(link => link.id === selection.linkId);
   const selectedLink = savedLink ?? draftLink;
+  const opticalLink = [selectedLink?.from, selectedLink?.to].every(endpoint =>
+    endpoint && linkOptions.graph.ports.get(signalPortKey(endpoint))?.definition.type === 'OPTICAL');
   const activeTrial = selectedLink ? linkInputs.get(selectedLink.id) ?? selectedLink.trial ?? defaultTrial : defaultTrial;
   const conditions = useMemo(() => {
     const ports = new Set(linkOptions.opticalSources.map(option => option.key));
@@ -735,7 +738,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
             toggle={() => setCollapsed(value => !value)} enlarge={() => setEnlarged(value => !value)}
             close={() => setDock(undefined)}>
             {dock === 'links' && <LinkEditor key={JSON.stringify([selectedLink?.id, !savedLink && draftLink?.from, !savedLink && draftLink?.to])} store={store} project={project}
-              options={linkOptions} draft={!savedLink && !!draftLink} selected={selectedLink} result={pathResult} budget={budget}
+              options={linkOptions} opticalLink={opticalLink} draft={!savedLink && !!draftLink} selected={selectedLink} result={pathResult} budget={budget}
               conditions={conditions} opticalResult={linkedOpticalResult} trialSaved={sameTrial(savedLink?.trial, conditions)}
               saveTrial={saveTrial} choose={chooseLink} locate={locateBudgetPort}
               setDraftChannel={channelId => setDraftLink(current => current && { ...current, channelId })}
@@ -757,6 +760,15 @@ export function Workbench({ store, loadExample, newProject }: Props) {
               {selection.instancePaths && !topologyActive && <p className="panel" role="status">已选中 {selection.instancePaths.length} 个对象。选中单个对象可编辑属性。</p>}
               {properties && <PropertiesPanel key={JSON.stringify([projectSession, properties.instancePath])}
                 store={store} occurrence={properties} occurrences={linkOptions.graph.instances} jumpToParameter={jumpToParameter} onAddPort={setPortTarget}
+                receiverQuery={portId => {
+                  const key = signalPortKey({ instancePath: properties.instancePath, portId });
+                  const step = pathResult?.trace?.steps.find(item => signalPortKey(item.port.ref) === key);
+                  const channelId = step?.channelIds?.length === 1 ? step.channelIds[0]
+                    : opticalResult?.stages.find(stage => signalPortKey(stage.endpoint) === key)?.channelId;
+                  const frequencyGHz = step && !opticalLink && isRfFrequency(conditions.frequencyGHz)
+                    ? conditions.frequencyGHz : undefined;
+                  return { channelId, frequencyGHz };
+                }}
                 onCopyModule={path => copyModuleTo(store.getSnapshot().project, path, path.slice(0, -1))}
                 onAddInside={topologyActive && selected?.instance && selected.definition.kind === 'module'
                   ? path => { enterModule(path); setLeftTab('library'); } : undefined}
