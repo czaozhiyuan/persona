@@ -1,6 +1,5 @@
 import type { OpticalChannelId } from '../../model/v1/channels';
-import type { Transfer } from '../../model/v1/device';
-import type { ResolvedInstance } from './hierarchy';
+import { loadedResponse } from './receiver-response';
 import type { NamedLink } from '../../model/v1/topology';
 import type { EndpointRef, Project } from '../../model/v1/types';
 import { addGain, budgetValue, checkInputRating, logZero, unavailable } from './budget-metric';
@@ -47,24 +46,6 @@ type Diagnostic = {
   reason: string;
   endpoint?: EndpointRef;
 };
-
-type Detector = Extract<Transfer, { kind: 'oe' }>;
-
-function loadedResponse(pd: Detector, detector: ResolvedInstance | undefined, rho: BudgetMetric<'A/W'>,
-  frequencyGHz: number): BudgetMetric<'V/W'> {
-  const mode = typeof pd.receiver === 'object' ? detector?.parameters.get(pd.receiver.parameterId)?.value : pd.receiver;
-  if (mode === 'active50') {
-    const response = resolveEmpiricalValue('V/W', pd.loadedGain, { frequencyGHz }, detector);
-    return response.availability === 'available' ? response : unavailable('V/W', `已加载转换增益 C(f)：${response.reason}`);
-  }
-  if (mode !== 'external50' && mode !== 'parallel50') return unavailable('V/W', '请设置接收结构。');
-  if (rho.availability === 'unavailable') return unavailable('V/W', `响应度：${rho.reason}`);
-  const hasResponse = pd.responseDb?.kind === 'parameter'
-    ? detector?.parameters.has(pd.responseDb.parameterId) : pd.responseDb !== undefined;
-  const response = hasResponse ? resolveEmpiricalValue('dB', pd.responseDb, { frequencyGHz }, detector) : budgetValue('dB', 0);
-  if (response.availability === 'unavailable') return unavailable('V/W', `归一化频响：${response.reason}`);
-  return budgetValue('V/W', rho.value * (mode === 'external50' ? 50 : 25) * 10 ** (response.value / 20));
-}
 
 export function loadedVoltages(power: BudgetMetric<'dBm'>) {
   if (power.availability === 'unavailable') return { vrms: unavailable('V', power.reason), vpp: unavailable('V', power.reason) };

@@ -172,16 +172,16 @@ export const rfKinds = ['fixed', 'rfCurve'] as const;
 export const opticalKinds = ['fixed', 'channelTable'] as const;
 const modeNames = { fixed: '固定值', rfCurve: '射频曲线折点', channelTable: '通道表', parameter: '引用参数' };
 
-export function QuantityField({ name, label, kinds, value, parameters, minimum, unit = 'dB' }: {
+export function QuantityField({ name, label, kinds, value, parameters, minimum, hidden, unit = 'dB' }: {
   name: string; label: string; kinds: readonly ValueKind[];
   value?: EmpiricalValue | { kind: 'parameter'; parameterId: string }; parameters: readonly ParameterDefinition[];
-  minimum?: number; unit?: NumericUnit;
+  minimum?: number; hidden?: boolean; unit?: NumericUnit;
 }) {
   const [kind, setKind] = useState<ValueKind | 'parameter' | ''>(value?.kind ?? '');
   const options = parameters.filter(parameter =>
     parameter.kind === 'numeric' && parameter.unit === unit && parameterValueKinds(parameter).every(item => kinds.includes(item))
     && (minimum === undefined || (parameter.range?.min ?? -Infinity) >= minimum));
-  return <fieldset>
+  return <fieldset hidden={hidden} disabled={hidden}>
     <legend>{label}</legend>
     <label>取值方式<select name={name + 'Kind'} value={kind} onChange={event => setKind(event.target.value as typeof kind)}>
       <option value="">未设置</option>

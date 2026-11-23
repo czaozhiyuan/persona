@@ -6,6 +6,7 @@ import { hierarchyKey, inHierarchy } from '../../editors/topology/v1/hierarchy-v
 import type { ApprovedMove, ReparentLayout } from '../../editors/topology/v1/reparent-drop';
 import type { CanvasView } from '../../editors/topology/v1/canvas-controls';
 import { TopologyEditor } from '../../editors/topology/v1/topology-editor';
+import { isRfFrequency } from '../../engine/v1/rf-budget';
 import { createLinkBudget } from '../../engine/v1/link-budget';
 import { createOpticalBudgetForGraph } from '../../engine/v1/optical-budget';
 import type { LinkTrial, NamedLink } from '../../model/v1/topology';
@@ -757,6 +758,15 @@ export function Workbench({ store, loadExample, newProject }: Props) {
               {selection.instancePaths && !topologyActive && <p className="panel" role="status">已选中 {selection.instancePaths.length} 个对象。选中单个对象可编辑属性。</p>}
               {properties && <PropertiesPanel key={JSON.stringify([projectSession, properties.instancePath])}
                 store={store} occurrence={properties} occurrences={linkOptions.graph.instances} jumpToParameter={jumpToParameter} onAddPort={setPortTarget}
+                receiverQuery={portId => {
+                  const key = signalPortKey({ instancePath: properties.instancePath, portId });
+                  const step = pathResult?.trace?.steps.find(item => signalPortKey(item.port.ref) === key);
+                  const channelId = step?.channelIds?.length === 1 ? step.channelIds[0]
+                    : opticalResult?.stages.find(stage => signalPortKey(stage.endpoint) === key)?.channelId;
+                  const frequencyGHz = step && isRfFrequency(conditions.frequencyGHz)
+                    ? conditions.frequencyGHz : undefined;
+                  return { channelId, frequencyGHz };
+                }}
                 onCopyModule={path => copyModuleTo(store.getSnapshot().project, path, path.slice(0, -1))}
                 onAddInside={topologyActive && selected?.instance && selected.definition.kind === 'module'
                   ? path => { enterModule(path); setLeftTab('library'); } : undefined}

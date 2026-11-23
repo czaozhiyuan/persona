@@ -9,6 +9,8 @@ import { editInstanceSettings } from '../../../state/v1/instance-settings';
 import { instantiateModule } from '../../../state/v1/instantiate-module';
 import { structureScope } from '../structure-scope';
 import { editModule } from '../../../state/v1/topology-edits';
+import { ReceiverPreview, receiverParameterVisible } from './receiver-properties';
+import type { ReceiverQuery } from './receiver-properties';
 import { AutosaveForm } from './autosave-form';
 import { PortFields, TransferFields } from './device-fields';
 import { choice, formatValue, numberField, ParameterField, readNumericParameter, readParameter, textField } from './value-fields';
@@ -26,8 +28,9 @@ function readDefault(data: FormData, parameter: ParameterDefinition): ParameterD
     range: min === undefined && max === undefined ? undefined : { min, max } };
 }
 
-export function PropertiesPanel({ store, occurrence, occurrences, jumpToParameter, onAddPort, onCopyModule, onMoveUp, onDissolve, onAddInside, onDcBudget }: {
+export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery, jumpToParameter, onAddPort, onCopyModule, onMoveUp, onDissolve, onAddInside, onDcBudget }: {
   store: ProjectStore; occurrence: ResolvedInstance; occurrences: readonly ResolvedInstance[];
+  receiverQuery: (portId: string) => ReceiverQuery;
   onAddPort: (path: InstancePath) => void;
   onCopyModule: (path: InstancePath) => void;
   onAddInside?: (path: InstancePath) => void;
@@ -105,6 +108,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, jumpToParamete
       parameterName: owner?.definition.parameters?.find(parameter => parameter.id === id)?.name ?? id };
   }
 
+  const detectors = definition.kind === 'component' ? definition.transfers?.filter(t => t.kind === 'oe') ?? [] : [];
   const name = instance?.name ?? definition.name;
   const nameField = <label>名称<input key={name} name="name" defaultValue={name} data-object-name={instance ? true : undefined} required
     onBlur={event => saveName(event.currentTarget)}
@@ -139,6 +143,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, jumpToParamete
         </label>}
         {!!definition.parameters?.length && <h3>参数</h3>}
         {definition.parameters?.map(parameter => {
+          if (detectors.length && !receiverParameterVisible(occurrence, parameter.id)) return null;
           const effective = parameters.get(parameter.id);
           const source = effective?.source;
           const local = settings?.parameterOverrides;
@@ -179,6 +184,8 @@ export function PropertiesPanel({ store, occurrence, occurrences, jumpToParamete
             </AutosaveForm>}
           </details>;
         })}
+        {detectors.map(pd => <ReceiverPreview key={JSON.stringify([pd.fromPortId, pd.toPortId])} pd={pd}
+          instance={occurrence} query={receiverQuery(pd.fromPortId)} showPorts={detectors.length > 1} />)}
       </div>}
       {instance && definition.kind === 'module' && <section>
         <h3>模块操作</h3>
@@ -283,7 +290,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, jumpToParamete
         </form>}
         {definition.kind === 'component' && definition.transfers?.map((transfer, index) => <details key={index}>
           <summary>传输 · {transferLabels[transfer.kind]} · {portDisplayName(definition.ports.find(port => port.id === transfer.fromPortId)!, true)} → {portDisplayName(definition.ports.find(port => port.id === transfer.toPortId)!, true)}</summary>
-          <TransferFields key={JSON.stringify(transfer)} transfer={transfer} definition={definition}
+          <TransferFields key={JSON.stringify(transfer)} transfer={transfer} definition={definition} occurrences={occurrences}
             save={read => changeDefinition(() => ({ ...definition,
               transfers: definition.transfers?.map((item, i) => i === index ? read() : item),
             }))} />
