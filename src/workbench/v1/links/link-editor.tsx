@@ -1,4 +1,3 @@
-import { numberedName } from '../../../model/v1/display-names';
 import { useMemo, useState } from 'react';
 import type { createLinkBudget } from '../../../engine/v1/link-budget';
 import type { OpticalBudget } from '../../../engine/v1/optical-budget';
@@ -6,7 +5,7 @@ import type { PathResult } from '../../../engine/v1/path-resolver';
 import { signalPortKey } from '../../../engine/v1/signal-graph';
 import { resolveOpticalChannel } from '../../../model/v1/channels';
 import type { LinkTrial, NamedLink } from '../../../model/v1/topology';
-import type { EndpointRef, Project } from '../../../model/v1/types';
+import type { EndpointRef } from '../../../model/v1/types';
 import type { ProjectStore } from '../../../state/v1/project-store';
 import { EndpointLocation } from '../budgets/budget-dock';
 import { OpticalResult } from '../budgets/local-optical-panel';
@@ -19,7 +18,6 @@ import './link-editor.css';
 
 type Props = {
   store: ProjectStore;
-  project: Project;
   options: LinkOptions;
   opticalLink: boolean;
   selected?: NamedLink;
@@ -71,7 +69,7 @@ function Diagnostics({ result, showEndpoint, locate }: {
   </div>;
 }
 
-export function LinkEditor({ store, project, options, selected, result, budget, conditions, setConditions,
+export function LinkEditor({ store, options, selected, result, budget, conditions, setConditions,
   draft, opticalLink, opticalResult, saveTrial, trialSaved, choose, locate, setDraftChannel }: Props) {
   const [error, setError] = useState('');
   const [fromKey, setFromKey] = useState(selected?.from ? signalPortKey(selected.from) : '');
@@ -112,7 +110,7 @@ export function LinkEditor({ store, project, options, selected, result, budget, 
         setError('');
       }}>
         <option value="">{draft ? '画布临时链路' : '新建链路'}</option>
-        {project.namedLinks?.map(item => <option key={item.id} value={item.id}>{numberedName(project.namedLinks!, item, link => link.name)}</option>)}
+        {options.namedLinks.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
       </select>
     </div>
     {error && <p className="error" role="alert">{error}</p>}

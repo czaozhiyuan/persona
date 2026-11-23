@@ -737,7 +737,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
           {showDock && dock && <BudgetDock title={budgetTitles[dock]} collapsed={collapsed} enlarged={enlarged}
             toggle={() => setCollapsed(value => !value)} enlarge={() => setEnlarged(value => !value)}
             close={() => setDock(undefined)}>
-            {dock === 'links' && <LinkEditor key={JSON.stringify([selectedLink?.id, !savedLink && draftLink?.from, !savedLink && draftLink?.to])} store={store} project={project}
+            {dock === 'links' && <LinkEditor key={JSON.stringify([selectedLink?.id, !savedLink && draftLink?.from, !savedLink && draftLink?.to])} store={store}
               options={linkOptions} opticalLink={opticalLink} draft={!savedLink && !!draftLink} selected={selectedLink} result={pathResult} budget={budget}
               conditions={conditions} opticalResult={linkedOpticalResult} trialSaved={sameTrial(savedLink?.trial, conditions)}
               saveTrial={saveTrial} choose={chooseLink} locate={locateBudgetPort}

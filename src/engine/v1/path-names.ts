@@ -1,25 +1,26 @@
+import { numberedNames } from '../../model/v1/display-names';
 import type { ResolvedInstance } from './hierarchy';
 import type { InstancePath } from '../../model/v1/types';
 
 export function createPathNames(instances: readonly ResolvedInstance[]) {
-  const totals = new Map<string, number>();
-  const seen = new Map<string, number>();
   const paths = new Map<string, string>();
   const names = new Map<string, string>();
-  const entries = instances.map(({ instancePath, instance, definition }) => {
-    const parent = JSON.stringify(instancePath.slice(0, -1));
-    const name = instance?.name ?? definition.name;
-    const group = JSON.stringify([parent, name, !!instance]);
-    totals.set(group, (totals.get(group) ?? 0) + 1);
-    return { instancePath, parent, name, group };
-  });
-  for (const { instancePath, parent, name, group } of entries) {
-    const index = (seen.get(group) ?? 0) + 1;
-    seen.set(group, index);
-    const local = totals.get(group)! > 1 ? `${name}（${index}）` : name;
-    const key = JSON.stringify(instancePath);
-    names.set(key, local);
-    paths.set(key, instancePath.length > 1 ? paths.get(parent) + ' / ' + local : local);
+  const scopes = new Map<string, ResolvedInstance[]>();
+  for (const item of instances) {
+    const parent = item.instancePath.length ? JSON.stringify(item.instancePath.slice(0, -1)) : '';
+    const siblings = scopes.get(parent);
+    if (siblings) siblings.push(item);
+    else scopes.set(parent, [item]);
+  }
+  // The hierarchy walk visits parents first, so their display paths are available to child scopes.
+  for (const [parent, siblings] of scopes) {
+    const labels = numberedNames(siblings.map(item => item.instance?.name ?? item.definition.name));
+    siblings.forEach(({ instancePath }, index) => {
+      const key = JSON.stringify(instancePath);
+      const local = labels[index];
+      names.set(key, local);
+      paths.set(key, instancePath.length > 1 ? paths.get(parent) + ' / ' + local : local);
+    });
   }
   return {
     showPath(path: InstancePath) {

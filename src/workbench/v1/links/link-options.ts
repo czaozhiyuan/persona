@@ -1,3 +1,4 @@
+import { numberedNames } from '../../../model/v1/display-names';
 import { createPathNames } from '../structure-scope';
 import { portDisplayName } from '../labels';
 import { createPathResolver } from '../../../engine/v1/path-resolver';
@@ -67,7 +68,10 @@ export function createLinkOptions(project: Project) {
       }
     }
   }
-  return { graph, showName, showPath, endpoints, opticalEndpoints, opticalSources, via, eo, oe, resolveNamedLink, showEndpoint, showPort };
+  const links = project.namedLinks ?? [];
+  const labels = numberedNames(links.map(link => link.name));
+  const namedLinks = links.map((link, index) => ({ value: link.id, label: labels[index] }));
+  return { graph, showName, showPath, namedLinks, endpoints, opticalEndpoints, opticalSources, via, eo, oe, resolveNamedLink, showEndpoint, showPort };
 }
 
 export type LinkOptions = ReturnType<typeof createLinkOptions>;

@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { blankModuleId } from '../../src/library/v1/built-in';
 import { insertLibraryItem } from '../../src/library/v1/insert-library-item';
 import { editablePortName, portDisplayName } from '../../src/model/v1/display-names';
+import type { Project } from '../../src/model/v1/types';
 import { topologyExample } from '../../src/model/v1/topology-example';
 import { groupModule } from '../../src/state/v1/group-module';
 import { editInstanceSettings } from '../../src/state/v1/instance-settings';
@@ -87,4 +88,30 @@ test('invalid snapshot diagnostics identify the occurrence in the attempted proj
   assert.equal(result.ok, false);
   if (!result.ok) assert.match(result.message, /改名机箱 \/ 未找到的对象/);
   assert.equal(store.getSnapshot(), before);
+});
+
+test('sibling objects, endpoints and named links reserve literal numbered names before allocating labels', () => {
+  const instances = ['光模块', '光模块', '光模块（1）'].map((name, i) => ({ name, id: 'device-' + i, definitionId: 'rf' }));
+  const ports = ['RF', 'RF', 'RF（1）'].map((name, i) => ({ name, id: 'port-' + i, direction: 'in' as const, type: 'RF' as const }));
+  const namedLinks = ['链路', '链路', '链路（1）'].map((name, i) => ({
+    name, id: 'link-' + i, from: { instancePath: [instances[i].id], portId: ports[i].id },
+  }));
+  const project: Project = {
+    id: 'legacy', name: '旧工程', rootModuleDefinitionId: 'root', namedLinks,
+    moduleDefinitions: [{ id: 'root', name: '光模块（2）', kind: 'module', instances, ports: [] }],
+    componentDefinitions: [{ id: 'rf', name: '射频器件', kind: 'component', ports }],
+  };
+  const original = serializeProjectJson(project);
+  const options = createLinkOptions(project);
+  const devices = ['光模块（2）', '光模块（3）', '光模块（1）'];
+  const portNames = ['RF（2）', 'RF（3）', 'RF（1）'];
+  assert.deepEqual(instances.map(i => options.showName([i.id])), devices);
+  assert.deepEqual(options.endpoints.map(({ label, value }) => [label, value]), instances.flatMap((item, i) =>
+    ports.map((p, j) => [devices[i] + ' / ' + portNames[j], { instancePath: [item.id], portId: p.id }])));
+  assert.deepEqual(options.namedLinks, [
+    { label: '链路（2）', value: 'link-0' },
+    { label: '链路（3）', value: 'link-1' },
+    { label: '链路（1）', value: 'link-2' },
+  ]);
+  assert.equal(serializeProjectJson(project), original);
 });

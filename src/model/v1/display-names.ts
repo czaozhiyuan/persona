@@ -7,10 +7,28 @@ export const portTypeLabels = {
   CONTROL: '控制',
 } satisfies Record<PortType, string>;
 
+export function numberedNames(names: readonly string[]): string[] {
+  const reserved = new Set<string>();
+  const nextSuffix = new Map<string, number>();
+  for (const name of names) {
+    if (reserved.has(name)) nextSuffix.set(name, 1);
+    reserved.add(name);
+  }
+  return names.map(name => {
+    let suffix = nextSuffix.get(name);
+    if (suffix === undefined) return name;
+    let candidate: string;
+    do {
+      candidate = `${name}（${suffix++}）`;
+    } while (reserved.has(candidate));
+    reserved.add(candidate);
+    nextSuffix.set(name, suffix);
+    return candidate;
+  });
+}
+
 export function numberedName<T>(items: readonly T[], item: T, label: (item: T) => string): string {
-  const name = label(item);
-  const matches = items.filter(other => label(other) === name);
-  return matches.length > 1 ? `${name}（${matches.indexOf(item) + 1}）` : name;
+  return numberedNames(items.map(label))[items.indexOf(item)] ?? label(item);
 }
 
 type DisplayPort = Pick<PortDefinition, 'id' | 'name'> & Partial<Pick<PortDefinition, 'type' | 'direction'>>;
