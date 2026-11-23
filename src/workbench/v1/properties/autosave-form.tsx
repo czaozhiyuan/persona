@@ -1,8 +1,8 @@
 import { Fragment, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
-export function AutosaveForm({ version, save, children }: {
-  version: string; save: (data: FormData) => string | undefined; children: ReactNode;
+export function AutosaveForm({ version, save, children, className }: {
+  version: string; save: (data: FormData) => string | undefined; children: ReactNode; className?: string;
 }) {
   const [fields, setFields] = useState({ version, revision: 0 });
   const focusedValue = useRef<string>(undefined);
@@ -23,7 +23,7 @@ export function AutosaveForm({ version, save, children }: {
     }
   }
 
-  return <form noValidate onSubmit={event => {
+  return <form className={className} noValidate onSubmit={event => {
     event.preventDefault();
     apply(event.currentTarget);
   }} onFocus={event => {
