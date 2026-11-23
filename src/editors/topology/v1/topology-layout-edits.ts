@@ -1,3 +1,4 @@
+import type { LibraryConfig } from '../../../library/v1/user-library';
 import type { XYPosition } from '@xyflow/react';
 import { resolveHierarchy } from '../../../engine/v1/hierarchy';
 import { insertLibraryItem } from '../../../library/v1/insert-library-item';
@@ -49,8 +50,8 @@ export function preserveDeletionLayout(project: Project, parentId: string, befor
 }
 
 export function insertCanvasItem(project: Project, item: LibraryItem, moduleId: string, modulePath: InstancePath,
-  instanceId: string, position?: XYPosition): Project {
-  const updated = insertLibraryItem(project, item, moduleId, modulePath, instanceId, position);
+  instanceId: string, position?: XYPosition, library?: LibraryConfig): Project {
+  const updated = insertLibraryItem(project, item, moduleId, modulePath, instanceId, position, library);
   const key = hierarchyKey(modulePath);
   const frame = updated.layout?.topologyFrames?.find(frame => hierarchyKey(frame.modulePath) === key);
   if (!frame) return updated;

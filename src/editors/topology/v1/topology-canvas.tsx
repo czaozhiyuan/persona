@@ -618,7 +618,7 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     }}>
     {placingModule && !panWithSpace && <ModulePlacement
       zoom={() => flow.current?.getZoom()}
-      place={screen => placeAt({ source: 'template', id: blankModuleId, name: '新建模块', automaticName: true }, screen)} />}
+      place={screen => placeAt({ source: 'blank-module', id: blankModuleId, name: '新建模块', automaticName: true }, screen)} />}
     <ReactFlow<CanvasNode, WiringEdge> nodes={nodes} edges={edges.map(edge => ({ ...edge, selected: selectedWiring === edge }))}
       nodeTypes={nodeTypes} edgeTypes={edgeTypes} ariaLabelConfig={flowAriaLabels} fitView={!initialViewport} defaultViewport={initialViewport} fitViewOptions={canvasFitOptions}
       viewport={viewport} onViewportChange={changeViewport} onInit={instance => { flow.current = instance; }}
