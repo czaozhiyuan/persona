@@ -106,7 +106,7 @@ export function projectWiring(projection: ReturnType<typeof projectTopology>,
         ariaLabel: `连接到内部端口：${portDisplayName(port)} · ${portDisplayName(childPort(mapping.target))}`,
       });
     }
-    for (const bundle of module.cableBundles ?? []) {
+    for (const [index, bundle] of (module.cableBundles ?? []).entries()) {
       for (const core of bundle.cores) {
         if (!core.a.endpoint || !core.b.endpoint) continue;
         const a = core.a.endpoint;
@@ -115,7 +115,7 @@ export function projectWiring(projection: ReturnType<typeof projectTopology>,
         edge(canvasEdgeKey('core', bundle.id, core.id), { kind: 'core', id: core.id, bundleId: bundle.id }, childPort(from).type, {
           source: child(from.instanceId), target: child(to.instanceId),
           sourceHandle: handleId(from.portId), targetHandle: handleId(to.portId),
-          ariaLabel: `纤芯：${bundle.id} · ${core.id} · A:${core.a.pin} / B:${core.b.pin}`,
+          ariaLabel: `线缆 ${index + 1} 纤芯 · A:${core.a.pin} / B:${core.b.pin}`,
         });
       }
     }

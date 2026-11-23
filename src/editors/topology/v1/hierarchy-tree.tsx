@@ -4,7 +4,7 @@ import { portDisplayName, portTypeLabels } from '../../../workbench/v1/labels';
 import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
 import type { InstancePath, Project } from '../../../model/v1/types';
 import { moveWiringSummary, planInstanceMove } from '../../../state/v1/reparent-instance';
-import { structureLocations } from '../../../workbench/v1/structure-scope';
+import { createPathNames, structureLocations } from '../../../workbench/v1/structure-scope';
 import type { ApprovedMove } from './reparent-drop';
 import { hierarchyChildren, hierarchyKey } from './hierarchy-view';
 
@@ -28,6 +28,7 @@ type Props = {
 };
 
 export function HierarchyTree({ project, focusMoved, move, instances, modulePath, selected, expanded, toggle, select, enter, navigatePort }: Props) {
+  const { showName, showPath } = createPathNames(instances);
   const tree = useRef<HTMLDivElement>(null);
   const drag = useRef<TreeDrag | undefined>(undefined);
   const [hover, setHover] = useState<Hover>();
@@ -57,7 +58,7 @@ export function HierarchyTree({ project, focusMoved, move, instances, modulePath
     const key = hierarchyKey(item.instancePath);
     if (session.hover?.key !== key) {
       const plan = item.definition.kind === 'module' ? planInstanceMove(session.base, session.source, item.instancePath) : undefined;
-      const name = item.instance?.name ?? item.definition.name;
+      const name = showName(item.instancePath);
       const up = item.instancePath.length === session.source.length - 2;
       session.hover = {
         key, label: `${up ? '移到上一级' : '移入'}：${name}`,
@@ -110,7 +111,7 @@ export function HierarchyTree({ project, focusMoved, move, instances, modulePath
       {rows.map(item => {
         const { instancePath, instance, definition } = item;
         const key = hierarchyKey(instancePath);
-        const name = instance?.name ?? definition.name;
+        const name = showName(instancePath);
         const open = expanded.has(key);
         const module = definition.kind === 'module';
         const hasChildren = !!children.get(key)?.length || (module && definition.ports.length > 0);
@@ -121,7 +122,7 @@ export function HierarchyTree({ project, focusMoved, move, instances, modulePath
           {hasChildren ? <button type="button" className="v1-hierarchy-disclosure" aria-expanded={open}
             aria-label={`${open ? '折叠' : '展开'} ${name}`} onClick={() => toggle(instancePath)}>{open ? '▾' : '▸'}</button>
             : <span className="v1-hierarchy-disclosure" />}
-          <button type="button" className="v1-hierarchy-entry" title={`${name} · ${definition.name}`}
+          <button type="button" className="v1-hierarchy-entry" title={showPath(instancePath)}
             draggable={!!instance}
             onDragStart={event => {
               if (!instance) return;
@@ -143,7 +144,7 @@ export function HierarchyTree({ project, focusMoved, move, instances, modulePath
             style={{ paddingInlineStart: 4 + (instancePath.length + 1) * 14 }}>
             <button type="button" onClick={() => navigatePort(instancePath, port.id)}
               title={`对外端口 · ${portTypeLabels[port.type]} · ${port.direction === 'in' ? '输入' : '输出'}`}>
-              <span aria-hidden="true">{port.direction === 'in' ? '↦' : '↤'}</span> {portDisplayName(port)}
+              <span aria-hidden="true">{port.direction === 'in' ? '↦' : '↤'}</span> {portDisplayName(port, false, definition.ports)}
             </button>
           </li>)}
         </Fragment>;

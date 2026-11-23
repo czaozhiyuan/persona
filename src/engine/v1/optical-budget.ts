@@ -1,3 +1,5 @@
+import { createPathNames } from './path-names';
+import { portDisplayName } from '../../model/v1/display-names';
 import { findOpticalSupply } from './optical-supply';
 import type { Carrier } from './path-search';
 import { resolveOpticalChannel } from '../../model/v1/channels';
@@ -56,6 +58,7 @@ export function createOpticalBudget(project: Project) {
 }
 
 export function createOpticalBudgetForGraph(graph: SignalGraph) {
+  const { showPath } = createPathNames(graph.instances);
   const instances = new Map(graph.instances.map(item => [JSON.stringify(item.instancePath), item]));
   const outgoing = new Map<SignalPort, SignalEdge[]>();
   for (const edge of graph.edges) {
@@ -125,7 +128,7 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
       const quadrature = 10 * Math.log10(2);
       const opticalLoss = { intrinsicLossDb: intrinsic, quadratureLossDb: budgetValue('dB', quadrature) };
       const gain = intrinsic.availability === 'unavailable'
-        ? unavailable('dB', `${edge.from.ref.instancePath.join('/')} 最大透过插损：${intrinsic.reason}`)
+        ? unavailable('dB', `${showPath(edge.from.ref.instancePath)} 最大透过插损：${intrinsic.reason}`)
         : budgetValue('dB', -intrinsic.value - quadrature);
       stages.push(stage(edge.to, previous.channelId, addGain(previous.powerDbm, gain), { edge, gainDb: gain, opticalLoss }));
       return addGain(gainDb, gain);
@@ -160,7 +163,7 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
       ? resolveEmpiricalValue('dBm', port.definition.opticalEmitter?.powerDbm, { channelId: source.channelId }, instanceAt(port.ref))
       : budgetValue('dBm', source.powerDbm);
     return [stage(port, source.channelId, power.availability === 'available' ? power
-      : unavailable('dBm', `${port.ref.instancePath.join('/')} · ${port.ref.portId} 光源功率：${power.reason}`))];
+      : unavailable('dBm', `${showPath(port.ref.instancePath)} · ${portDisplayName(port.definition)} 光源功率：${power.reason}`))];
   }
 
   function calculateOpticalPath(path: SignalPath, source: OpticalSource) {

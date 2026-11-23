@@ -125,7 +125,7 @@ export function moveLocalWiring(source: ModuleDefinition, destination: ModuleDef
 
     const internal = bundle.cores.find(core => isMoving(core.a.endpoint) && isMoving(core.b.endpoint));
     if (internal) {
-      throw new Error(`线束「${bundle.id}」的纤芯「${internal.id}」两端都随移，但线束还连接未移动的对象，无法安全拆分。请先调整线束附件。`);
+      throw new Error(`线束的纤芯（A:${internal.a.pin} / B:${internal.b.pin}）两端都随移，但线束还连接未移动的对象，无法安全拆分。请先调整线束附件。`);
     }
 
     const broken = new Set<string>();

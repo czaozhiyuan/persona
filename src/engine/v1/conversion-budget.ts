@@ -1,3 +1,4 @@
+import { createPathNames } from './path-names';
 import type { OpticalChannelId } from '../../model/v1/channels';
 import { loadedResponse } from './receiver-response';
 import type { NamedLink } from '../../model/v1/topology';
@@ -85,6 +86,7 @@ function selectOpticalSource(first: SignalStep, sources: readonly OpticalSource[
 }
 
 export function createConversionPathBudget(graph: SignalGraph) {
+  const { showPath } = createPathNames(graph.instances);
   const opticalBudget = createOpticalBudgetForGraph(graph);
   const instances = new Map(graph.instances.map(item => [JSON.stringify(item.instancePath), item]));
 
@@ -182,8 +184,8 @@ export function createConversionPathBudget(graph: SignalGraph) {
         const modulationDepth = vPi.availability === 'unavailable' ? unavailable('ratio', `RF Vπ：${vPi.reason}`)
           : powerDbm.availability === 'unavailable' ? unavailable('ratio', powerDbm.reason)
           : budgetValue('ratio', Math.PI * Math.sqrt(100 * 10 ** ((powerDbm.value - 30) / 10)) / vPi.value);
-        const gain = vPi.availability === 'unavailable' ? unavailable('dB', `${eoInput.instancePath.join('/')} RF Vπ：${vPi.reason}`)
-          : conversion.availability === 'unavailable' ? unavailable('dB', `${pdInput.instancePath.join('/')} 光电转换：${conversion.reason}`)
+        const gain = vPi.availability === 'unavailable' ? unavailable('dB', `${showPath(eoInput.instancePath)} RF Vπ：${vPi.reason}`)
+          : conversion.availability === 'unavailable' ? unavailable('dB', `${showPath(pdInput.instancePath)} 光电转换：${conversion.reason}`)
           : pdPowerDbm.availability === 'unavailable' ? unavailable('dB', pdPowerDbm.reason)
           : conversion.value === 0 ? logZero('dB')
           : budgetValue('dB', 2 * (pdPowerDbm.value - 30) + 20 * Math.log10(Math.PI * Math.abs(conversion.value) / vPi.value));

@@ -1,3 +1,4 @@
+import { moduleName } from './module-name';
 import { resolveHierarchy } from '../../engine/v1/hierarchy';
 import type { ComponentDefinition, InstancePath, ModuleDefinition, Project } from '../../model/v1/types';
 import { editModule } from './topology-edits';
@@ -15,7 +16,7 @@ export function instantiateModule(project: Project, sourcePath: InstancePath, mo
   if (!source?.instance || source.definition.kind !== 'module' || parent?.kind !== 'module') {
     throw new Error('请先选中一个可复用或复制的模块。');
   }
-  const name = source.instance.name + ' 复用';
+  const name = moduleName(project, source.instance.name + ' 复用', { automatic: true });
   return editModule(project, parent.id, module => ({
     ...module, instances: [...module.instances, { id: instanceId, name, definitionId: source.definition.id }],
   }));
@@ -29,7 +30,7 @@ export function pasteModule(project: Project, copiedProject: Project, sourcePath
   if (!source?.instance || source.definition.kind !== 'module' || parent?.kind !== 'module') {
     throw new Error('请选择一个可复制的模块，并在模块视图中粘贴。');
   }
-  const name = source.instance.name + ' 副本';
+  const name = moduleName(project, source.instance.name + ' 副本', { automatic: true });
   const definitions = new Map<string, Definition>([...copiedProject.moduleDefinitions, ...copiedProject.componentDefinitions].map(item => [item.id, item]));
   const copiedIds = new Map<string, string>();
   const pending: Definition[] = [source.definition];

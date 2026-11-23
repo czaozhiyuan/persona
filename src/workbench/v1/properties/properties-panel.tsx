@@ -1,3 +1,4 @@
+import { moduleName } from '../../../state/v1/module-name';
 import { portDisplayName, portTypeLabels, transferLabels } from '../labels';
 import { useState } from 'react';
 import { PortDeletionDialog } from '../../../editors/topology/v1/port-deletion-dialog';
@@ -72,8 +73,8 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
     const previous = owner.instance?.name ?? owner.definition.name;
     const name = input.value.trim();
     if (!name) {
-      input.value = previous;
-      setError('名称不能为空，已保留原名称。');
+      if (owner.definition.kind !== 'module') input.value = previous;
+      setError('名称不能为空。');
       return;
     }
     input.value = name;
@@ -83,8 +84,8 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
     }
     const saved = owner.instance
       ? commit(draft => editInstanceSettings(draft, instancePath, current => ({ ...current, name })))
-      : commit(draft => editModule(draft, owner.definition.id, current => ({ ...current, name })));
-    if (!saved) input.value = previous;
+      : commit(draft => editModule(draft, owner.definition.id, current => ({ ...current, name: moduleName(draft, name, { except: [] }) })));
+    if (!saved && owner.definition.kind !== 'module') input.value = previous;
   }
 
   function reuseModule() {
@@ -105,7 +106,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
       source = owner?.parameters.get(id)?.source;
     }
     return { path, id, name: owner?.instance?.name ?? owner?.definition.name,
-      parameterName: owner?.definition.parameters?.find(parameter => parameter.id === id)?.name ?? id };
+      parameterName: owner?.definition.parameters?.find(parameter => parameter.id === id)?.name ?? '未找到的参数' };
   }
 
   const detectors = definition.kind === 'component' ? definition.transfers?.filter(t => t.kind === 'oe') ?? [] : [];
@@ -221,10 +222,10 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
         {sharedLocations.length > 0 && <p className="v1-property-effective">共享定义 · 影响 {sharedLocations.join('、')}</p>}
         {!definition.ports.length && <p className="empty">暂无端口。</p>}
         {definition.ports.map(port => <details key={port.id} data-port-id={port.id}>
-          <summary>{portDisplayName(port)}<span className="v1-parameter-value">
+          <summary>{portDisplayName(port, false, definition.ports)}<span className="v1-parameter-value">
             {portTypeLabels[port.type]} · {port.direction === 'in' ? '输入' : '输出'}
           </span></summary>
-          <p className="v1-property-effective">端口属于共享结构。{sharedLocations.length > 0 && ` 影响 ${sharedLocations.join('、')}。`} 端口 ID：{port.id}</p>
+          <p className="v1-property-effective">端口属于共享结构。{sharedLocations.length > 0 && ` 影响 ${sharedLocations.join('、')}。`}</p>
           <PortFields port={port} occurrence={occurrence} remove={() => { setError(''); setDeletion(port.id); }}
             save={next => changeDefinition(() => ({ ...definition,
               ports: definition.ports.map(item => item.id === port.id ? next : item),
@@ -240,7 +241,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
           if (!name) { setError('定义名称不能为空。'); return; }
           changeDefinition(() => ({ ...definition, name }));
         }}>
-          <label>定义名称<input name="name" defaultValue={definition.name} required /></label>
+          <label>共享定义名称<input name="name" defaultValue={definition.name} required /></label>
           <button type="submit">保存定义名称</button>
         </form>}
         {definition.parameters?.map(parameter => <details key={parameter.id} data-definition-parameter={parameter.id}>
@@ -283,7 +284,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
             <select name={direction === 'in' ? 'input' : 'output'} required defaultValue="">
               <option value="">请选择端口</option>
               {definition.ports.filter(port => port.direction === direction && (port.type === 'RF' || port.type === 'OPTICAL'))
-                .map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true)}</option>)}
+                .map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true, definition.ports)}</option>)}
             </select>
           </label>)}
           <button type="submit">添加电光或光电传输</button>

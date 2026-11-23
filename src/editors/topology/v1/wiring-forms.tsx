@@ -76,7 +76,7 @@ export function MappingForm({ module, ports, connect }: {
   return <TopologyTool title="连接到内部端口">
     <label>对外端口<select value={publicPort?.id ?? ''} onChange={event => setSelected(event.target.value)}>
       <option value="">请选择</option>
-      {module.ports.map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true)}{module.portMappings?.some(item => item.portId === port.id) ? '' : '（开放）'}</option>)}
+      {module.ports.map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true, module.ports)}{module.portMappings?.some(item => item.portId === port.id) ? '' : '（开放）'}</option>)}
     </select></label>
     {publicPort && <form key={JSON.stringify([selected, mapping])} onSubmit={event => {
       event.preventDefault();
@@ -125,21 +125,20 @@ export function CableForm({ module, ports, update }: { module: ModuleDefinition;
   const [selected, setSelected] = useState('');
   const bundle = module.cableBundles?.find(item => item.id === selected);
   const save = (item: CableBundle) => update(current => ({
-    ...current, cableBundles: [...(current.cableBundles ?? []).filter(existing => existing.id !== bundle?.id), item],
+    ...current, cableBundles: bundle ? current.cableBundles?.map(existing => existing.id === bundle.id ? item : existing) : [...(current.cableBundles ?? []), item],
   }));
   return <TopologyTool title="MPO 芯序">
     <label>线缆<select value={bundle?.id ?? ''} onChange={event => setSelected(event.target.value)}>
       <option value="">新增线缆</option>
-      {module.cableBundles?.map(item => <option key={item.id} value={item.id}>{item.id}（{item.coreCount} 芯）</option>)}
+      {module.cableBundles?.map((item, index) => <option key={item.id} value={item.id}>线缆 {index + 1}（{item.coreCount} 芯）</option>)}
     </select></label>
     <form key={JSON.stringify([bundle?.id, bundle?.coreCount])} onSubmit={event => {
       event.preventDefault();
       const data = new FormData(event.currentTarget);
       const coreCount = Number(field(data, 'count'));
-      const id = bundle?.id ?? field(data, 'id');
+      const id = bundle?.id ?? crypto.randomUUID();
       if (save({ id, coreCount, cores: bundle?.cores ?? [] })) setSelected(id);
     }}>
-      {!bundle && <label>线缆 ID<input name="id" required pattern=".*\S.*" /></label>}
       <label>芯数<input name="count" type="number" min={1} defaultValue={bundle?.coreCount ?? 12} required /></label>
       <button type="submit">{bundle ? '保存芯数' : '添加线缆'}</button>
       {bundle && <button type="button" onClick={() => {

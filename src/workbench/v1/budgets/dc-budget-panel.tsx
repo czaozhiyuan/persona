@@ -31,8 +31,8 @@ function OutputHead() {
   return <><th>输出电压</th><th>输出需求</th><th>已知需求小计</th><th>额定容量</th><th>容量余量</th></>;
 }
 
-export function DcBudgetPanel({ project, labels: { showEndpoint, showPort }, scope, locate }: {
-  project: Project; labels: Pick<LinkOptions, 'showEndpoint' | 'showPort'>; scope?: InstancePath;
+export function DcBudgetPanel({ project, labels: { showEndpoint, showPort, showPath }, scope, locate }: {
+  project: Project; labels: Pick<LinkOptions, 'showEndpoint' | 'showPort' | 'showPath'>; scope?: InstancePath;
   locate: (endpoint: EndpointRef) => void;
 }) {
   const full = useMemo(() => calculateDcBudget(project), [project]);
@@ -46,7 +46,7 @@ export function DcBudgetPanel({ project, labels: { showEndpoint, showPort }, sco
   const ratings = budget.ports.flatMap(port => port.rating ? [port.rating] : []);
   return <section className="panel v1-budget-report" aria-labelledby="v1-dc-heading">
     <h2 id="v1-dc-heading">直流供电预算</h2>
-    {scope && <p>机箱范围 · {scope.join(' / ') || '系统根层级'}</p>}
+    {scope && <p>机箱范围 · {showPath(scope)}</p>}
     {!budget.ports.length && <p className="empty">当前工程没有直流供电端口。</p>}
     {!!budget.ports.length && !budget.supplies.length && !budget.converters.length && !budget.loads.length &&
       <p className="empty">当前工程尚未声明直流电源、变换器或负载。</p>}

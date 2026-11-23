@@ -145,7 +145,7 @@ export function createPathResolver(project: Project) {
     for (const ref of link?.via ?? []) {
       const edge = edgeRefs.get(requiredKey(ref));
       // An existing, partially attached fibre is valid project data but cannot carry the path.
-      if (!edge) return { status: 'unreachable', reason: `必经纤芯未接通：${requiredKey(ref)}。` };
+      if (!edge) return { status: 'unreachable', reason: '必经纤芯未接通，请检查所选纤芯两端的附件。' };
       requiredEdges.push(edge);
     }
     const required = new Map([...new Set(requiredEdges)].map((edge, index) => [edge, 1n << BigInt(index)]));

@@ -1,3 +1,4 @@
+import { numberedName } from '../../../model/v1/display-names';
 import { useMemo, useState } from 'react';
 import type { createLinkBudget } from '../../../engine/v1/link-budget';
 import type { OpticalBudget } from '../../../engine/v1/optical-budget';
@@ -111,7 +112,7 @@ export function LinkEditor({ store, project, options, selected, result, budget, 
         setError('');
       }}>
         <option value="">{draft ? '画布临时链路' : '新建链路'}</option>
-        {project.namedLinks?.map(item => <option key={item.id} value={item.id}>{item.name} ({item.id})</option>)}
+        {project.namedLinks?.map(item => <option key={item.id} value={item.id}>{numberedName(project.namedLinks!, item, link => link.name)}</option>)}
       </select>
     </div>
     {error && <p className="error" role="alert">{error}</p>}

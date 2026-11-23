@@ -1,4 +1,4 @@
-import { portDisplayName, portTypeLabels } from '../../../workbench/v1/labels';
+import { editablePortName, portDisplayName, portTypeLabels } from '../../../workbench/v1/labels';
 import type { PortDefinition } from '../../../model/v1/types';
 import { field } from './wiring-forms';
 
@@ -39,7 +39,7 @@ export function PortActionsDialog({ port, name, rename, locations, exposure, dis
       rename(field(new FormData(event.currentTarget), 'name'));
     }}>
       {locations.length > 0 && <p>显示名称会更新到 {locations.join('、')}。</p>}
-      <label>显示名称 <input name="name" defaultValue={port.name} placeholder={port.id} autoFocus={!exposure} /></label>
+      <label>显示名称 <input name="name" defaultValue={editablePortName(port)} placeholder={portDisplayName(port)} autoFocus={!exposure} /></label>
       <button type="submit">保存显示名称</button>
     </form>
     {error && <p className="error" role="alert">{error}</p>}

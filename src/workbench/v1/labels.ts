@@ -1,13 +1,6 @@
 import type { Transfer } from '../../model/v1/device';
 import type { Connection } from '../../model/v1/topology';
-import type { PortDefinition, PortType } from '../../model/v1/types';
-
-export const portTypeLabels = {
-  RF: '射频',
-  OPTICAL: '光信号',
-  DC_POWER: '直流供电',
-  CONTROL: '控制',
-} satisfies Record<PortType, string>;
+export { editablePortName, portDisplayName, portTypeLabels } from '../../model/v1/display-names';
 
 export const mediaLabels = {
   OPTICAL_FIBER: '光纤',
@@ -23,7 +16,3 @@ export const transferLabels = {
   oe: '光电转换',
   dc: '直流变换',
 } satisfies Record<Transfer['kind'], string>;
-
-export function portDisplayName({ id, name = id }: Pick<PortDefinition, 'id' | 'name'>, includeId = false): string {
-  return includeId && name !== id ? `${name}（${id}）` : name;
-}

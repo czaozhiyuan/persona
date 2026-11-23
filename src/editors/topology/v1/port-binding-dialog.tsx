@@ -18,7 +18,7 @@ export function PortBindingDialog({ store, preview, locations, close }: {
   function endpointLabel(ref: LocalEndpointRef) {
     const child = store.resolveInstance([...scope, ref.instanceId]);
     const port = child?.definition.ports.find(item => item.id === ref.portId);
-    return `${child?.instance?.name ?? ref.instanceId} · ${portDisplayName(port ?? { id: ref.portId }, true)}`;
+    return `${child?.instance?.name ?? '未找到的对象'} · ${port ? portDisplayName(port, true, child?.definition.ports) : '未找到的端口'}`;
   }
   function confirm() {
     if (base !== store.getSnapshot().project) {

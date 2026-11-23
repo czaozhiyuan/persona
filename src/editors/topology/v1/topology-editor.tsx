@@ -1,6 +1,6 @@
 import { createPortal } from 'react-dom';
-import { portDisplayName, portTypeLabels } from '../../../workbench/v1/labels';
-import { structureScope } from '../../../workbench/v1/structure-scope';
+import { editablePortName, portDisplayName, portTypeLabels } from '../../../workbench/v1/labels';
+import { createPathNames, structureScope } from '../../../workbench/v1/structure-scope';
 import { useState } from 'react';
 import type { PathResult } from '../../../engine/v1/path-resolver';
 import type { SignalGraph } from '../../../engine/v1/signal-graph';
@@ -69,10 +69,12 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
     || (selected && (selected.kind !== 'module' || !selected.physicalEnclosure)));
   const sharedLocations = structureScope(graph.instances, module.id);
   const depth = { value: visibleDepth, max: maxDepth, set: expandTo };
+  const { showName } = createPathNames(graph.instances);
   const ports: LocalPort[] = module.instances.flatMap(instance => {
-    const name = store.resolveInstance([...scope, instance.id])?.instance?.name ?? instance.name;
-    return definitions.get(instance.definitionId)!.ports.map(port => ({
-      ref: { instanceId: instance.id, portId: port.id }, port, label: `${name} / ${portDisplayName(port, true)} · ${portTypeLabels[port.type]}`,
+    const name = showName([...scope, instance.id]);
+    const ports = definitions.get(instance.definitionId)!.ports;
+    return ports.map(port => ({
+      ref: { instanceId: instance.id, portId: port.id }, port, label: `${name} / ${portDisplayName(port, true, ports)} · ${portTypeLabels[port.type]}`,
     }));
   });
 
@@ -171,7 +173,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
       setPreview({ definitionId, portId: String(new FormData(event.currentTarget).get('port')) });
     }}>
       <label>{heading}
-        <select name="port" required>{available.map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true)}</option>)}</select>
+        <select name="port" required>{available.map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true, available)}</option>)}</select>
       </label>
       <button type="submit" aria-label={`预览删除 · ${heading}`}>预览删除</button>
     </form>;
@@ -195,7 +197,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
       locations={structureScope(graph.instances, definition.id)} error={message}
       budget={action => { setPortAction(undefined); onPortBudget(action, { instancePath: path, portId }); }}
       rename={name => {
-        if (name === (port.name ?? '') || commit(draft => renamePort(draft, definition.id, portId, name))) setPortAction(undefined);
+        if (name === editablePortName(port) || commit(draft => renamePort(draft, definition.id, portId, name))) setPortAction(undefined);
       }}
       disconnect={definition.kind === 'module' && definition.portMappings?.some(mapping => mapping.portId === portId) ? () => {
         setPortAction(undefined);

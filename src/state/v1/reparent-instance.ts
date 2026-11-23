@@ -47,7 +47,7 @@ function applyMove(project: Project, sources: readonly InstancePath[], destinati
   const moved = from.instances.filter(instance => moving.has(instance.id));
   if (moved.length !== moving.size) throw new Error('待移动的实例已不存在。');
   const conflict = to.instances.find(instance => moving.has(instance.id));
-  if (conflict) throw new Error(`目标模块「${to.name}」已有实例 ID「${conflict.id}」。`);
+  if (conflict) throw new Error(`目标模块「${to.name}」已有实例「${conflict.name}」，与移动对象的内部引用冲突。`);
 
   // A single slot can occur many times through its parents. Another slot would add or lose unmatched occurrences.
   for (const module of project.moduleDefinitions) {

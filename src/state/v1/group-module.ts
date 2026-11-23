@@ -1,3 +1,5 @@
+import { portDisplayName } from '../../model/v1/display-names';
+import { moduleName } from './module-name';
 import { resolveHierarchy } from '../../engine/v1/hierarchy';
 import type { ParameterDefinition, ParameterMapping } from '../../model/v1/parameters';
 import type { CableBundle, Connection, LocalEndpointRef } from '../../model/v1/topology';
@@ -28,8 +30,7 @@ export function groupModule(project: Project, paths: readonly InstancePath[], na
   const portMappings: PortMapping[] = [];
   const exposed = new Map<string, string>();
   const portIds = new Set<string>();
-  const groupName = name.trim();
-  if (!groupName) throw new Error('模块名称不能为空。');
+  const groupName = moduleName(project, name);
 
   function throughBoundary(ref: LocalEndpointRef): LocalEndpointRef {
     const child = childById.get(ref.instanceId);
@@ -42,7 +43,7 @@ export function groupModule(project: Project, paths: readonly InstancePath[], na
       for (let suffix = 2; portIds.has(id); suffix++) id = `${port.id}_${suffix}`;
       portIds.add(id);
       exposed.set(key, id);
-      ports.push({ id, name: `${child.name} · ${port.name ?? port.id}`, type: port.type, direction: port.direction,
+      ports.push({ id, name: `${hierarchy.resolveInstance([...scope, child.id])?.instance?.name ?? child.name} · ${portDisplayName(port)}`, type: port.type, direction: port.direction,
         ...(port.channelIds && { channelIds: port.channelIds }) });
       portMappings.push({ portId: id, target: ref });
     }
@@ -60,7 +61,7 @@ export function groupModule(project: Project, paths: readonly InstancePath[], na
     } else {
       if (bundle.cores.some(core => core.a.endpoint && core.b.endpoint
         && selected.has(core.a.endpoint.instanceId) && selected.has(core.b.endpoint.instanceId))) {
-        throw new Error(`线束「${bundle.id}」同时包含组内纤芯和组外附件，无法整体移动。请选择线束的全部已接对象，或调整选区。`);
+        throw new Error(`线束 ${(parent.cableBundles ?? []).indexOf(bundle) + 1} 同时包含组内纤芯和组外附件，无法整体移动。请选择线束的全部已接对象，或调整选区。`);
       }
       parentBundles.push({ ...bundle, cores: bundle.cores.map(core => ({
         ...core,
