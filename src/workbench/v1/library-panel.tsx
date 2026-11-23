@@ -1,11 +1,11 @@
-import { definitionLabels, numberedName, portDisplayName, readableError } from '../../model/v1/display-names';
+import { definitionLabels, numberedNamesById, portDisplayName, readableError } from '../../model/v1/display-names';
 import { createPathNames } from './structure-scope';
 import { moduleName } from '../../state/v1/module-name';
 import { useState } from 'react';
 import { insertCanvasItem } from '../../editors/topology/v1/topology-layout-edits';
 import { PortDeletionDialog } from '../../editors/topology/v1/port-deletion-dialog';
 import { resolveHierarchy } from '../../engine/v1/hierarchy';
-import { builtInDefinitions, isBlankTemplate } from '../../library/v1/built-in';
+import { isBlankTemplate } from '../../library/v1/built-in';
 import { libraryDragType } from '../../library/v1/insert-library-item';
 import type { LibraryItem } from '../../library/v1/insert-library-item';
 import { previewTemplateUpdate } from '../../library/v1/project-snapshots';
@@ -15,10 +15,15 @@ import type { TemplateChanges } from '../../library/v1/project-snapshots';
 import type { ModuleDefinition, Project } from '../../model/v1/types';
 import type { ProjectStore, ProjectStoreSnapshot } from '../../state/v1/project-store';
 import './library-panel.css';
+import { libraryDefinitions } from '../../library/v1/user-library';
+import type { LibraryConfig } from '../../library/v1/user-library';
+import type { UserLibrary } from './use-library';
+import { LibraryManager } from './library-manager';
 
-type Props = { store: ProjectStore; state: ProjectStoreSnapshot; module: ModuleDefinition };
+type Props = { library: UserLibrary; store: ProjectStore; state: ProjectStoreSnapshot; module: ModuleDefinition };
 type Preview = {
   base: Project;
+  library: LibraryConfig;
   result: ReturnType<typeof previewTemplateUpdate>;
   paths: readonly string[];
 };
@@ -30,12 +35,10 @@ function describe(changes: TemplateChanges) {
   ].filter(Boolean).join('。');
 }
 
-function matchingTemplates(query: string) {
-  const search = query.trim().toLowerCase();
-  return builtInDefinitions.filter(item => item.name.toLowerCase().includes(search));
-}
-
-export function LibraryPanel({ store, state, module }: Props) {
+export function LibraryPanel({ library, store, state, module }: Props) {
+  const [manage, setManage] = useState(false);
+  const templates = libraryDefinitions(library.config);
+  const labels = numberedNamesById(templates);
   const { project, selection } = state;
   const [query, setQuery] = useState('');
   const [definitionKey, setDefinitionKey] = useState('');
@@ -44,9 +47,9 @@ export function LibraryPanel({ store, state, module }: Props) {
   const [unlink, setUnlink] = useState<string>();
   const [feedback, setFeedback] = useState<{ text: string; error?: boolean; snapshot?: Project }>();
   const definitions = new Map([...project.componentDefinitions, ...project.moduleDefinitions].map(item => [item.id, item]));
-  const installed = builtInDefinitions.filter(item => !isBlankTemplate(item.id) && definitions.has(item.id));
+  const installed = templates.filter(item => !isBlankTemplate(item.id) && definitions.has(item.id));
   const templateId = installed.find(item => item.id === updateId)?.id ?? installed[0]?.id ?? '';
-  const activePreview = preview?.base === project ? preview : undefined;
+  const activePreview = preview?.base === project && preview.library === library.config ? preview : undefined;
   const compatible = activePreview?.result.ok ? activePreview.result : undefined;
   const hasChanges = !!(compatible?.definitionChanges.length || compatible?.changes.added.length);
 
@@ -57,14 +60,14 @@ export function LibraryPanel({ store, state, module }: Props) {
   };
   function prepareUpdate() {
     if (!templateId) return;
-    const result = previewTemplateUpdate(project, builtInDefinitions, templateId);
+    const result = previewTemplateUpdate(project, templates, templateId);
     const paths: string[] = [];
     const occurrences = [...resolveHierarchy(project).walkInstances()];
     const { showPath } = createPathNames(occurrences);
     for (const occurrence of occurrences) {
       if (occurrence.definition.id === templateId) paths.push(showPath(occurrence.instancePath));
     }
-    setPreview({ base: project, result, paths });
+    setPreview({ base: project, library: library.config, result, paths });
     setFeedback(undefined);
   }
 
@@ -124,10 +127,11 @@ export function LibraryPanel({ store, state, module }: Props) {
       if (candidate.instances.some(instance => instance.definitionId === id)) unavailable.add(candidate.id);
     }
   }
-  const matches = matchingTemplates(query);
   const search = query.trim().toLowerCase();
+  const matches = templates.filter(d => !library.config.hidden.includes(d.id) && labels.get(d.id)!.toLowerCase().includes(search));
   const reusable = [...definitions.values()].filter(candidate => !unavailable.has(candidate.id)
     && candidate.id !== project.rootModuleDefinitionId && candidate.name.toLowerCase().includes(search));
+  const projectLabels = numberedNamesById(reusable);
   const namedOptions = [
     ...reusable.map(item => ({ key: 'project:' + item.id, item, source: 'project' as const })),
     ...matches.filter(item => isBlankTemplate(item.id) || !definitions.has(item.id))
@@ -142,7 +146,7 @@ export function LibraryPanel({ store, state, module }: Props) {
   function add(item: LibraryItem) {
     if (!item.name) { setFeedback({ error: true, text: '名称不能为空。' }); return; }
     const id = crypto.randomUUID();
-    const result = store.commit(draft => insertCanvasItem(draft, item, module.id, selection.modulePath, id));
+    const result = store.commit(draft => insertCanvasItem(draft, item, module.id, selection.modulePath, id, undefined, library.config));
     if (result.ok) store.selectInstance([...selection.modulePath, id]);
     setPreview(undefined);
     setFeedback(result.ok ? { text: `已添加「${store.resolveInstance([...selection.modulePath, id])?.instance?.name ?? item.name}」。`, snapshot: store.getSnapshot().project }
@@ -155,6 +159,8 @@ export function LibraryPanel({ store, state, module }: Props) {
     event.dataTransfer.setData(libraryDragType, JSON.stringify(item));
   }
   return <section className="panel v1-properties" aria-label="离线器件与模块库">
+    <button type="button" onClick={() => setManage(true)}>管理器件库</button>
+    {manage && <LibraryManager library={library} project={project} selected={selection.instancePath} close={() => setManage(false)} />}
     <label>搜索器件库<input type="search" value={query} onChange={event => setQuery(event.target.value)} /></label>
     <p className="v1-property-effective">添加到 · {store.resolveInstance(selection.modulePath)?.instance?.name ?? module.name}</p>
     {matches.length > 0 && <ul className="v1-library-items" aria-label="可拖入框图的器件与模块">
@@ -165,17 +171,18 @@ export function LibraryPanel({ store, state, module }: Props) {
         return <li key={template.id}><button type="button" draggable={!conflict} disabled={conflict}
           title={conflict ? '该模板与工程内已有的类型冲突'
             : definition ? `点击或拖入框图，沿用工程定义「${definition.name}」` : '点击添加到当前模块，或拖入框图'}
-          onClick={() => add(item)} onDragStart={event => drag(event, item)}>{template.name}</button></li>;
+          onClick={() => add(item)} onDragStart={event => drag(event, item)}>{labels.get(template.id)}</button></li>;
       })}
     </ul>}
     {!matches.length && !reusable.length && <p className="empty" role="status">没有匹配的器件或模块。</p>}
     {!!installed.length && <details><summary>高级库设置</summary>
+      <p>工程内已有独立快照，可预检并主动更新。</p>
       <label>工程内的模板<select value={templateId} onChange={event => selectTemplate(event.target.value)}>
-        {installed.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+        {installed.map(item => <option key={item.id} value={item.id}>{labels.get(item.id)}</option>)}
       </select></label>
       <button type="button" onClick={prepareUpdate}>预检从库更新</button>
     </details>}
-    {preview && !activePreview && <p role="status">工程已变化，请重新预检。</p>}
+    {preview && !activePreview && <p role="status">工程或器件库已变化，请重新预检。</p>}
     {activePreview && <div className="v1-property-effective" aria-label="模板更新预检">
       <h3>{activePreview.result.ok ? '预检通过' : '无法更新工程定义'}</h3>
       <p>更新目标「{target?.name}」。已存在的依赖定义沿用工程快照。</p>
@@ -216,7 +223,7 @@ export function LibraryPanel({ store, state, module }: Props) {
     {namedOption && <details><summary>按名称添加器件或模块</summary>
       <label>定义<select value={namedOption.key} onChange={event => setDefinitionKey(event.target.value)}>
         {namedOptions.map(({ key, item, source }) => <option key={key} value={key}>
-          {numberedName(namedOptions.filter(o => o.source === source).map(o => o.item), item, d => d.name)} · {source === 'project' ? '工程' : '器件库'}
+          {(source === 'project' ? projectLabels : labels).get(item.id)} · {source === 'project' ? '工程' : '器件库'}
         </option>)}
       </select></label>
       <form key={namedOption.key} onSubmit={event => {

@@ -7,37 +7,42 @@ import { resolveEmpiricalValue } from '../../../engine/v1/empirical-value';
 import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
 import type { ComponentDefinition, PortDefinition, PortDirection, PortType } from '../../../model/v1/types';
 import type { Transfer } from '../../../model/v1/device';
+import { CapacityField, readCapacity } from './dc-fields';
 import { AutosaveForm } from './autosave-form';
 import { ChannelField } from './channel-field';
 import { InputRatingField, ratingUnits, readInputRating } from './input-rating-field';
 import { OutputVoltageField, readOutputVoltage } from './output-voltage-field';
 import { channelId, channelList, choice, enumLabel, opticalKinds, QuantityField, readQuantity, rfKinds } from './value-fields';
 
+export function readPort(data: FormData, port: PortDefinition): PortDefinition {
+  const type = choice(data, 'type') as PortType;
+  const direction = choice(data, 'direction') as PortDirection;
+  // The form still contains the previous rating controls during a type or direction change.
+  const inputRating = type === port.type && direction === port.direction
+    ? readInputRating(data, ratingUnits(type, direction)) : undefined;
+  const channels = type === 'OPTICAL' ? channelList(data, 'channels') : undefined;
+  const previousChannels = port.channelIds;
+  const channelIds = channels?.length === previousChannels?.length
+    && channels?.every(channel => previousChannels?.includes(channel)) ? previousChannels : channels;
+  const previousRating = port.inputRating;
+  const sameRating = inputRating?.unit === previousRating?.unit
+    && inputRating?.min === previousRating?.min && inputRating?.max === previousRating?.max;
+  const name = choice(data, 'name').trim();
+  return {
+    ...port, name: name === editablePortName(port) ? port.name : name || undefined, type, direction, channelIds,
+    inputRating: sameRating ? previousRating : inputRating,
+    opticalEmitter: type === 'OPTICAL' && direction === 'out' && data.get('emitter') === 'yes'
+      ? { powerDbm: readQuantity(data, 'sourcePower', opticalKinds) } : undefined,
+    outputVoltageV: type === 'DC_POWER' && direction === 'out' ? readOutputVoltage(data) : undefined,
+  };
+}
+
 export function PortFields({ port, occurrence, save, remove }: {
   port: PortDefinition; occurrence: ResolvedInstance; save: (port: PortDefinition) => boolean; remove: () => void;
 }) {
   const version = JSON.stringify(port);
   return <AutosaveForm version={version} save={data => {
-    const type = choice(data, 'type') as PortType;
-    const direction = choice(data, 'direction') as PortDirection;
-    // The form still contains the previous rating controls during a type or direction change.
-    const inputRating = type === port.type && direction === port.direction
-      ? readInputRating(data, ratingUnits(type, direction)) : undefined;
-    const channels = type === 'OPTICAL' ? channelList(data, 'channels') : undefined;
-    const previousChannels = port.channelIds;
-    const channelIds = channels?.length === previousChannels?.length
-      && channels?.every(channel => previousChannels?.includes(channel)) ? previousChannels : channels;
-    const previousRating = port.inputRating;
-    const sameRating = inputRating?.unit === previousRating?.unit
-      && inputRating?.min === previousRating?.min && inputRating?.max === previousRating?.max;
-    const name = choice(data, 'name').trim();
-    const next: PortDefinition = {
-      ...port, name: name === editablePortName(port) ? port.name : name || undefined, type, direction, channelIds,
-      inputRating: sameRating ? previousRating : inputRating,
-      opticalEmitter: type === 'OPTICAL' && direction === 'out' && data.get('emitter') === 'yes'
-        ? { powerDbm: readQuantity(data, 'sourcePower', opticalKinds) } : undefined,
-      outputVoltageV: type === 'DC_POWER' && direction === 'out' ? readOutputVoltage(data) : undefined,
-    };
+    const next = readPort(data, port);
     const nextVersion = JSON.stringify(next);
     if (nextVersion !== version && save(next)) return nextVersion;
   }}>
@@ -97,7 +102,7 @@ function readReceiver(value: string) {
     : receiverModes.find(mode => mode === value);
 }
 
-function readTransfer(data: FormData, transfer: Transfer): Transfer {
+export function readTransfer(data: FormData, transfer: Transfer): Transfer {
   const ports = { fromPortId: choice(data, 'from'), toPortId: choice(data, 'to') };
   switch (transfer.kind) {
     case 'rf': return { ...transfer, ...ports, gainDb: readQuantity(data, 'gain', rfKinds), nfDb: readQuantity(data, 'nf', rfKinds) };
@@ -112,12 +117,13 @@ function readTransfer(data: FormData, transfer: Transfer): Transfer {
     }
     case 'wavelengthConversion': return { ...transfer, ...ports, fromChannelId: channelId(choice(data, 'fromChannel')),
       toChannelId: channelId(choice(data, 'toChannel')), gainDb: readQuantity(data, 'gain', opticalKinds) };
-    case 'dc': return { ...transfer, ...ports };
+    case 'dc': return data.has('capacityUnit') ? { ...transfer, ...ports,
+      efficiency: readQuantity(data, 'efficiency', ['fixed']), capacity: readCapacity(data) } : { ...transfer, ...ports };
   }
 }
 
-export function TransferFields({ transfer, definition, occurrences = [], save }: {
-  occurrences?: readonly ResolvedInstance[];
+export function TransferFields({ transfer, definition, occurrences = [], save, draft }: {
+  draft?: boolean; occurrences?: readonly ResolvedInstance[];
   transfer: Transfer; definition: ComponentDefinition; save: (read: () => Transfer) => void;
 }) {
   const receiver = transfer.kind === 'oe' ? transfer.receiver : undefined;
@@ -127,7 +133,7 @@ export function TransferFields({ transfer, definition, occurrences = [], save }:
     ? new Set(occurrences.filter(item => item.definition.id === definition.id).map(item => receiverMode(reference, item)))
     : new Set([reference]);
   const [mode] = modes;
-  const mixed = modes.size > 1;
+  const mixed = modes.size > 1 || (!!draft && typeof reference === 'object');
   const inputPorts = definition.ports.filter(port => port.direction === 'in');
   const outputPorts = definition.ports.filter(port => port.direction === 'out');
   const parameters = definition.parameters ?? [];
@@ -179,6 +185,11 @@ export function TransferFields({ transfer, definition, occurrences = [], save }:
     </>}
     {(transfer.kind === 'optical' || transfer.kind === 'wavelengthConversion') &&
       <QuantityField name="gain" label="增益" kinds={opticalKinds} value={transfer.gainDb} parameters={parameters} />}
-    <button type="submit">保存传输</button>
+    {draft && transfer.kind === 'dc' && <>
+      <QuantityField name="efficiency" label="转换效率" kinds={['fixed']} unit="ratio" minimum={Number.MIN_VALUE}
+        value={transfer.efficiency} parameters={parameters} />
+      <CapacityField capacity={transfer.capacity} parameters={parameters} />
+    </>}
+    {!draft && <button type="submit">保存传输</button>}
   </form>;
 }

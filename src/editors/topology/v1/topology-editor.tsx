@@ -28,7 +28,10 @@ import { CableForm, ConnectionForm, MappingForm, TopologyTool, field } from './w
 import type { LocalPort, UpdateWiring } from './wiring-forms';
 import './topology.css';
 
-export function TopologyEditor({ store, state, module, pathResult, graph, rename, expanded, setExpanded, budgetHighlight, onPortBudget, onDcBudget, onAddPort, newPort, onSelectObject, onSelectObjects, moveAcrossLevels, focusMoved, copyModule, pasteModule, copyNotice, fullPage, toggleFullPage, restoreView, placingModule, setPlacingModule, toolsHost, viewHost, topologyActive }: {
+import type { LibraryConfig } from '../../../library/v1/user-library';
+
+export function TopologyEditor({ library, store, state, module, pathResult, graph, rename, expanded, setExpanded, budgetHighlight, onPortBudget, onDcBudget, onAddPort, newPort, onSelectObject, onSelectObjects, moveAcrossLevels, focusMoved, copyModule, pasteModule, copyNotice, fullPage, toggleFullPage, restoreView, placingModule, setPlacingModule, toolsHost, viewHost, topologyActive }: {
+  library: LibraryConfig;
   store: ProjectStore; state: ProjectStoreSnapshot; module: ModuleDefinition; pathResult?: PathResult; graph: SignalGraph; rename: () => void;
   expanded: ReadonlySet<string>; setExpanded: (value: ReadonlySet<string>) => void;
   budgetHighlight?: BudgetHighlight;
@@ -96,7 +99,7 @@ export function TopologyEditor({ store, state, module, pathResult, graph, rename
 
   function add(item: LibraryItem, position?: { x: number; y: number }) {
     const id = crypto.randomUUID();
-    if (!commit(draft => insertCanvasItem(draft, item, module.id, scope, id, position))) return false;
+    if (!commit(draft => insertCanvasItem(draft, item, module.id, scope, id, position, library))) return false;
     setPlacingModule(false);
     store.selectInstance([...scope, id]);
     return true;

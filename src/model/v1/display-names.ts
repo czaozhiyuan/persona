@@ -27,6 +27,11 @@ export function numberedNames(names: readonly string[]): string[] {
   });
 }
 
+export function numberedNamesById(items: readonly { id: string; name: string }[]): Map<string, string> {
+  const labels = numberedNames(items.map(item => item.name));
+  return new Map(items.map((item, i) => [item.id, labels[i]]));
+}
+
 export function numberedName<T>(items: readonly T[], item: T, label: (item: T) => string): string {
   return numberedNames(items.map(label))[items.indexOf(item)] ?? label(item);
 }

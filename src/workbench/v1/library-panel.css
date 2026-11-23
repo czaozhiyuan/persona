@@ -7,3 +7,20 @@
 
 .v1-library-dimensions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .3rem; }
 .v1-library-dimensions input { padding-inline: .2rem; }
+
+.v1-side dialog.v1-library-manager {
+  margin: auto;
+  background: white;
+  box-sizing: border-box;
+  width: min(42rem, 94vw);
+  max-height: 88vh;
+  overflow: auto;
+  border: 1px solid #a8c4bf;
+  border-radius: .6rem;
+  padding: 1.25rem;
+}
+.v1-library-manager::backdrop { background: rgb(20 40 38 / 40%); }
+.v1-library-manager header { display: flex; align-items: center; justify-content: space-between; }
+.v1-library-manager > div, .v1-library-manager section { margin-block: .75rem; }
+.v1-library-manager input[type="checkbox"] { display: inline; width: auto; min-height: auto; margin-right: .5rem; }
+.v1-library-manager input[hidden] { display: none; }

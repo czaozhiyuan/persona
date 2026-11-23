@@ -24,6 +24,7 @@ import { projectFileName, sameTrial } from './budgets/trial-conditions';
 import { DcBudgetPanel } from './budgets/dc-budget-panel';
 import { LocalOpticalPanel } from './budgets/local-optical-panel';
 import type { LocalOpticalSettings } from './budgets/local-optical-panel';
+import { useLibrary } from './use-library';
 import { LibraryPanel } from './library-panel';
 import { LinkEditor } from './links/link-editor';
 import { createLinkOptions } from './links/link-options';
@@ -64,6 +65,7 @@ function closeWorkbenchMenu() {
 }
 
 export function Workbench({ store, loadExample, newProject }: Props) {
+  const library = useLibrary();
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const { project, selection, canUndo, canRedo } = state;
   const [error, setError] = useState('');
@@ -641,14 +643,14 @@ export function Workbench({ store, loadExample, newProject }: Props) {
               enter={enterModule} navigatePort={navigatePort} />
           </div>
           <div id="workbench-library" className="v1-side-scroll" hidden={leftTab !== 'library'}>
-            {active?.kind === 'module' && <LibraryPanel key={projectSession} store={store} state={state} module={active} />}
+            {active?.kind === 'module' && <LibraryPanel library={library} key={projectSession} store={store} state={state} module={active} />}
           </div>
         </aside>
         <main className="v1-workbench-main" data-budget={dock ? collapsed ? 'collapsed' : enlarged ? 'enlarged' : 'open' : undefined}>
           <div className="v1-canvas-page" inert={page !== 'canvas' || selection.view !== 'topology'}
             aria-hidden={page !== 'canvas' || selection.view !== 'topology'}>
             {active?.kind === 'module' &&
-              <TopologyEditor key={JSON.stringify(['topology', projectSession, selection.modulePath])}
+              <TopologyEditor library={library.config} key={JSON.stringify(['topology', projectSession, selection.modulePath])}
                 store={store} state={state} module={active} pathResult={pathResult} graph={linkOptions.graph} rename={renameSelection}
                 expanded={expandedCanvas} setExpanded={setExpandedCanvas} budgetHighlight={budgetHighlight}
                 onPortBudget={selectBudgetPort} onDcBudget={showDc} onAddPort={setPortTarget} newPort={newPort}
