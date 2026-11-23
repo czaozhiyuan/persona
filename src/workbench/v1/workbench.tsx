@@ -116,6 +116,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const budget = useMemo(() => createLinkBudget(project), [project]);
   const savedLink = project.namedLinks?.find(link => link.id === selection.linkId);
   const selectedLink = savedLink ?? draftLink;
+  const opticalLink = [selectedLink?.from, selectedLink?.to].every(endpoint =>
+    endpoint && linkOptions.graph.ports.get(signalPortKey(endpoint))?.definition.type === 'OPTICAL');
   const activeTrial = selectedLink ? linkInputs.get(selectedLink.id) ?? selectedLink.trial ?? defaultTrial : defaultTrial;
   const conditions = useMemo(() => {
     const ports = new Set(linkOptions.opticalSources.map(option => option.key));
@@ -736,7 +738,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
             toggle={() => setCollapsed(value => !value)} enlarge={() => setEnlarged(value => !value)}
             close={() => setDock(undefined)}>
             {dock === 'links' && <LinkEditor key={JSON.stringify([selectedLink?.id, !savedLink && draftLink?.from, !savedLink && draftLink?.to])} store={store} project={project}
-              options={linkOptions} draft={!savedLink && !!draftLink} selected={selectedLink} result={pathResult} budget={budget}
+              options={linkOptions} opticalLink={opticalLink} draft={!savedLink && !!draftLink} selected={selectedLink} result={pathResult} budget={budget}
               conditions={conditions} opticalResult={linkedOpticalResult} trialSaved={sameTrial(savedLink?.trial, conditions)}
               saveTrial={saveTrial} choose={chooseLink} locate={locateBudgetPort}
               setDraftChannel={channelId => setDraftLink(current => current && { ...current, channelId })}
@@ -763,7 +765,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
                   const step = pathResult?.trace?.steps.find(item => signalPortKey(item.port.ref) === key);
                   const channelId = step?.channelIds?.length === 1 ? step.channelIds[0]
                     : opticalResult?.stages.find(stage => signalPortKey(stage.endpoint) === key)?.channelId;
-                  const frequencyGHz = step && isRfFrequency(conditions.frequencyGHz)
+                  const frequencyGHz = step && !opticalLink && isRfFrequency(conditions.frequencyGHz)
                     ? conditions.frequencyGHz : undefined;
                   return { channelId, frequencyGHz };
                 }}

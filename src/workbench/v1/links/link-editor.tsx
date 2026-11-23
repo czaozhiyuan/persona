@@ -20,6 +20,7 @@ type Props = {
   store: ProjectStore;
   project: Project;
   options: LinkOptions;
+  opticalLink: boolean;
   selected?: NamedLink;
   result?: PathResult;
   budget: ReturnType<typeof createLinkBudget>;
@@ -70,14 +71,12 @@ function Diagnostics({ result, showEndpoint, locate }: {
 }
 
 export function LinkEditor({ store, project, options, selected, result, budget, conditions, setConditions,
-  draft, opticalResult, saveTrial, trialSaved, choose, locate, setDraftChannel }: Props) {
+  draft, opticalLink, opticalResult, saveTrial, trialSaved, choose, locate, setDraftChannel }: Props) {
   const [error, setError] = useState('');
   const [fromKey, setFromKey] = useState(selected?.from ? signalPortKey(selected.from) : '');
   const [toKey, setToKey] = useState(selected?.to ? signalPortKey(selected.to) : '');
   const domain = (key: string) => options.graph.ports.get(key)?.definition.type;
   const fromDomain = selected?.from && domain(signalPortKey(selected.from));
-  const toDomain = selected?.to && domain(signalPortKey(selected.to));
-  const opticalLink = fromDomain === 'OPTICAL' && toDomain === 'OPTICAL';
   const conversions = result?.trace?.conversions ?? [];
   const hasEo = conversions.some(step => step.kind === 'eo');
   const crossesOptical = useMemo(() => {
