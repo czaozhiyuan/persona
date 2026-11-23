@@ -1,4 +1,4 @@
-import { definitionLabels, numberedName, portDisplayName, readableError } from '../../model/v1/display-names';
+import { definitionLabels, numberedNamesById, portDisplayName, readableError } from '../../model/v1/display-names';
 import { createPathNames } from './structure-scope';
 import { moduleName } from '../../state/v1/module-name';
 import { useState } from 'react';
@@ -38,6 +38,7 @@ function describe(changes: TemplateChanges) {
 export function LibraryPanel({ library, store, state, module }: Props) {
   const [manage, setManage] = useState(false);
   const templates = libraryDefinitions(library.config);
+  const labels = numberedNamesById(templates);
   const { project, selection } = state;
   const [query, setQuery] = useState('');
   const [definitionKey, setDefinitionKey] = useState('');
@@ -127,9 +128,10 @@ export function LibraryPanel({ library, store, state, module }: Props) {
     }
   }
   const search = query.trim().toLowerCase();
-  const matches = templates.filter(d => !library.config.hidden.includes(d.id) && d.name.toLowerCase().includes(search));
+  const matches = templates.filter(d => !library.config.hidden.includes(d.id) && labels.get(d.id)!.toLowerCase().includes(search));
   const reusable = [...definitions.values()].filter(candidate => !unavailable.has(candidate.id)
     && candidate.id !== project.rootModuleDefinitionId && candidate.name.toLowerCase().includes(search));
+  const projectLabels = numberedNamesById(reusable);
   const namedOptions = [
     ...reusable.map(item => ({ key: 'project:' + item.id, item, source: 'project' as const })),
     ...matches.filter(item => isBlankTemplate(item.id) || !definitions.has(item.id))
@@ -169,14 +171,14 @@ export function LibraryPanel({ library, store, state, module }: Props) {
         return <li key={template.id}><button type="button" draggable={!conflict} disabled={conflict}
           title={conflict ? '该模板与工程内已有的类型冲突'
             : definition ? `点击或拖入框图，沿用工程定义「${definition.name}」` : '点击添加到当前模块，或拖入框图'}
-          onClick={() => add(item)} onDragStart={event => drag(event, item)}>{template.name}</button></li>;
+          onClick={() => add(item)} onDragStart={event => drag(event, item)}>{labels.get(template.id)}</button></li>;
       })}
     </ul>}
     {!matches.length && !reusable.length && <p className="empty" role="status">没有匹配的器件或模块。</p>}
     {!!installed.length && <details><summary>高级库设置</summary>
       <p>工程内已有独立快照，可预检并主动更新。</p>
       <label>工程内的模板<select value={templateId} onChange={event => selectTemplate(event.target.value)}>
-        {installed.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+        {installed.map(item => <option key={item.id} value={item.id}>{labels.get(item.id)}</option>)}
       </select></label>
       <button type="button" onClick={prepareUpdate}>预检从库更新</button>
     </details>}
@@ -221,7 +223,7 @@ export function LibraryPanel({ library, store, state, module }: Props) {
     {namedOption && <details><summary>按名称添加器件或模块</summary>
       <label>定义<select value={namedOption.key} onChange={event => setDefinitionKey(event.target.value)}>
         {namedOptions.map(({ key, item, source }) => <option key={key} value={key}>
-          {numberedName(namedOptions.filter(o => o.source === source).map(o => o.item), item, d => d.name)} · {source === 'project' ? '工程' : '器件库'}
+          {(source === 'project' ? projectLabels : labels).get(item.id)} · {source === 'project' ? '工程' : '器件库'}
         </option>)}
       </select></label>
       <form key={namedOption.key} onSubmit={event => {

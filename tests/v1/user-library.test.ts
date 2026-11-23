@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { resolveHierarchy } from '../../src/engine/v1/hierarchy';
+import { numberedNamesById } from '../../src/model/v1/display-names';
 import { blankModuleId } from '../../src/library/v1/built-in';
 import { insertLibraryItem } from '../../src/library/v1/insert-library-item';
 import { captureInstance, factory, factoryLibrary, libraryDefinitions, parseLibrary, removeDefinition, restoreDefinition, saveDefinition, validateLibrary } from '../../src/library/v1/user-library';
@@ -49,6 +50,15 @@ test('snapshot of a mapped occurrence materializes effective defaults and clones
   assert.equal(serializeProjectJson(project), before);
   assert.throws(() => removeDefinition(config, dependency.id), /引用/);
   assert.throws(() => captureInstance(project, [], true), /独立设置/);
+});
+
+test('editing a same-name template preserves its display number and literal suffixes', () => {
+  const templates = ['U2T PD', 'U2T PD', 'U2T PD（1）'].map((name, index) => ({ ...gain, id: 'pd-' + index, name }));
+  const config = templates.reduce(saveDefinition, factoryLibrary());
+  const edited = saveDefinition(config, { ...templates[0], ports: templates[0].ports.map(p => ({ ...p, name: 'PD ' + p.direction })) });
+  const labels = numberedNamesById(libraryDefinitions(edited));
+  assert.deepEqual(templates.map(d => labels.get(d.id)), ['U2T PD（2）', 'U2T PD（3）', 'U2T PD（1）']);
+  assert.deepEqual(edited.custom.map(d => d.id), templates.map(d => d.id));
 });
 
 test('invalid files fail before replacing the effective library', () => {

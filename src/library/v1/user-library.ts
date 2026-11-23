@@ -70,7 +70,9 @@ export function parseLibrary(source: string): LibraryConfig {
 
 export function saveDefinition(config: LibraryConfig, definition: LibraryDefinition): LibraryConfig {
   const list = factory.has(definition.id) ? 'overrides' : 'custom';
-  return { ...config, [list]: [...config[list].filter(d => d.id !== definition.id), definition] };
+  const entries = config[list];
+  const exists = entries.some(d => d.id === definition.id);
+  return { ...config, [list]: exists ? entries.map(d => d.id === definition.id ? definition : d) : [...entries, definition] };
 }
 
 export function removeDefinition(config: LibraryConfig, id: string): LibraryConfig {

@@ -4,6 +4,7 @@ import { captureInstance, factory, factoryLibrary, libraryDefinitions, parseLibr
 import type { LibraryDefinition } from '../../library/v1/project-snapshots';
 import type { InstancePath, Project } from '../../model/v1/types';
 import { projectErrorMessage } from '../../storage/v1/project-json';
+import { numberedNamesById } from '../../model/v1/display-names';
 import { createPathNames } from './structure-scope';
 import type { UserLibrary } from './use-library';
 import { TemplateEditor } from './template-editor';
@@ -13,6 +14,7 @@ export function LibraryManager({ library, project, selected, close }: {
 }) {
   const { config, replace } = library;
   const definitions = libraryDefinitions(config);
+  const labels = numberedNamesById(definitions);
   const [selectedId, select] = useState(definitions[0]?.id);
   const item = definitions.find(d => d.id === selectedId) ?? definitions[0];
   const [draft, edit] = useState<LibraryDefinition[]>();
@@ -33,7 +35,7 @@ export function LibraryManager({ library, project, selected, close }: {
   }
   return <dialog className="v1-library-manager v1-properties" aria-label="管理器件库"
     ref={node => { if (node && !node.open) node.showModal(); }} onCancel={close}>
-    <header><h2>管理器件库</h2><button type="button" onClick={close}>关闭</button></header>
+    <header><h2>{draft && labels.has(draft[0].id) ? '编辑模板 · ' + labels.get(draft[0].id) : '管理器件库'}</h2><button type="button" onClick={close}>关闭</button></header>
     {draft ? <TemplateEditor key={draft[0].id} initial={draft[0]} hidden={config.hidden} definitions={[...definitions, ...draft.slice(1)]}
       cancel={() => { edit(undefined); report(''); }} report={report} save={definition => run(() => {
         replace([definition, ...draft.slice(1)].reduce(saveDefinition, config));
@@ -44,13 +46,13 @@ export function LibraryManager({ library, project, selected, close }: {
         start([kind === 'module' ? { ...base, kind, instances: [] } : { ...base, kind }]);
       }}>{kind === 'component' ? '新建器件模板' : '新建模块模板'}</button>)}</div>
       <label>库模板<select value={item?.id ?? ''} onChange={e => { select(e.target.value); report(''); }}>
-        {definitions.map(d => <option key={d.id} value={d.id}>{d.name} · {status(d.id)}</option>)}
+        {definitions.map(d => <option key={d.id} value={d.id}>{labels.get(d.id)} · {status(d.id)}</option>)}
       </select></label>
       {item && <div className="actions">
         <button onClick={() => start([structuredClone(item)])}>编辑模板</button>
         <button onClick={() => start([{ ...structuredClone(item), id: crypto.randomUUID(), name: item.name + ' 副本' }])}>复制为新模板</button>
         {!config.hidden.includes(item.id) && <button onClick={() => run(() => {
-          if (!window.confirm('确认' + (factory.has(item.id) ? '隐藏' : '删除') + '「' + item.name + '」？工程快照将保留。')) return;
+          if (!window.confirm('确认' + (factory.has(item.id) ? '隐藏' : '删除') + '「' + labels.get(item.id) + '」？工程快照将保留。')) return;
           replace(removeDefinition(config, item.id)); report('已更新器件库。');
         })}>{factory.has(item.id) ? '隐藏模板' : '删除模板'}</button>}
         {factory.has(item.id) && <button onClick={() => run(() => {
@@ -65,13 +67,18 @@ export function LibraryManager({ library, project, selected, close }: {
         <label><input type="checkbox" checked={effective} onChange={e => setEffective(e.target.checked)} />将当前实例有效参数保存为模板默认值</label>
         <button onClick={() => run(() => start(captureInstance(project, JSON.parse(path), effective)))}>复制工程快照</button>
       </details>
+      <p role="status">{library.status}</p>
+      {library.conflict && <button onClick={() => {
+        if (window.confirm('重新载入会替换本页的器件库。请先导出要保留的本页修改，并确认文件已保存。继续载入？')) {
+          library.reload(); report('');
+        }
+      }}>重新载入浏览器中的库</button>}
       <details open><summary>库备份与恢复</summary>
-        <p>{library.status}</p>
         <div className="actions"><button onClick={() => run(() => {
           const url = URL.createObjectURL(new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' }));
           const link = document.createElement('a');
           link.href = url; link.download = 'persona-library.json'; link.click();
-          setTimeout(() => URL.revokeObjectURL(url), 1000); library.markExported();
+          setTimeout(() => URL.revokeObjectURL(url), 1000); library.markDownloadRequested();
         })}>导出器件库 JSON</button>
         <button onClick={() => file.current?.click()}>导入器件库 JSON</button>
         <input type="file" hidden ref={file} accept=".json,application/json" onChange={async e => {
@@ -89,7 +96,7 @@ export function LibraryManager({ library, project, selected, close }: {
             replace(factoryLibrary(), true); report('已恢复全部默认库。');
           }
         })}>恢复全部默认库</button></div>
-        <p>{library.exported ? '当前库已导出 JSON。' : '当前库尚未导出 JSON。'}</p>
+        <p>{library.downloadRequested ? '已请求下载当前库 JSON，请确认文件已保存。' : '尚未请求下载当前库 JSON。'}</p>
       </details>
     </>}
     {message && <p role="status">{message}</p>}

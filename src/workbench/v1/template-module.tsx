@@ -1,3 +1,4 @@
+import { numberedNamesById } from '../../model/v1/display-names';
 import { useState } from 'react';
 import type { LibraryDefinition } from '../../library/v1/project-snapshots';
 import type { ModuleDefinition } from '../../model/v1/types';
@@ -7,6 +8,7 @@ import { portDisplayName } from './labels';
 export function TemplateModule({ module, definitions, hidden, change }: {
   module: ModuleDefinition; definitions: LibraryDefinition[]; hidden: readonly string[]; change: (module: ModuleDefinition) => void;
 }) {
+  const labels = numberedNamesById(definitions);
   const available = definitions.filter(d => d.id !== module.id && !hidden.includes(d.id));
   const [choice, select] = useState('');
   const childDefinition = available.find(d => d.id === choice) ?? available[0];
@@ -33,7 +35,7 @@ export function TemplateModule({ module, definitions, hidden, change }: {
           })) })),
         })}>移除子实例</button></div>)}
       <label>子模板<select value={childDefinition?.id ?? ''} onChange={e => select(e.target.value)}>
-        {available.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></label>
+        {available.map(d => <option key={d.id} value={d.id}>{labels.get(d.id)}</option>)}</select></label>
       <button disabled={!childDefinition} onClick={() => change({ ...module, instances: [...module.instances, {
         id: crypto.randomUUID(), definitionId: childDefinition.id, name: childDefinition.name,
         switchStateId: childDefinition.kind === 'component' ? childDefinition.switchStates?.[0]?.id : undefined,
