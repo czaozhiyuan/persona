@@ -1,3 +1,4 @@
+import { AutosaveForm } from '../../../workbench/v1/properties/autosave-form';
 import { createPathNames } from '../../../workbench/v1/structure-scope';
 import { useMemo, useState } from 'react';
 import { resolveHierarchy } from '../../../engine/v1/hierarchy';
@@ -33,9 +34,9 @@ function PositionFields({ placement, item }: { placement: PhysicalPlacement; ite
       </select></label>
     </div>
     {!item.enclosure && <div className="v1-layout-size">
-      <label>宽 (mm)<input type="number" name="width" step="any" defaultValue={footprint?.widthMm}
+      <label>长 (mm)<input type="number" name="length" step="any" defaultValue={footprint?.widthMm}
         placeholder={item.suggested?.widthMm.toString()} /></label>
-      <label>深 (mm)<input type="number" name="depth" step="any" defaultValue={footprint?.depthMm}
+      <label>宽 (mm)<input type="number" name="width" step="any" defaultValue={footprint?.depthMm}
         placeholder={item.suggested?.depthMm.toString()} /></label>
     </div>}
   </>;
@@ -136,8 +137,11 @@ export function LayoutEditor({ store, state, onDcBudget }: {
       return;
     }
     const result = store.commit(draft => updatePhysicalPlacement(draft, placement));
-    if (result.ok) select(placement.instancePath);
-    else setError(result.message);
+    if (result.ok) {
+      select(placement.instancePath);
+      return JSON.stringify(placement);
+    }
+    setError(result.message);
   }
 
   function place(key: string, point: LayoutPoint = { x: gridStepMm, y: gridStepMm }) {
@@ -147,19 +151,23 @@ export function LayoutEditor({ store, state, onDcBudget }: {
   }
 
   function saveFields(data: FormData, placement: PhysicalPlacement, rotation?: number) {
+    const length = data.get('length');
     const width = data.get('width');
-    const depth = data.get('depth');
-    if (Boolean(width) !== Boolean(depth)) {
-      setError('请同时填写宽和深，或同时留空。');
+    if (Boolean(length) !== Boolean(width)) {
+      setError('请同时填写长和宽，或同时留空。');
+      return;
+    }
+    if (length && width && (Number(length) <= 0 || Number(width) <= 0)) {
+      setError('长和宽必须大于零。');
       return;
     }
     const next = {
       ...placement,
       xMm: Number(data.get('x')), yMm: Number(data.get('y')),
       rotationDeg: rotation ?? Number(data.get('rotation')),
-      footprint: width && depth ? { widthMm: Number(width), depthMm: Number(depth) } : undefined,
+      footprint: length && width ? { widthMm: Number(length), depthMm: Number(width) } : undefined,
     };
-    commitPlacement(next);
+    return commitPlacement(next);
   }
 
   return <section className="panel v1-layout" aria-labelledby="layout-title">
@@ -201,26 +209,23 @@ export function LayoutEditor({ store, state, onDcBudget }: {
             {objects.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}
           </select>
         </label>
-        {selected && <form className="v1-layout-placement" key={JSON.stringify(selected.placement)} onSubmit={event => {
-          event.preventDefault();
-          const form = event.currentTarget;
-          const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
-          const data = new FormData(form);
-          const rotation = submitter?.name === 'rotate'
-            ? normalizeRotation(Number(data.get('rotation')) + 90) : undefined;
-          saveFields(data, selected.placement, rotation);
-        }}>
+        {selected && <AutosaveForm className="v1-layout-placement" key={selected.key} version={JSON.stringify(selected.placement)}
+          save={data => saveFields(data, selected.placement)}>
           <p className="v1-layout-note">{selected.footprint
             ? `${selected.footprint.widthMm} × ${selected.footprint.depthMm} mm · ${selected.enclosure ? '机箱包络' : selected.placement.footprint ? '实例尺寸' : '定义参考尺寸'}`
             : '尺寸未设置'}</p>
           <PositionFields placement={selected.placement} item={selected} />
-          {selected.suggested && <p className="v1-layout-note">宽深留空时使用定义参考尺寸。</p>}
+          {selected.suggested && <p className="v1-layout-note">长和宽均留空时使用定义参考尺寸。</p>}
           <div className="actions">
-            <button type="submit">保存位置与尺寸</button>
-            <button type="submit" name="rotate">顺时针转 90°</button>
+            <button type="button" name="rotate" data-skip-autosave onClick={event => {
+              const form = event.currentTarget.form!;
+              if (!form.reportValidity()) return;
+              const data = new FormData(form);
+              saveFields(data, selected.placement, normalizeRotation(Number(data.get('rotation')) + 90));
+            }}>顺时针转 90°</button>
             {selected.enclosure && <button type="button" onClick={() => chooseEnclosure(selected.key)}>进入子机箱</button>}
           </div>
-        </form>}
+        </AutosaveForm>}
         {error && <p className="error" role="alert">{error}</p>}
         {issues.length > 0 && <div className="v1-layout-issues" aria-label="占位提示" aria-live="polite">
           <h3>占位提示</h3>
