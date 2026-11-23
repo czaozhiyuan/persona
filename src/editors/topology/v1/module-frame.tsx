@@ -8,7 +8,7 @@ import { boundaryPortSide, PortLabel, portSides } from './block-ports';
 export const framePortRow = 28;
 export const frameHeader = 52;
 export const framePadding = 28;
-export const framePortColumn = 134;
+export const framePortColumn = 45;
 
 export function frameInsets(ports: readonly PortDefinition[]) {
   const inputs = ports.filter(port => boundaryPortSide(port.direction) === 'left').length;
@@ -44,7 +44,7 @@ export function ModuleFrame({ id, width, height, name, ports, highlighted, newPo
       <strong title={name}>{name}</strong>
       {controls}
     </div>
-    {portSides.map(side => <div key={side} className={`v1-module-pins ${side}`}>
+    {portSides.map(side => <div key={side} className={`v1-module-pins ${side}`} style={{ width: framePortColumn }}>
       {ports.filter(port => boundaryPortSide(port.direction) === side).map(port => {
         const input = port.direction === 'in';
         return <div key={port.id} className={`v1-topology-port${highlighted.has(port.id) ? ' is-on-path' : ''}${port.id === newPortId ? ' is-new-port' : ''}`}

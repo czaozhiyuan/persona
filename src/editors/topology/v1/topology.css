@@ -87,11 +87,12 @@
 .v1-module-toggle { flex: none; min-height: 1.3rem; width: 1.3rem; padding: 0; line-height: 1; border: 1px solid #9ab6ad; border-radius: .25rem; background: #fbfdfc; color: #214d46; }
 .v1-inline-shared { margin-top: .1rem; padding: .08rem .25rem; border-radius: .2rem; background: #fff; color: #375951; font-size: .7rem; white-space: nowrap; }
 .v1-module-pins .react-flow__handle { pointer-events: auto; }
-.v1-module-pins { position: absolute; top: 52px; width: 116px; }
+.v1-module-pins { position: absolute; top: 52px; }
 .v1-module-pins.left { left: 0; }
 .v1-module-pins.right { right: 0; text-align: right; }
-.v1-module-pins .v1-topology-port { box-sizing: border-box; height: 28px; padding-inline: .65rem; }
-.v1-module-pins.right .v1-topology-port { justify-content: end; }
+.v1-module-pins .v1-topology-port { box-sizing: border-box; height: 28px; }
+.v1-module-pins.left .v1-topology-port { padding-left: .5rem; }
+.v1-module-pins.right .v1-topology-port { padding-right: .5rem; justify-content: end; }
 .v1-module-pins .v1-topology-port:not(.is-on-path):not(.is-new-port) .v1-port-label { background: var(--v1-frame-fill); }
 .v1-module-pins .v1-topology-port span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .v1-module-pins .v1-topology-port .react-flow__handle { transform: translate(-50%, -50%); right: auto; }
