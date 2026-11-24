@@ -17,7 +17,8 @@ export type ConnectionRef = {
   connectionId: string;
 };
 
-export type PortType = 'RF' | 'OPTICAL' | 'DC_POWER' | 'CONTROL';
+export type PortType = 'RF' | 'OPTICAL' | 'DC_POWER' | 'AC_POWER' | 'CONTROL';
+export function isPowerPort(type?: PortType) { return type === 'DC_POWER' || type === 'AC_POWER'; }
 export type PortDirection = 'in' | 'out';
 
 export type PortDefinition = {
@@ -28,7 +29,9 @@ export type PortDefinition = {
   channelIds?: readonly OpticalChannelId[];
   opticalEmitter?: OpticalEmitter;
   inputRating?: InputRating;
-  /** Declared voltage on a DC output. Supply and conversion roles are defined separately. */
+  /** Nominal input voltage, independent of limits and consumption. AC voltages are RMS. */
+  inputVoltageV?: DcValue;
+  /** Declared output voltage, independent of supply and converter roles. */
   outputVoltageV?: DcValue;
 };
 

@@ -180,8 +180,8 @@ export function calculateDcBudget(project: Project): DcBudget {
     let reason: string | undefined;
     if (node.load?.availability === 'available') knownW = node.load.value;
     else if (node.load?.availability === 'unavailable') reason = node.load.reason;
-    else if (node.port.definition.direction === 'in' && node.incoming.length && !node.outgoing.length) {
-      reason = '所接直流输入未声明负载，也没有后续供电路径。';
+    else if (node.port.definition.direction === 'in' && (node.incoming.length || node.instance.definition.kind === 'component') && !node.outgoing.length) {
+      reason = '直流输入未声明负载，也没有后续供电路径。';
       report(node, 'unknown_load', reason);
     }
     for (const edge of node.outgoing) {

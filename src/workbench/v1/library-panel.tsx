@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { definitionIcon, DeviceIcon } from '../../editors/topology/v1/device-icon';
 import { insertCanvasItem } from '../../editors/topology/v1/topology-layout-edits';
 import { PortDeletionDialog } from '../../editors/topology/v1/port-deletion-dialog';
-import { resolveHierarchy } from '../../engine/v1/hierarchy';
+import { readParameters, resolveHierarchy, withMappedVoltages } from '../../engine/v1/hierarchy';
 import { creationLabels, libraryGroups, templateMatches } from '../../library/v1/categories';
 import { isBlankTemplate } from '../../library/v1/built-in';
 import { libraryDragType } from '../../library/v1/insert-library-item';
@@ -57,7 +57,8 @@ export function LibraryPanel({ centerPlacement, library, store, state, module }:
   const target = definitions.get(templateId);
   const portName = (id: string) => {
     const port = target?.ports.find(p => p.id === id);
-    return port ? portDisplayName(port, false, target?.ports) : '未找到的端口';
+    return port && target ? portDisplayName(port, false, target.ports,
+      withMappedVoltages({ definition: target, instancePath: [], parameters: readParameters(target) }, definitions)) : '未找到的端口';
   };
   function prepareUpdate() {
     if (!templateId) return;

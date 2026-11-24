@@ -5,13 +5,15 @@ import { usesReceiverField } from './receiver-properties';
 import { receiverModes } from '../../../model/v1/device';
 import { resolveEmpiricalValue } from '../../../engine/v1/empirical-value';
 import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
+import { transferTypes } from '../../../model/v1/validate-device';
+import { isPowerPort } from '../../../model/v1/types';
 import type { ComponentDefinition, PortDefinition, PortDirection, PortType } from '../../../model/v1/types';
 import type { Transfer } from '../../../model/v1/device';
 import { CapacityField, readCapacity } from './dc-fields';
 import { AutosaveForm } from './autosave-form';
 import { ChannelField } from './channel-field';
 import { InputRatingField, ratingUnits, readInputRating } from './input-rating-field';
-import { OutputVoltageField, readOutputVoltage } from './output-voltage-field';
+import { PortVoltageField, readPortVoltage, voltageTitle, voltageParameters } from './port-voltage-field';
 import { channelId, channelList, choice, enumLabel, opticalKinds, QuantityField, readQuantity, rfKinds } from './value-fields';
 
 export function readPort(data: FormData, port: PortDefinition): PortDefinition {
@@ -27,13 +29,17 @@ export function readPort(data: FormData, port: PortDefinition): PortDefinition {
   const previousRating = port.inputRating;
   const sameRating = inputRating?.unit === previousRating?.unit
     && inputRating?.min === previousRating?.min && inputRating?.max === previousRating?.max;
-  const name = choice(data, 'name').trim();
+  const voltage = isPowerPort(type) && type === port.type && direction === port.direction ? readPortVoltage(data, direction) : undefined;
+  const editedName = choice(data, 'name').trim();
+  const name = isPowerPort(type) || isPowerPort(port.type) ? undefined
+    : editedName === editablePortName(port) ? port.name : editedName || undefined;
   return {
-    ...port, name: name === editablePortName(port) ? port.name : name || undefined, type, direction, channelIds,
+    ...port, name, type, direction, channelIds,
     inputRating: sameRating ? previousRating : inputRating,
     opticalEmitter: type === 'OPTICAL' && direction === 'out' && data.get('emitter') === 'yes'
       ? { powerDbm: readQuantity(data, 'sourcePower', opticalKinds) } : undefined,
-    outputVoltageV: type === 'DC_POWER' && direction === 'out' ? readOutputVoltage(data) : undefined,
+    inputVoltageV: direction === 'in' ? voltage : undefined,
+    outputVoltageV: direction === 'out' ? voltage : undefined,
   };
 }
 
@@ -54,7 +60,7 @@ function PortControls({ port, occurrence, remove }: { port: PortDefinition; occu
   const { type, direction } = port;
   const ratings = ratingUnits(type, direction);
   return <>
-    <label>显示名称<input name="name" defaultValue={editablePortName(port)} placeholder={portDisplayName(port)} /></label>
+    {!isPowerPort(type) && <label>显示名称<input name="name" defaultValue={editablePortName(port)} placeholder={portDisplayName(port)} /></label>}
     <label>端口类型<select name="type" value={type} onChange={() => { /* Saved by the form's change handler. */ }}>
       {Object.entries(portTypeLabels).map(([type, label]) => <option key={type} value={type}>{label}</option>)}
     </select></label>
@@ -70,7 +76,7 @@ function PortControls({ port, occurrence, remove }: { port: PortDefinition; occu
         value={port.opticalEmitter.powerDbm} parameters={occurrence.definition.parameters ?? []} />}
     </>}
     {ratings.length > 0 && <InputRatingField key={type} units={ratings} rating={port.inputRating} />}
-    {type === 'DC_POWER' && direction === 'out' && <PortVoltage port={port} occurrence={occurrence} />}
+    {isPowerPort(type) && <PortVoltage key={type + direction} port={port} occurrence={occurrence} />}
     <div className="actions">
       <button type="button" onClick={remove}>预览删除端口</button>
     </div>
@@ -78,22 +84,22 @@ function PortControls({ port, occurrence, remove }: { port: PortDefinition; occu
 }
 
 function PortVoltage({ port, occurrence }: { port: PortDefinition; occurrence: ResolvedInstance }) {
-  const value = port.outputVoltageV;
-  const parameters = occurrence.definition.parameters?.filter(parameter =>
-    parameter.kind === 'numeric' && parameter.unit === 'V' && parameter.valueKind === 'fixed'
-    && (parameter.range?.min ?? 0) > 0) ?? [];
+  const value = port.direction === 'in' ? port.inputVoltageV : port.outputVoltageV;
+  const parameters = voltageParameters(occurrence.definition.parameters);
   const parameterId = value?.kind === 'parameter' ? value.parameterId : '';
   const effective = parameterId ? resolveEmpiricalValue('V', value, {}, occurrence) : undefined;
+  const mapped = !value ? occurrence.mappedVoltages?.get(port.id) : undefined;
   return <>
-    {!!parameters.length && <label>输出电压来源
-      <select name="outputVoltageParameter" value={parameterId} onChange={() => { /* Saved by the form's change handler. */ }}>
+    {mapped !== undefined && <p className="v1-property-effective">内部端口电压 · {mapped} {port.type === 'AC_POWER' ? 'V RMS' : 'V'}</p>}
+    {!!parameters.length && <label>{port.direction === 'in' ? '标称输入电压来源' : '输出电压来源'}
+      <select name={port.direction === 'in' ? 'inputVoltageParameter' : 'outputVoltageParameter'} value={parameterId} onChange={() => { /* Saved by the form's change handler. */ }}>
         <option value="">固定值或留空</option>
         {parameters.map(parameter => <option key={parameter.id} value={parameter.id}>{parameter.name}</option>)}
       </select>
     </label>}
-    {effective ? <p className="v1-property-effective">输出电压 (V) · {
+    {effective ? <p className="v1-property-effective">{voltageTitle(port.type, port.direction)} · {
       effective.availability === 'available' ? effective.value : '未设置'
-    }</p> : <OutputVoltageField value={value?.kind === 'fixed' ? value.value : undefined} />}
+    }</p> : <PortVoltageField type={port.type} direction={port.direction} value={value?.kind === 'fixed' ? value.value : undefined} />}
   </>;
 }
 
@@ -129,7 +135,7 @@ export function readTransfer(data: FormData, transfer: Transfer): Transfer {
 }
 
 type TransferFieldProps = {
-  draft?: boolean; occurrences?: readonly ResolvedInstance[];
+  draft?: boolean; occurrences?: readonly ResolvedInstance[]; effective?: ResolvedInstance['parameters'];
   transfer: Transfer; definition: ComponentDefinition; save: (read: () => Transfer) => void | boolean;
 };
 
@@ -143,7 +149,7 @@ export function TransferFields(props: TransferFieldProps) {
   }} />;
 }
 
-function TransferForm({ transfer, definition, occurrences = [], save, draft, saveCurve }: TransferFieldProps & {
+function TransferForm({ transfer, definition, effective, occurrences = [], save, draft, saveCurve }: TransferFieldProps & {
   saveCurve: (next: Transfer) => void;
 }) {
   const receiver = transfer.kind === 'oe' ? transfer.receiver : undefined;
@@ -154,10 +160,9 @@ function TransferForm({ transfer, definition, occurrences = [], save, draft, sav
     : new Set([reference]);
   const [mode] = modes;
   const mixed = modes.size > 1 || (!!draft && typeof reference === 'object');
-  const inputType = transfer.kind === 'digitalTx' ? 'CONTROL' : transfer.kind === 'digitalRx' || transfer.kind === 'splitter' ? 'OPTICAL' : undefined;
-  const outputType = transfer.kind === 'digitalRx' ? 'CONTROL' : transfer.kind === 'digitalTx' || transfer.kind === 'splitter' ? 'OPTICAL' : undefined;
-  const inputPorts = definition.ports.filter(port => port.direction === 'in' && (!inputType || port.type === inputType));
-  const outputPorts = definition.ports.filter(port => port.direction === 'out' && (!outputType || port.type === outputType));
+  const [inputType, outputType] = transferTypes[transfer.kind];
+  const inputPorts = definition.ports.filter(port => port.direction === 'in' && port.type === inputType);
+  const outputPorts = definition.ports.filter(port => port.direction === 'out' && port.type === outputType);
   const parameters = definition.parameters ?? [];
   return <form onSubmit={event => {
     event.preventDefault();
@@ -165,10 +170,10 @@ function TransferForm({ transfer, definition, occurrences = [], save, draft, sav
     save(() => readTransfer(data, transfer));
   }}>
     <label>输入端口<select name="from" defaultValue={transfer.fromPortId} required>
-      {inputPorts.map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true, definition.ports)} · {portTypeLabels[port.type]}</option>)}
+      {inputPorts.map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true, definition.ports, effective && { parameters: effective })} · {portTypeLabels[port.type]}</option>)}
     </select></label>
     <label>输出端口<select name="to" defaultValue={transfer.toPortId} required>
-      {outputPorts.map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true, definition.ports)} · {portTypeLabels[port.type]}</option>)}
+      {outputPorts.map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true, definition.ports, effective && { parameters: effective })} · {portTypeLabels[port.type]}</option>)}
     </select></label>
     {(transfer.kind === 'optical' || transfer.kind === 'eo' || transfer.kind === 'dml' || transfer.kind === 'oe'
       || transfer.kind === 'digitalTx' || transfer.kind === 'digitalRx') &&
@@ -186,7 +191,7 @@ function TransferForm({ transfer, definition, occurrences = [], save, draft, sav
     </>}
     {transfer.kind === 'eo' && <label>供光输入<select name="supply" defaultValue={transfer.supplyPortId ?? ''}>
       <option value="">未设置</option>
-      {inputPorts.filter(port => port.type === 'OPTICAL').map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true, definition.ports)}</option>)}
+      {definition.ports.filter(port => port.direction === 'in' && port.type === 'OPTICAL').map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true, definition.ports)}</option>)}
     </select></label>}
     {transfer.kind === 'wavelengthConversion' && <div className="v1-property-pair">
       <ChannelField name="fromChannel" label="输入通道" value={transfer.fromChannelId} required />

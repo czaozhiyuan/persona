@@ -12,6 +12,8 @@ function numeric(id: string, name: string, unit: NumericParameter['unit'], range
 
 const parameter = (parameterId: string) => ({ kind: 'parameter' as const, parameterId });
 const rfPorts = [port('RF_IN', '射频输入', 'RF', 'in'), port('RF_OUT', '射频输出', 'RF', 'out')];
+const fiveVoltInput: PortDefinition = { id: 'DC_IN', type: 'DC_POWER', direction: 'in', inputVoltageV: { kind: 'fixed', value: 5 } };
+const poweredRfPorts = [...rfPorts, fiveVoltInput];
 const opticalPorts = [port('OPT_IN', '光输入', 'OPTICAL', 'in'), port('OPT_OUT', '光输出', 'OPTICAL', 'out')];
 const dcPorts = [port('DC_IN', '直流输入', 'DC_POWER', 'in'), port('DC_OUT', '直流输出', 'DC_POWER', 'out')];
 const gain = numeric('gain', '增益', 'dB');
@@ -30,28 +32,28 @@ export const isBlankTemplate = (id: string) => id === blankComponentId || id ===
 
 export const builtInDefinitions = [
   {
-    kind: 'component', id: 'library-rf-gain', iconKey: 'amplifier', name: '射频增益器件（示例）', ports: rfPorts,
+    kind: 'component', id: 'library-rf-gain', iconKey: 'amplifier', name: '射频增益器件（示例）', ports: poweredRfPorts,
     parameters: [{ ...gain, defaultValue: { kind: 'fixed', value: 6 } }],
     transfers: [{ kind: 'rf', fromPortId: 'RF_IN', toPortId: 'RF_OUT', gainDb: parameter('gain') }],
   },
   {
     kind: 'component', id: 'library-optical-source', iconKey: 'multiWavelengthSource', name: '双波长光源', ports: [
-      { id: 'OPT_OUT', name: '光输出', type: 'OPTICAL', direction: 'out', opticalEmitter: emitter, channelIds: ['DWDM_CH28', 'DWDM_CH30'] },
+      { id: 'OPT_OUT', name: '光输出', type: 'OPTICAL', direction: 'out', opticalEmitter: emitter, channelIds: ['DWDM_CH28', 'DWDM_CH30'] }, fiveVoltInput,
     ], parameters: [laserPower],
   },
   {
-    kind: 'module', id: 'library-rf-stage', name: '射频增益模块（示例）', ports: rfPorts, parameters: [gain],
+    kind: 'module', id: 'library-rf-stage', name: '射频增益模块（示例）', ports: poweredRfPorts, parameters: [gain],
     instances: [{ id: 'amplifier', name: '内部增益器件', definitionId: 'library-rf-gain' }],
-    portMappings: rfPorts.map(port => ({ portId: port.id, target: { instanceId: 'amplifier', portId: port.id } })),
+    portMappings: poweredRfPorts.map(port => ({ portId: port.id, target: { instanceId: 'amplifier', portId: port.id } })),
     parameterMappings: [{ parameterId: 'gain', target: { instanceId: 'amplifier', parameterId: 'gain' } }],
   },
   { kind: 'component', id: blankComponentId, name: '空白器件', ports: [] },
   { kind: 'module', id: blankModuleId, name: '空白模块', ports: [], instances: [] },
   { kind: 'module', id: blankEnclosureId, name: '空机箱', ports: [], instances: [],
     physicalEnclosure: { widthMm: 440, depthMm: 350, heightMm: 44.45 } },
-  { kind: 'component', id: 'library-pcb', iconKey: 'controlCircuit', name: '控制电路', ports: [] },
+  { kind: 'component', id: 'library-pcb', iconKey: 'controlCircuit', name: '控制电路', ports: [fiveVoltInput] },
   { kind: 'component', id: 'library-laser', iconKey: 'laser', name: '激光器', parameters: [laserPower],
-    ports: [{ ...port('OPT_OUT', '光输出', 'OPTICAL', 'out'), opticalEmitter: emitter }] },
+    ports: [{ ...port('OPT_OUT', '光输出', 'OPTICAL', 'out'), opticalEmitter: emitter }, fiveVoltInput] },
   {
     kind: 'component', id: 'library-splitter', iconKey: 'splitter', name: '光分路器（1×2）',
     ports: [opticalPorts[0], port('OPT_OUT_1', '光输出 1', 'OPTICAL', 'out'), port('OPT_OUT_2', '光输出 2', 'OPTICAL', 'out')],
@@ -65,7 +67,7 @@ export const builtInDefinitions = [
   {
     kind: 'component', id: 'library-sfp', iconKey: 'sfp', name: '数字光模块（SFP）',
     ports: [port('DATA_TX_IN', '数字发送输入', 'CONTROL', 'in'), { ...port('OPT_TX_OUT', '发送光输出', 'OPTICAL', 'out'), opticalEmitter: emitter },
-      port('OPT_RX_IN', '接收光输入', 'OPTICAL', 'in'), port('DATA_RX_OUT', '数字接收输出', 'CONTROL', 'out')],
+      port('OPT_RX_IN', '接收光输入', 'OPTICAL', 'in'), port('DATA_RX_OUT', '数字接收输出', 'CONTROL', 'out'), fiveVoltInput],
     parameters: [ { ...laserPower, name: '发射光功率' },
       { ...numeric('sensitivity', '接收灵敏度', 'dBm'), valueKind: 'opticalValue' },
       { ...numeric('overload', '接收过载上限（可选）', 'dBm'), valueKind: 'opticalValue' } ],
@@ -75,14 +77,14 @@ export const builtInDefinitions = [
   },
   {
     kind: 'component', id: 'library-dml', iconKey: 'dml', name: '直调激光器（DML）',
-    ports: [rfPorts[0], { ...opticalPorts[1], opticalEmitter: emitter }],
+    ports: [rfPorts[0], { ...opticalPorts[1], opticalEmitter: emitter }, fiveVoltInput],
     parameters: [{ ...laserPower, name: '平均输出信号光功率 P0' },
       { ...numeric('slope', '加载 50 Ω 的直调系数 K(f)', 'W/V', { min: 0 }), valueKind: 'rfValue' }],
     transfers: [{ kind: 'dml', fromPortId: 'RF_IN', toPortId: 'OPT_OUT', modulationSlope: parameter('slope') }],
   },
   {
     kind: 'component', id: 'library-mzm', iconKey: 'mzm', name: '光调制器（MZM）',
-    ports: [port('RF_IN', '射频输入', 'RF', 'in'), port('LASER_IN', '激光输入', 'OPTICAL', 'in'), port('OPT_OUT', '光输出', 'OPTICAL', 'out')],
+    ports: [port('RF_IN', '射频输入', 'RF', 'in'), port('LASER_IN', '激光输入', 'OPTICAL', 'in'), port('OPT_OUT', '光输出', 'OPTICAL', 'out'), fiveVoltInput],
     parameters: [{ ...numeric('intrinsicLoss', '最大透过状态光插损', 'dB', { min: 0 }), valueKind: 'opticalValue' },
       { ...numeric('vPi', 'RF 半波电压 Vπ（固定值按平坦响应）', 'V', { min: Number.MIN_VALUE }), valueKind: 'rfValue' }],
     transfers: [{ kind: 'eo', fromPortId: 'RF_IN', toPortId: 'OPT_OUT', supplyPortId: 'LASER_IN',
@@ -90,7 +92,7 @@ export const builtInDefinitions = [
   },
   {
     kind: 'component', id: 'library-pd', iconKey: 'photodiode', name: '光电探测器（PD）',
-    ports: [port('OPT_IN', '光输入', 'OPTICAL', 'in'), port('RF_OUT', '射频输出', 'RF', 'out')],
+    ports: [port('OPT_IN', '光输入', 'OPTICAL', 'in'), port('RF_OUT', '射频输出', 'RF', 'out'), fiveVoltInput],
     parameters: [{ id: 'receiver', name: '外接 50 Ω 时的接收结构', kind: 'enum', options: receiverModes, overridable: true },
       { ...numeric('responsivity', '响应度', 'A/W', { min: 0 }), valueKind: 'opticalValue' }, { ...numeric('response', '无源 PD 归一化幅频响应（缺省平坦）', 'dB'), valueKind: 'rfValue' },
       { ...numeric('loadedGain', '有源接收机加载转换增益', 'V/W'), valueKind: 'rfValue' }],
@@ -98,7 +100,7 @@ export const builtInDefinitions = [
       responsivity: parameter('responsivity'), responseDb: parameter('response'), loadedGain: parameter('loadedGain') }],
   },
   {
-    kind: 'component', id: 'library-optical-switch', iconKey: 'opticalSwitch', name: '光通断开关', ports: opticalPorts,
+    kind: 'component', id: 'library-optical-switch', iconKey: 'opticalSwitch', name: '光通断开关', ports: [...opticalPorts, fiveVoltInput],
     parameters: [attenuation],
     switchStates: [
       { id: 'pass', name: '导通', routes: [{ fromPortId: 'OPT_IN', toPortId: 'OPT_OUT', gainDb: parameter('gain') }] },
@@ -111,7 +113,7 @@ export const builtInDefinitions = [
     transfers: [{ kind: 'optical', fromPortId: 'OPT_IN', toPortId: 'OPT_OUT', gainDb: parameter('gain') }],
   },
   {
-    kind: 'component', id: 'library-rf-amplifier', iconKey: 'amplifier', name: '射频放大器', ports: rfPorts,
+    kind: 'component', id: 'library-rf-amplifier', iconKey: 'amplifier', name: '射频放大器', ports: poweredRfPorts,
     parameters: [gain, numeric('nf', '噪声系数', 'dB', { min: 0 })],
     transfers: [{ kind: 'rf', fromPortId: 'RF_IN', toPortId: 'RF_OUT', gainDb: parameter('gain'), nfDb: parameter('nf') }],
   },
@@ -121,7 +123,9 @@ export const builtInDefinitions = [
     transfers: [{ kind: 'rf', fromPortId: 'RF_IN', toPortId: 'RF_OUT', gainDb: parameter('gain') }],
   },
   {
-    kind: 'component', id: 'library-dc-supply', iconKey: 'dcSupply', name: '直流电源', ports: [{ ...dcPorts[1], outputVoltageV: parameter('voltage') }],
+    kind: 'component', id: 'library-dc-supply', iconKey: 'dcSupply', name: 'AC/DC 电源',
+    ports: [{ ...dcPorts[1], outputVoltageV: parameter('voltage') },
+      { id: 'AC_IN', type: 'AC_POWER', direction: 'in', inputVoltageV: { kind: 'fixed', value: 220 } }],
     parameters: [voltage, capacity],
     dcSupply: { portId: 'DC_OUT', capacity: { unit: 'W', value: parameter('capacity') } },
   },

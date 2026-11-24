@@ -153,7 +153,7 @@ test('DC validation catches efficiency and unit errors, and port deletion clears
       ...component, transfers: component.transfers?.map(transfer => transfer.kind === 'dc'
         ? { ...transfer, efficiency: fixed(efficiency) } : transfer),
     })) };
-    assert.throws(() => serializeProjectJson(invalid), /转换效率: 无效的直流参数值/);
+    assert.throws(() => serializeProjectJson(invalid), /转换效率: 无效的供电参数值/);
   }
   const wrongUnit: Project = { ...project, componentDefinitions: project.componentDefinitions.map(component =>
     component.id !== 'load' ? component : { ...component,
@@ -203,14 +203,14 @@ test('configured passive outputs need a real feed and cannot change a known upst
   assert.ok(calculateDcBudget(conflict).diagnostics.some(item => item.code === 'voltage_conflict'));
 });
 
-test('only DC output ports accept a finite positive voltage declaration', () => {
+test('output voltage declarations require a positive voltage on a power output', () => {
   const project = fixture();
   for (const [port, error] of [
-    [{ ...dc('OUT', 'out'), outputVoltageV: fixed(0) }, /输出电压: 无效的直流参数值/],
-    [{ ...dc('OUT', 'out'), outputVoltageV: fixed(-2) }, /输出电压: 无效的直流参数值/],
+    [{ ...dc('OUT', 'out'), outputVoltageV: fixed(0) }, /输出电压: 无效的供电参数值/],
+    [{ ...dc('OUT', 'out'), outputVoltageV: fixed(-2) }, /输出电压: 无效的供电参数值/],
     [{ ...dc('OUT', 'out'), outputVoltageV: fixed(Infinity) }, /应为有限数值/],
-    [{ ...dc('OUT', 'in'), outputVoltageV: fixed(5) }, /仅直流输出端口/],
-    [{ ...rf('out'), outputVoltageV: fixed(5) }, /仅直流输出端口/],
+    [{ ...dc('OUT', 'in'), outputVoltageV: fixed(5) }, /仅供电输出端口/],
+    [{ ...rf('out'), outputVoltageV: fixed(5) }, /仅供电输出端口/],
     [{ ...dc('OUT', 'out'), outputVoltageV: { kind: 'parameter', parameterId: 'missing' } }, /应引用单位为 V 的固定值参数/],
   ] as const) {
     assert.throws(() => serializeProjectJson({

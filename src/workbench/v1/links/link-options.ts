@@ -17,11 +17,12 @@ export const conversionKey = ({ instancePath, fromPortId, toPortId }: Conversion
 export function createLinkOptions(project: Project) {
   const { graph, resolveNamedLink } = createPathResolver(project);
   const { showPath, showName } = createPathNames(graph.instances);
-  const definitions = new Map(graph.instances.map(item => [JSON.stringify(item.instancePath), item.definition]));
+  const instances = new Map(graph.instances.map(item => [JSON.stringify(item.instancePath), item]));
   const showPort = (ref: EndpointRef) => {
-    const ports = definitions.get(JSON.stringify(ref.instancePath))?.ports;
+    const occurrence = instances.get(JSON.stringify(ref.instancePath));
+    const ports = occurrence?.definition.ports;
     const port = ports?.find(item => item.id === ref.portId);
-    return port ? portDisplayName(port, false, ports) : '未找到的端口';
+    return port ? portDisplayName(port, false, ports, occurrence) : '未找到的端口';
   };
   const showEndpoint = (ref: EndpointRef) => `${showPath(ref.instancePath)} / ${showPort(ref)}`;
   const endpoints: Option<EndpointRef>[] = [];

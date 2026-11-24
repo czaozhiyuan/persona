@@ -65,7 +65,8 @@ export function ConnectionForm({ module, ports, update }: { module: ModuleDefini
   </TopologyTool>;
 }
 
-export function MappingForm({ module, ports, connect }: {
+export function MappingForm({ module, ports, connect, labelContext }: {
+  labelContext?: import('../../../model/v1/display-names').PortLabelContext;
   module: ModuleDefinition; ports: readonly LocalPort[]; connect: (portId: string, target?: LocalEndpointRef) => void;
 }) {
   const [selected, setSelected] = useState('');
@@ -76,7 +77,7 @@ export function MappingForm({ module, ports, connect }: {
   return <TopologyTool title="连接到内部端口">
     <label>对外端口<select value={publicPort?.id ?? ''} onChange={event => setSelected(event.target.value)}>
       <option value="">请选择</option>
-      {module.ports.map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true, module.ports)}{module.portMappings?.some(item => item.portId === port.id) ? '' : '（开放）'}</option>)}
+      {module.ports.map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true, module.ports, labelContext)}{module.portMappings?.some(item => item.portId === port.id) ? '' : '（开放）'}</option>)}
     </select></label>
     {publicPort && <form key={JSON.stringify([selected, mapping])} onSubmit={event => {
       event.preventDefault();

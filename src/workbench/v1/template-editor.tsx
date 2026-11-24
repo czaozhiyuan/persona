@@ -1,3 +1,5 @@
+import { transferTypes } from '../../model/v1/validate-device';
+import { readParameters, withMappedVoltages } from '../../engine/v1/hierarchy';
 import { useRef, useState } from 'react';
 import type { LibraryDefinition } from '../../library/v1/project-snapshots';
 import type { Transfer } from '../../model/v1/device';
@@ -33,7 +35,8 @@ export function TemplateEditor({ initial, definitions, hidden, save, cancel, rep
   });
   const activeKind = availableKinds.some(([k]) => k === kind) ? kind : 'rf';
   const parameters = draft.parameters ?? [];
-  const occurrence = { definition: draft, instancePath: [], parameters: new Map() };
+  const byId = new Map(definitions.map(d => [d.id, d]));
+  const occurrence = withMappedVoltages({ definition: draft, instancePath: [], parameters: readParameters(draft) }, byId);
   function updatePort(port: PortDefinition) {
     edit(prev => ({ ...prev, ports: prev.ports.map(p => p.id === port.id ? port : p) }));
     return true;
@@ -81,7 +84,7 @@ export function TemplateEditor({ initial, definitions, hidden, save, cancel, rep
   return <div ref={body}>
     <label>模板名称<input value={draft.name} onChange={e => edit({ ...draft, name: e.target.value })} /></label>
     <section className="template-ports"><h3>端口</h3>{draft.ports.map(p => <details key={p.id}>
-      <summary>{portDisplayName(p, false, draft.ports)}</summary>
+      <summary>{portDisplayName(p, false, draft.ports, occurrence)}</summary>
       <PortFields port={p} occurrence={occurrence} save={updatePort} remove={() => edit({ ...draft,
         ports: draft.ports.filter(other => other.id !== p.id),
         ...(draft.kind === 'module' && { portMappings: draft.portMappings?.filter(m => m.portId !== p.id) }) })} />
@@ -93,14 +96,14 @@ export function TemplateEditor({ initial, definitions, hidden, save, cancel, rep
         remove={() => edit({ ...draft, parameters: parameters.filter(other => other.id !== p.id) })} />
     </details>)}<button onClick={() => edit({ ...draft, parameters: [...parameters, { id: crypto.randomUUID(), name: '新参数',
       kind: 'numeric', unit: 'dB', valueKind: 'fixed', overridable: true }] })}>添加参数</button></section>
-    {draft.kind === 'module' ? <TemplateModule module={draft} definitions={definitions} hidden={hidden} change={edit} /> : <section><h3>传输关系</h3>
+    {draft.kind === 'module' ? <TemplateModule occurrence={occurrence} module={draft} definitions={definitions} hidden={hidden} change={edit} /> : <section><h3>传输关系</h3>
       {rows.map(({ key, transfer }) => <details key={key} className="template-transfer" onChange={event => {
         const select = event.target;
         if (!(select instanceof HTMLSelectElement) || (select.name !== 'from' && select.name !== 'to')) return;
         const field = select.name === 'from' ? 'fromPortId' : 'toPortId';
         setRows(current => current.map(row => row.key === key ? { ...row, pair: { ...row.pair, [field]: select.value } } : row));
       }}><summary>{transferLabels[transfer.kind]}</summary>
-        <TransferFields draft definition={draft} transfer={transfer} save={() => {}} />
+        <TransferFields effective={occurrence.parameters} draft definition={draft} transfer={transfer} save={() => {}} />
         <button onClick={() => setRows(rows.filter(row => row.key !== key))}>删除传输</button>
       </details>)}
       <label>传输类型<select value={activeKind} onChange={e => setKind(e.target.value as Transfer['kind'])}>
@@ -109,8 +112,8 @@ export function TemplateEditor({ initial, definitions, hidden, save, cancel, rep
         const kind = activeKind;
         const pair = digitalPairs.find(pair => pair.kind === kind);
         const ports = pair ? { fromPortId: pair.fromPortId, toPortId: pair.toPortId } : {
-          fromPortId: (kind === 'splitter' ? splitInput : draft.ports.find(p => p.direction === 'in'))?.id ?? '',
-          toPortId: (kind === 'splitter' ? splitOutputs[0] : draft.ports.find(p => p.direction === 'out'))?.id ?? '',
+          fromPortId: draft.ports.find(p => p.direction === 'in' && p.type === transferTypes[kind][0])?.id ?? '',
+          toPortId: draft.ports.find(p => p.direction === 'out' && p.type === transferTypes[kind][1])?.id ?? '',
         };
         const transfer: Transfer = kind === 'wavelengthConversion' ? { kind, ...ports, fromChannelId: 'CWDM_1511', toChannelId: 'CWDM_1531' }
           : kind === 'splitter' ? { kind, ...ports, secondPortId: splitOutputs[1].id }

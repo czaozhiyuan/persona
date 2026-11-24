@@ -1,10 +1,11 @@
 import type { InputRating } from '../../../model/v1/device';
+import { isPowerPort } from '../../../model/v1/types';
 import type { PortDirection, PortType } from '../../../model/v1/types';
 import { choice, numberField } from './value-fields';
 
 export function ratingUnits(type: PortType, direction: PortDirection): readonly InputRating['unit'][] {
   if (direction !== 'in' || type === 'CONTROL') return [];
-  return type === 'DC_POWER' ? ['V', 'A', 'W'] : ['dBm'];
+  return isPowerPort(type) ? ['V', 'A', 'W'] : ['dBm'];
 }
 
 export function readInputRating(data: FormData, units: readonly InputRating['unit'][]): InputRating | undefined {
