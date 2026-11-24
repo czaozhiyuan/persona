@@ -42,7 +42,8 @@ type DefinitionIdentity = {
 export type PhysicalFootprint = { widthMm: number; depthMm: number };
 
 export const componentIconKeys = [
-  'laser', 'mzm', 'photodiode', 'amplifier', 'attenuator', 'opticalSwitch', 'dcSupply', 'dcConverter', 'pcb',
+  'laser', 'dml', 'multiWavelengthSource', 'mzm', 'photodiode', 'opticalSwitch', 'opticalAttenuator',
+  'amplifier', 'rfAttenuator', 'dcSupply', 'dcConverter', 'pcb',
 ] as const;
 export type ComponentIconKey = typeof componentIconKeys[number];
 

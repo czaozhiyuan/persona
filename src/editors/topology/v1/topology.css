@@ -27,9 +27,7 @@
   background: #e7f7ee; color: #155a49; font-size: .8rem; overflow-wrap: anywhere;
 }
 .v1-tree-drop-notice[data-blocked="true"] { background: #fff1ef; color: #8c352b; border-color: #a34e37; }
-.v1-hierarchy-icon { width: .45rem; height: .45rem; border-radius: 50%; background: #327970; }
 .v1-hierarchy-tree .v1-tree-port button { padding-inline-start: 1.4rem; color: #42605f; text-align: left; }
-.v1-hierarchy-icon.module { width: .55rem; height: .55rem; border-radius: .13rem; background: #fff; border: 1px solid #327970; }
 .v1-topology-message {
   position: absolute; z-index: 2; left: 14px; margin: 0; padding: .4rem .6rem;
   max-width: calc(100% - 180px); border-radius: .35rem; pointer-events: none;
@@ -79,9 +77,10 @@
 .react-flow__node-moduleFrame .v1-module-pins { z-index: 3; }
 .v1-module-frame.is-selected { outline: 3px solid #267e73; }
 .v1-frame-title, .v1-block-title { display: flex; align-items: start; gap: .35rem; }
-.v1-device-icon { flex: none; width: .875rem; height: .875rem; margin-top: .23rem; color: #4e6965; pointer-events: none; }
+.v1-device-icon { flex: none; color: #4e6965; pointer-events: none; }
 /* Use the card's side padding for the icon so the name retains its original wrapping width. */
 .v1-block-title { margin-inline: -.65rem -.35rem; }
+.v1-block-title .v1-device-icon, .v1-frame-title .v1-device-icon { margin-top: .1rem; }
 .v1-block-title .v1-device-icon { margin-inline-end: -.225rem; }
 .v1-frame-title { position: relative; z-index: 1; margin: .6rem 1rem; width: fit-content; max-width: calc(100% - 2rem); pointer-events: auto; }
 .react-flow__node.draggable .v1-frame-title {

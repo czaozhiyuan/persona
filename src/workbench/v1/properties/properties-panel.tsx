@@ -16,6 +16,7 @@ import type { ReceiverQuery } from './receiver-properties';
 import { AutosaveForm } from './autosave-form';
 import { PortFields, TransferFields } from './device-fields';
 import { choice, formatValue, numberField, ParameterField, readNumericParameter, readParameter, textField } from './value-fields';
+import { definitionIcon, DeviceIcon } from '../../../editors/topology/v1/device-icon';
 
 type Definition = ComponentDefinition | ModuleDefinition;
 const sourceLabels = { default: '定义默认值', override: '当前实例单独设置', mapped: '由上级设置' };
@@ -121,7 +122,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
     }} /></label>;
 
   return <section className="panel v1-properties" aria-labelledby="v1-properties-heading">
-    <h2 id="v1-properties-heading">对象属性 · {name}</h2>
+    <h2 id="v1-properties-heading"><DeviceIcon iconKey={definitionIcon(definition)} /><span>对象属性 · {name}</span></h2>
     {(onMoveUp || onAddInside || onDcBudget) && <div className="v1-context-actions">
       {onAddInside && <button type="button" onClick={() => onAddInside(instancePath)}>添加内部对象 · {name}</button>}
       {onMoveUp && <button type="button" onClick={() => onMoveUp(instancePath)}>移到上一级</button>}

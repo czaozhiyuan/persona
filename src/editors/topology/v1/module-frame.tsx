@@ -5,7 +5,7 @@ import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 import type { PortDefinition } from '../../../model/v1/types';
 import { boundaryPortSide, PortLabel, portSides } from './block-ports';
-import { DeviceIcon } from './device-icon';
+import { DeviceIcon, type DeviceIconKey } from './device-icon';
 export const framePortRow = 28;
 export const frameHeader = 52;
 export const framePadding = 28;
@@ -21,7 +21,8 @@ export function frameInsets(ports: readonly PortDefinition[]) {
   };
 }
 
-export function ModuleFrame({ metricTitle, portValue, id, width, height, name, ports, highlighted, newPortId, handleId, editable = false, outerHandles = false, selected = false, wireState, controls, openPort }: {
+export function ModuleFrame({ iconKey, metricTitle, portValue, id, width, height, name, ports, highlighted, newPortId, handleId, editable = false, outerHandles = false, selected = false, wireState, controls, openPort }: {
+  iconKey: DeviceIconKey;
   id: string;
   width?: number;
   height?: number;
@@ -44,7 +45,7 @@ export function ModuleFrame({ metricTitle, portValue, id, width, height, name, p
 
   return <div className={`v1-module-frame${selected ? ' is-selected' : ''}`}>
     <div className="v1-frame-title">
-      <DeviceIcon iconKey="module" />
+      <DeviceIcon iconKey={iconKey} />
       <strong title={metricTitle ?? name}>{name}</strong>
       {controls}
     </div>

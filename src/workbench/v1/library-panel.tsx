@@ -2,6 +2,7 @@ import { definitionLabels, numberedNamesById, portDisplayName, readableError } f
 import { createPathNames } from './structure-scope';
 import type { CenterPlacement } from '../../editors/topology/v1/topology-layout-edits';
 import { useState } from 'react';
+import { definitionIcon, DeviceIcon } from '../../editors/topology/v1/device-icon';
 import { insertCanvasItem } from '../../editors/topology/v1/topology-layout-edits';
 import { PortDeletionDialog } from '../../editors/topology/v1/port-deletion-dialog';
 import { resolveHierarchy } from '../../engine/v1/hierarchy';
@@ -170,7 +171,9 @@ export function LibraryPanel({ centerPlacement, library, store, state, module }:
         return <li key={template.id}><button type="button" draggable={!conflict} disabled={conflict}
           title={conflict ? '该模板与工程内已有的类型冲突'
             : definition ? `点击或拖入框图，沿用工程定义「${definition.name}」` : '点击添加到当前模块，或拖入框图'}
-          onClick={() => add(item)} onDragStart={event => drag(event, item)}>{labels.get(template.id)}</button></li>;
+          onClick={() => add(item)} onDragStart={event => drag(event, item)}>
+          <DeviceIcon iconKey={definitionIcon(conflict ? template : definition ?? template)} size={16} />{labels.get(template.id)}
+        </button></li>;
       })}
     </ul>}
     {!matches.length && !reusable.length && <p className="empty" role="status">没有匹配的器件或模块。</p>}

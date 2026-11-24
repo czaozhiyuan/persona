@@ -1,5 +1,5 @@
 .v1-library-items { display: grid; gap: .35rem; list-style: none; margin: .55rem 0; padding: 0; }
-.v1-library-items button { width: 100%; text-align: left; }
+.v1-library-items button { display: flex; align-items: center; gap: .4rem; width: 100%; text-align: left; }
 .v1-library-items button[draggable="true"]:hover { cursor: grab; }
 .v1-library-diff li { margin: .7rem 0; overflow-wrap: anywhere; }
 .v1-library-diff-values { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: .5rem; }
