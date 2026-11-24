@@ -90,3 +90,25 @@ test('canvas insertion grows a saved frame as part of the edit', () => {
   assert.deepEqual(result.layout?.topologyFrames, [{ ...frame, width: 620, height: 276 }]);
   assert.deepEqual(result.layout?.topology?.at(-1), { instancePath: ['a', 'inner', 'added'], x: 390, y: 200 });
 });
+
+test('center insertion grows the current occurrence in local coordinates without shifting previously clamped siblings', () => {
+  const scope = ['a', 'inner'];
+  const saved = { modulePath: scope, x: 0, y: 0, width: 360, height: 150 };
+  const sibling = [...scope, 'removed'];
+  const store = createProjectStore({ ...fixture, layout: { topology: [{ instancePath: sibling, x: -80, y: -20 }], topologyFrames: [saved] } });
+  const localView = (p: Project) => projectTopology(p, [...resolveHierarchy(p).walkInstances()], scope, expanded, measured);
+  const original = store.getSnapshot().project;
+  const projection = localView(original);
+  const position = { x: -320, y: -180 };
+  const inserted = [...scope, 'added'];
+  assert.deepEqual(store.commit(p => insertCanvasItem(p, { source: 'project', id: 'device', name: 'New' }, 'inner', scope, 'added',
+    () => ({ position, projection }))), { ok: true });
+  const restored = parseProjectJson(serializeProjectJson(store.getSnapshot().project));
+  const after = localView(restored);
+  assert.deepEqual(item(after, inserted).preferred, position);
+  assert.deepEqual(item(after, sibling).bounds, item(projection, sibling).bounds);
+  assert.deepEqual(restored.layout?.topologyFrames, [{ modulePath: scope, x: -348, y: -232, width: 708, height: 382 }]);
+  assert.equal(restored.layout?.topology?.some(p => p.instancePath[0] === 'b' && p.instancePath.at(-1) === 'added'), false);
+  store.undo();
+  assert.equal(store.getSnapshot().project, original);
+});
