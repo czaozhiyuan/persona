@@ -49,7 +49,7 @@ export function preserveDeletionLayout(project: Project, parentId: string, befor
   return moveTopologyNodes(preserved, moves);
 }
 
-export type CenterPlacement = (ports: readonly PortDefinition[]) => {
+export type CenterPlacement = (definition: { id: string; ports: readonly PortDefinition[] }, name: string) => {
   position: XYPosition; projection: Projection;
 } | undefined;
 
@@ -88,7 +88,7 @@ export function insertCanvasItem(project: Project, item: LibraryItem, moduleId: 
   const definition = updated.componentDefinitions.find(item => item.id === child.definitionId)
     ?? updated.moduleDefinitions.find(item => item.id === child.definitionId)!;
   if (typeof placement === 'function') {
-    const centered = placement(definition.ports);
+    const centered = placement(definition, child.name);
     if (centered) return placeInView(updated, [...modulePath, instanceId], centered.position, definition.ports, centered.projection);
   }
   if (!frame) return updated;

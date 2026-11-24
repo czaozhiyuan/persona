@@ -529,13 +529,14 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     add(item, flow.current.screenToFlowPosition(screen));
   }
 
-  useImperativeHandle(centerPlacement, () => ports => {
+  useImperativeHandle(centerPlacement, () => (definition, name) => {
     if (!topologyActive) return;
-    const position = viewportPosition(ports, true);
+    const position = viewportPosition(definition.ports, definition.id, name);
     return position && { position, projection };
   });
 
-  function viewportPosition(ports: readonly PortDefinition[], inserting = false) {
+  function viewportPosition(ports: readonly PortDefinition[], definitionId?: string, name?: string) {
+    const inserting = definitionId !== undefined;
     if (!canvas.current || !flow.current) return;
     const screen = canvas.current.getBoundingClientRect();
     const left = inserting ? Math.max(0, screen.left) : screen.left;
@@ -554,39 +555,53 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     const size = estimatedBlockSize(ports);
     const width = inserting ? parseFloat(getComputedStyle(canvas.current).getPropertyValue('--v1-block-width-rem'))
       * parseFloat(getComputedStyle(document.documentElement).fontSize) : size.width;
-    const height = size.height;
+    const members = scopes.get(rootKey)?.members ?? [];
+    // A rendered copy accounts for wrapping in the selected card's title and controls.
+    const height = inserting ? members.reduce((height, node) =>
+      !node.frame && node.item.definition.id === definitionId && node.item.instance?.name === name
+        ? Math.max(height, node.bounds.height) : height, size.height) : size.height;
     const center = { x: (topLeft.x + bottomRight.x - width) / 2, y: (topLeft.y + bottomRight.y - height) / 2 };
-    const occupied = scopes.get(rootKey)?.members.map(item => ({
+    const occupied = members.map(item => ({
       ...item.bounds, width: item.frame?.display.width ?? item.bounds.width, height: item.frame?.display.height ?? item.bounds.height,
-    })) ?? [];
+    }));
     const fits = visible[1][0] - visible[0][0] >= width && visible[1][1] - visible[0][1] >= height;
     // Keep the viewport fixed. Prefer a nearby visible gap and use the least-overlapping candidate in a crowded view.
     const offsets = [[0, 0], [0, 1], [1, 0], [0, -1], [-1, 0], [1, 1], [-1, 1], [1, -1], [-1, -1]];
-    const candidates = offsets.map(([x, y]) => {
-      const rect = { x: center.x + x * (width + 16), y: center.y + y * (height + 16), width, height };
+    function candidateAt(x: number, y: number) {
+      const rect = { x, y, width, height };
       const limit = fits ? visible : extent;
       const position = limit ? keepNodeInside(rect, limit) : { x: rect.x, y: rect.y };
       if (inserting && !fits) {
         position.x = Math.max(topLeft.x - width / 2, Math.min(position.x, bottomRight.x - width / 2));
         position.y = Math.max(topLeft.y - height / 2, Math.min(position.y, bottomRight.y - height / 2));
       }
-      const overlap = occupied.reduce((total, node) => total
-        + Math.max(0, Math.min(node.x + node.width, position.x + width) - Math.max(node.x, position.x))
-        * Math.max(0, Math.min(node.y + node.height, position.y + height) - Math.max(node.y, position.y)), 0);
-      return { position, overlap };
-    });
-    const best = candidates.reduce((best, candidate) => candidate.overlap < best.overlap ? candidate : best).position;
-    if (inserting && occupied.some(node => node.x === best.x && node.y === best.y)) {
-      // Stagger crowded insertions even when every visible candidate is already occupied.
-      const span = Math.min(40, (bottomRight.x - topLeft.x) / 4, (bottomRight.y - topLeft.y) / 4);
-      const count = occupied.length + 1;
-      for (let i = count; i > 0; i--) {
-        const offset = span * i / count;
-        const position = { x: center.x + offset, y: center.y + offset };
-        if (!occupied.some(node => node.x === position.x && node.y === position.y)) return position;
+      let overlap = 0;
+      let largest = 0;
+      for (const node of occupied) {
+        const area = Math.max(0, Math.min(node.x + node.width, position.x + width) - Math.max(node.x, position.x))
+          * Math.max(0, Math.min(node.y + node.height, position.y + height) - Math.max(node.y, position.y));
+        overlap += area;
+        largest = Math.max(largest, area);
+      }
+      return { position, overlap, largest, distance: Math.hypot(position.x - center.x, position.y - center.y) };
+    }
+    const candidates = offsets.map(([x, y]) => candidateAt(center.x + x * (width + 16), center.y + y * (height + 16)));
+    let best = candidates.reduce((best, candidate) => candidate.overlap < best.overlap ? candidate : best);
+    if (!inserting || !best.overlap) return best.position;
+
+    // Try the free edges of visible cards. In a full view, a half-card stagger keeps titles distinguishable.
+    for (const node of occupied) {
+      if (node.x + node.width < topLeft.x || node.x > bottomRight.x || node.y + node.height < topLeft.y || node.y > bottomRight.y) continue;
+      const neighbors = [[node.x, node.y - height - 16], [node.x, node.y + node.height + 16],
+        [node.x - width - 16, node.y], [node.x + node.width + 16, node.y],
+        [node.x - width / 2, node.y - height / 2], [node.x + width / 2, node.y + height / 2]];
+      for (const [x, y] of neighbors) {
+        const option = candidateAt(x, y);
+        if (option.largest < best.largest || (option.largest === best.largest &&
+          (option.overlap < best.overlap || (option.overlap === best.overlap && option.distance < best.distance)))) best = option;
       }
     }
-    return best;
+    return best.position;
   }
 
   useEffect(() => {

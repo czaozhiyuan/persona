@@ -647,7 +647,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
               enter={enterModule} navigatePort={navigatePort} />
           </div>
           <div id="workbench-library" className="v1-side-scroll" hidden={leftTab !== 'library'}>
-            {active?.kind === 'module' && <LibraryPanel centerPlacement={ports => centerPlacement.current?.(ports)} library={library} key={projectSession} store={store} state={state} module={active} />}
+            {active?.kind === 'module' && <LibraryPanel centerPlacement={(definition, name) => centerPlacement.current?.(definition, name)} library={library} key={projectSession} store={store} state={state} module={active} />}
           </div>
         </aside>
         <main className="v1-workbench-main">
