@@ -159,8 +159,13 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
       let gain: BudgetMetric<'dB'>;
       if (percent.availability === 'unavailable') gain = unavailable('dB', percent.reason);
       else {
-        const share = (edge.to.ref.portId === split.toPortId ? percent.value : 100 - percent.value) / 100;
-        gain = share === 0 ? logZero('dB') : loss.availability === 'unavailable' ? loss : budgetValue('dB', 10 * Math.log10(share) - loss.value);
+        const outputPercent = edge.to.ref.portId === split.toPortId ? percent.value : 100 - percent.value;
+        if (outputPercent === 0) {
+          const zeroGain = logZero('dB');
+          stages.push(stage(edge.to, previous.channelId, logZero('dBm'), { edge, gainDb: zeroGain }));
+          return zeroGain;
+        }
+        gain = loss.availability === 'unavailable' ? loss : budgetValue('dB', 10 * (Math.log10(outputPercent) - 2) - loss.value);
       }
       stages.push(stage(edge.to, previous.channelId, addGain(previous.powerDbm, gain), { edge, gainDb: gain }));
       return addGain(gainDb, gain);

@@ -63,6 +63,31 @@ test('complementary optical branches conserve power, including fractional and da
   }
 });
 
+test('zero-share branches stay dark with unknown launch power only on reachable channels', () => {
+  for (const firstPercent of [0, 100]) {
+    const base = opticalNetwork(firstPercent, 0, true);
+    const project: Project = { ...base, componentDefinitions: base.componentDefinitions.map(d => d.id !== 'library-splitter' ? d : {
+      ...d, ports: d.ports.map(p => p.direction === 'out' ? { ...p, channelIds: ['DWDM_CH30'] } : p),
+    }) };
+    const optics = createOpticalBudget(project);
+    const source = { endpoint: endpoint('a', 'OPT_TX_OUT'), channelId: 'DWDM_CH30' as const };
+    const receiver = endpoint('b', 'OPT_RX_IN'), detector = endpoint('pd', 'OPT_IN');
+    const darkTarget = firstPercent === 0 ? receiver : detector;
+    const dark = optics.calculateLocal({ source, to: darkTarget });
+    assert.equal(dark.stages[0].powerDbm.availability, 'unavailable');
+    assert.equal(dark.stages[1].powerDbm.availability, 'unavailable');
+    assert.equal(number(dark.stages[2].powerDbm), -Infinity);
+    assert.equal(number(dark.powerDbm), -Infinity);
+    assert.equal(number(dark.gainDb), -Infinity);
+    if (firstPercent === 100) assert.equal(number(dark.averageCurrent!), 0);
+    else assert.equal(dark.digitalReceiver!.margin.availability, 'unavailable');
+    assert.equal(optics.calculateLocal({ source, to: firstPercent === 0 ? detector : receiver }).powerDbm.availability, 'unavailable');
+    const blocked = optics.calculateLocal({ source: { ...source, channelId: 'DWDM_CH28' }, to: darkTarget });
+    assert.equal(blocked.pathIssue?.status, 'unreachable');
+    assert.equal(blocked.powerDbm.availability, 'unavailable');
+  }
+});
+
 test('full duplex digital links use optical thresholds, never a radio gain', () => {
   const project = parseProjectJson(serializeProjectJson(opticalNetwork(99, 2)));
   const resolver = createPathResolver(project), optics = createOpticalBudget(project);
