@@ -282,7 +282,8 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
           const fromPortId = choice(data, 'input'), toPortId = choice(data, 'output');
           const from = definition.ports.find(port => port.id === fromPortId);
           const to = definition.ports.find(port => port.id === toPortId);
-          const kind = from?.type === 'RF' && to?.type === 'OPTICAL' ? 'eo'
+          const eoKind = choice(data, 'eoKind') === 'dml' ? 'dml' : 'eo';
+          const kind = from?.type === 'RF' && to?.type === 'OPTICAL' ? eoKind
             : from?.type === 'OPTICAL' && to?.type === 'RF' ? 'oe' : undefined;
           if (!kind) { setError('请选择射频输入与光输出，或光输入与射频输出。'); return; }
           if (definition.transfers?.some(t => t.fromPortId === fromPortId && t.toPortId === toPortId)) {
@@ -297,6 +298,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
                 .map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true, definition.ports)}</option>)}
             </select>
           </label>)}
+          <label>电光转换方式<select name="eoKind"><option value="eo">外置调制器</option><option value="dml">直调激光器</option></select></label>
           <button type="submit">添加电光或光电传输</button>
         </form>}
         {definition.kind === 'component' && definition.transfers?.map((transfer, index) => <details key={index}>

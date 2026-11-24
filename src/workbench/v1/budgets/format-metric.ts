@@ -3,7 +3,8 @@ import type { BudgetMetric } from '../../../engine/v1/budget-metric';
 export function formatMetric(metric: BudgetMetric): string {
   if (metric.availability === 'unavailable') return '不可用';
   if (metric.value === -Infinity) return '−∞ ' + metric.unit;
-  if (metric.unit === 'V' || metric.unit === 'A') {
+  if (metric.unit === 'W/V') return `${Number(metric.value.toPrecision(6))} W/V`;
+  if (metric.unit === 'V' || metric.unit === 'A' || (metric.unit === 'W' && metric.value > 0 && metric.value < 0.1)) {
     const magnitude = Math.abs(metric.value);
     const [scale, prefix] = magnitude === 0 || magnitude >= 1 ? [1, ''] as const
       : magnitude >= 0.001 ? [1e3, 'm'] as const : [1e6, 'µ'] as const;

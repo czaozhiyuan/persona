@@ -67,7 +67,7 @@ export function channelSetsOverlap(a: PortDefinition, b: PortDefinition): boolea
 
 const transferTypes: Record<Transfer['kind'], readonly [PortType, PortType]> = {
   rf: ['RF', 'RF'], optical: ['OPTICAL', 'OPTICAL'], wavelengthConversion: ['OPTICAL', 'OPTICAL'],
-  eo: ['RF', 'OPTICAL'], oe: ['OPTICAL', 'RF'], dc: ['DC_POWER', 'DC_POWER'],
+  eo: ['RF', 'OPTICAL'], dml: ['RF', 'OPTICAL'], oe: ['OPTICAL', 'RF'], dc: ['DC_POWER', 'DC_POWER'],
 };
 
 export function validateDevice(
@@ -104,6 +104,9 @@ export function validateDevice(
     const kinds = route.kind === 'rf' ? ['fixed', 'rfCurve'] as const : ['fixed', 'channelTable'] as const;
     if ('gainDb' in route && route.gainDb !== undefined) validateQuantity(parameters, 'dB', route.gainDb, kinds, context);
     if (route.kind === 'rf' && route.nfDb !== undefined) validateQuantity(parameters, 'dB', route.nfDb, kinds, `${context} NF`);
+    if (route.kind === 'dml' && route.modulationSlope) {
+      validateQuantity(parameters, 'W/V', route.modulationSlope, ['fixed', 'rfCurve'], `${context} K(f)`, 0);
+    }
     if (route.kind === 'eo') {
       if (route.insertionLossDb) validateQuantity(parameters, 'dB', route.insertionLossDb, kinds, `${context} 最大透过插损`, 0);
       if (route.vPi) validateQuantity(parameters, 'V', route.vPi, ['fixed', 'rfCurve'], `${context} RF Vπ`, Number.MIN_VALUE);

@@ -26,6 +26,7 @@ export const transferLabels = {
   optical: '光传输',
   wavelengthConversion: '波长转换',
   eo: '电光转换',
+  dml: '直调激光器电光转换',
   oe: '光电转换',
   dc: '直流变换',
 } satisfies Record<Transfer['kind'], string>;

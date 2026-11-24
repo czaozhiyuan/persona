@@ -109,6 +109,7 @@ export function readTransfer(data: FormData, transfer: Transfer): Transfer {
     case 'optical': return { ...transfer, ...ports, channelIds: channelList(data, 'channels'), gainDb: readQuantity(data, 'gain', opticalKinds) };
     case 'eo': return { ...transfer, ...ports, channelIds: channelList(data, 'channels'), supplyPortId: choice(data, 'supply') || undefined,
       insertionLossDb: readQuantity(data, 'insertionLoss', opticalKinds), vPi: readQuantity(data, 'vPi', rfKinds) };
+    case 'dml': return { ...transfer, ...ports, channelIds: channelList(data, 'channels'), modulationSlope: readQuantity(data, 'slope', rfKinds) };
     case 'oe': {
       return { ...transfer, ...ports, channelIds: channelList(data, 'channels'), receiver: readReceiver(choice(data, 'receiver')),
         responsivity: data.has('responsivityKind') ? readQuantity(data, 'responsivity', opticalKinds) : transfer.responsivity,
@@ -162,7 +163,7 @@ function TransferForm({ transfer, definition, occurrences = [], save, draft, sav
     <label>输出端口<select name="to" defaultValue={transfer.toPortId} required>
       {outputPorts.map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true, definition.ports)} · {portTypeLabels[port.type]}</option>)}
     </select></label>
-    {(transfer.kind === 'optical' || transfer.kind === 'eo' || transfer.kind === 'oe') &&
+    {(transfer.kind === 'optical' || transfer.kind === 'eo' || transfer.kind === 'dml' || transfer.kind === 'oe') &&
       <ChannelField name="channels" label="适用通道（未选择表示不限）" value={transfer.channelIds} multiple />}
     {transfer.kind === 'eo' && <label>供光输入<select name="supply" defaultValue={transfer.supplyPortId ?? ''}>
       <option value="">未设置</option>
@@ -177,6 +178,12 @@ function TransferForm({ transfer, definition, occurrences = [], save, draft, sav
         onCurveApply={draft ? undefined : gainDb => saveCurve({ ...transfer, gainDb })} />
       <QuantityField name="nf" label="噪声系数" kinds={rfKinds} value={transfer.nfDb} parameters={parameters}
         onCurveApply={draft ? undefined : nfDb => saveCurve({ ...transfer, nfDb })} />
+    </>}
+    {transfer.kind === 'dml' && <>
+      <QuantityField name="slope" label="加载 50 Ω 的直调系数 K(f)" unit="W/V" kinds={rfKinds}
+        value={transfer.modulationSlope} parameters={parameters} minimum={0}
+        onCurveApply={draft ? undefined : modulationSlope => saveCurve({ ...transfer, modulationSlope })} />
+      <p>K 是交流光功率峰值与已加载 RF 电压峰值之比。已知斜率效率 η（W/A）和实际电流耦合 α（A/V）时，K = η × α。固定 K 按平坦频响计算。</p>
     </>}
     {transfer.kind === 'eo' && <>
       <QuantityField name="insertionLoss" label="最大透过状态光插损" kinds={opticalKinds}

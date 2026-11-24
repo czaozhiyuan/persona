@@ -110,7 +110,7 @@ const parameterValue: Check = (value, path) => {
 };
 const parameter = byKind({
   numeric: shape({
-    ...identity, kind: oneOf('numeric'), unit: oneOf('dB', 'dBm', 'V', 'A', 'W', 'GHz', 'nm', 'A/W', 'V/W', 'ohm', 'ratio'),
+    ...identity, kind: oneOf('numeric'), unit: oneOf('dB', 'dBm', 'V', 'A', 'W', 'GHz', 'nm', 'A/W', 'V/W', 'W/V', 'ohm', 'ratio'),
     valueKind: oneOf('fixed', 'rfCurve', 'channelTable', 'rfValue', 'opticalValue'),
   }, { overridable: boolean, range: shape({}, limits), defaultValue: empirical }),
   enum: shape({ ...identity, kind: oneOf('enum'), options: list(text) }, { overridable: boolean, defaultValue: text }),
@@ -126,6 +126,7 @@ const transfer = byKind({
   wavelengthConversion: shape({
     ...portPair, kind: oneOf('wavelengthConversion'), fromChannelId: text, toChannelId: text,
   }, { gainDb: opticalQuantity }),
+  dml: shape({ ...portPair, kind: oneOf('dml') }, { channelIds: channels, modulationSlope: rfQuantity }),
   eo: shape({ ...portPair, kind: oneOf('eo') }, {
     channelIds: channels, supplyPortId: text, insertionLossDb: opticalQuantity, vPi: rfQuantity,
   }),

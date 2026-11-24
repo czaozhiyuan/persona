@@ -68,13 +68,30 @@ export function linkAnnotations(graph: SignalGraph, path?: PathResult, point?: L
     }
     for (const segment of point.segments) {
       const eo = path.trace.edges[segment.eoEdgeIndex].from.ref;
-      metric(eo, 'Vπ', segment.vPi);
+      if (segment.transmitter.kind === 'mzm') metric(eo, 'Vπ', segment.transmitter.vPi);
+      else {
+        metric(path.trace.edges[segment.eoEdgeIndex].to.ref, 'P0', segment.transmitter.mean, -1);
+        metric(eo, 'K', segment.transmitter.slope, -1);
+        metric(eo, '调制深度', segment.modulationDepth, -1);
+        metric(path.trace.edges[segment.oeEdgeIndex].to.ref, '转换段增益', segment.gainDb);
+      }
       if (segment.optical) opticalStages(segment.optical);
       else power(segment.pdInput, segment.pdPowerDbm);
       metric(eo, '调制深度', segment.modulationDepth, 2);
       if (segment.extrapolated) note(eo, '小信号线性外推');
       metric(segment.pdInput, '响应度', segment.responsivity);
       metric(segment.pdInput, '平均光电流', segment.averageCurrent);
+    }
+    if (path.status === 'resolved' && point.segments.some(s => s.transmitter.kind === 'dml')) {
+      metric(path.trace.steps.at(-1)!.port.ref, '链路增益', point.gainDb);
+    }
+    if (point.partialDml) {
+      const { output, optical, emission } = point.partialDml;
+      if (optical) opticalStages(optical);
+      else power(output, emission.mean);
+      metric(output, 'K', emission.slope);
+      metric(output, '调制深度', emission.modulationDepth, 2);
+      if (point.partialDml.extrapolated) note(output, '小信号线性外推');
     }
     if (point.continuousWave) {
       const cw = point.continuousWave;

@@ -35,6 +35,7 @@ export type Transfer =
     insertionLossDb?: Quantity<OpticalValue>;
     vPi?: Quantity<RfValue>;
   })
+  | (PortPair & ChannelFilter & { kind: 'dml'; modulationSlope?: Quantity<RfValue> })
   | (PortPair & ChannelFilter & {
     kind: 'oe';
     receiver?: Quantity<ReceiverMode>;
