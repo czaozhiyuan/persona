@@ -5,6 +5,7 @@ import { HierarchyTree } from '../../editors/topology/v1/hierarchy-tree';
 import { hierarchyKey, inHierarchy } from '../../editors/topology/v1/hierarchy-view';
 import type { ApprovedMove, ReparentLayout } from '../../editors/topology/v1/reparent-drop';
 import type { CanvasView } from '../../editors/topology/v1/canvas-controls';
+import type { CenterPlacement } from '../../editors/topology/v1/topology-layout-edits';
 import { TopologyEditor } from '../../editors/topology/v1/topology-editor';
 import { isRfFrequency } from '../../engine/v1/rf-budget';
 import { createLinkBudget } from '../../engine/v1/link-budget';
@@ -68,6 +69,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const { project, selection, canUndo, canRedo } = state;
   const [error, setError] = useState('');
   const [copyNotice, setCopyNotice] = useState('');
+  const centerPlacement = useRef<CenterPlacement>(null);
   const moduleClipboard = useRef<{ project: Project; path: InstancePath; ports: readonly PortDefinition[] }>(undefined);
   const fileInput = useRef<HTMLInputElement>(null);
   const importAttempt = useRef(0);
@@ -645,14 +647,14 @@ export function Workbench({ store, loadExample, newProject }: Props) {
               enter={enterModule} navigatePort={navigatePort} />
           </div>
           <div id="workbench-library" className="v1-side-scroll" hidden={leftTab !== 'library'}>
-            {active?.kind === 'module' && <LibraryPanel library={library} key={projectSession} store={store} state={state} module={active} />}
+            {active?.kind === 'module' && <LibraryPanel centerPlacement={ports => centerPlacement.current?.(ports)} library={library} key={projectSession} store={store} state={state} module={active} />}
           </div>
         </aside>
         <main className="v1-workbench-main">
           <div className="v1-canvas-page" inert={page !== 'canvas' || selection.view !== 'topology'}
             aria-hidden={page !== 'canvas' || selection.view !== 'topology'}>
             {active?.kind === 'module' &&
-              <TopologyEditor library={library.config} key={JSON.stringify(['topology', projectSession, selection.modulePath])}
+              <TopologyEditor centerPlacement={centerPlacement} library={library.config} key={JSON.stringify(['topology', projectSession, selection.modulePath])}
                 linkControls={<div className="v1-canvas-link">
                   <label>当前链路<select aria-label="框图当前链路" value={category === 'links' ? savedLink?.id ?? '' : ''} onChange={e => chooseLink(e.target.value || undefined)}>
                     <option value="">{category !== 'links' ? budgetTitles[category] : draftLink ? '画布临时链路' : '未选择链路'}</option>

@@ -1,6 +1,6 @@
 import { definitionLabels, numberedNamesById, portDisplayName, readableError } from '../../model/v1/display-names';
 import { createPathNames } from './structure-scope';
-import { moduleName } from '../../state/v1/module-name';
+import type { CenterPlacement } from '../../editors/topology/v1/topology-layout-edits';
 import { useState } from 'react';
 import { insertCanvasItem } from '../../editors/topology/v1/topology-layout-edits';
 import { PortDeletionDialog } from '../../editors/topology/v1/port-deletion-dialog';
@@ -9,7 +9,6 @@ import { isBlankTemplate } from '../../library/v1/built-in';
 import { libraryDragType } from '../../library/v1/insert-library-item';
 import type { LibraryItem } from '../../library/v1/insert-library-item';
 import { previewTemplateUpdate } from '../../library/v1/project-snapshots';
-import { editModule } from '../../state/v1/topology-edits';
 import type { DragEvent } from 'react';
 import type { TemplateChanges } from '../../library/v1/project-snapshots';
 import type { ModuleDefinition, Project } from '../../model/v1/types';
@@ -20,7 +19,7 @@ import type { LibraryConfig } from '../../library/v1/user-library';
 import type { UserLibrary } from './use-library';
 import { LibraryManager } from './library-manager';
 
-type Props = { library: UserLibrary; store: ProjectStore; state: ProjectStoreSnapshot; module: ModuleDefinition };
+type Props = { centerPlacement: CenterPlacement; library: UserLibrary; store: ProjectStore; state: ProjectStoreSnapshot; module: ModuleDefinition };
 type Preview = {
   base: Project;
   library: LibraryConfig;
@@ -35,7 +34,7 @@ function describe(changes: TemplateChanges) {
   ].filter(Boolean).join('。');
 }
 
-export function LibraryPanel({ library, store, state, module }: Props) {
+export function LibraryPanel({ centerPlacement, library, store, state, module }: Props) {
   const [manage, setManage] = useState(false);
   const templates = libraryDefinitions(library.config);
   const labels = numberedNamesById(templates);
@@ -146,7 +145,7 @@ export function LibraryPanel({ library, store, state, module }: Props) {
   function add(item: LibraryItem) {
     if (!item.name) { setFeedback({ error: true, text: '名称不能为空。' }); return; }
     const id = crypto.randomUUID();
-    const result = store.commit(draft => insertCanvasItem(draft, item, module.id, selection.modulePath, id, undefined, library.config));
+    const result = store.commit(draft => insertCanvasItem(draft, item, module.id, selection.modulePath, id, centerPlacement, library.config));
     if (result.ok) store.selectInstance([...selection.modulePath, id]);
     setPreview(undefined);
     setFeedback(result.ok ? { text: `已添加「${store.resolveInstance([...selection.modulePath, id])?.instance?.name ?? item.name}」。`, snapshot: store.getSnapshot().project }
@@ -249,13 +248,8 @@ export function LibraryPanel({ library, store, state, module }: Props) {
           kind: 'module', id, name, ports: [], instances: [],
           physicalEnclosure: { widthMm: Number(data.get('width')), depthMm: Number(data.get('depth')), heightMm: Number(data.get('height')) },
         };
-        const result = store.commit(draft => {
-          moduleName(draft, name);
-          const updated = editModule(draft, module.id, current => ({
-            ...current, instances: [...current.instances, { id, name, definitionId: id }],
-          }));
-          return { ...updated, moduleDefinitions: [...updated.moduleDefinitions, enclosure] };
-        });
+        const result = store.commit(draft => insertCanvasItem({ ...draft, moduleDefinitions: [...draft.moduleDefinitions, enclosure] },
+          { source: 'project', id, name }, module.id, selection.modulePath, id, centerPlacement, library.config));
         if (result.ok) {
           form.reset();
           store.selectInstance([...selection.modulePath, id]);

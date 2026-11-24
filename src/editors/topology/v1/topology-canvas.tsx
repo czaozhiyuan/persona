@@ -1,7 +1,7 @@
 import { createPortal } from 'react-dom';
 import { Background, ConnectionMode, ReactFlow, ReactFlowProvider, useKeyPress, useStoreApi, useUpdateNodeInternals, ViewportPortal } from '@xyflow/react';
 import type { Connection as FlowConnection, CoordinateExtent, Node, NodeProps, OnConnectStartParams, ReactFlowInstance, Rect, Viewport, XYPosition } from '@xyflow/react';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
 import type { PathResult } from '../../../engine/v1/path-resolver';
 import { signalPortKey } from '../../../engine/v1/signal-graph';
@@ -34,6 +34,7 @@ import { groupDragBounds, groupDragExtent, groupDropDelta, placeDropGroup, repar
 import type { ApprovedMove, ReparentLayout } from './reparent-drop';
 import { handleId, nodeId, portKey, projectWiring, scopedWiringProblem } from './topology-wiring';
 import type { WiringEdge } from './topology-wiring';
+import type { CenterPlacement } from './topology-layout-edits';
 import { preserveDeletionLayout } from './topology-layout-edits';
 import { SignalWire, signalColor } from './signal-wire';
 import '@xyflow/react/dist/style.css';
@@ -160,6 +161,7 @@ type Props = {
   deleteWiring: (path: InstancePath, wire: WiringSelection) => boolean;
   rename: () => void;
   copyModule: () => boolean;
+  centerPlacement: React.Ref<CenterPlacement>;
   pasteModule: (placement: (ports: readonly PortDefinition[]) => XYPosition | undefined) => boolean;
   report: (message: string) => void;
   undo: () => void;
@@ -172,7 +174,7 @@ export function TopologyCanvas(props: Props) {
 
 function EditableTopologyCanvas({ project, instances, modulePath, selectedInstance, selectedPaths, pathResult, budgetHighlight, expanded,
   toggleModule, selectObject, selectObjects, enterModule, reparent, focusMoved, move, resize, connect, mapPort, add, placingModule, cancelPlacement,
-  deleteInstance, deleteWiring, rename, copyModule, pasteModule, report, undo, redo, openPort, onAddPort, newPort,
+  deleteInstance, deleteWiring, rename, copyModule, pasteModule, centerPlacement, report, undo, redo, openPort, onAddPort, newPort,
   depth, fullPage, toggleFullPage, restoreView, viewHost, topologyActive }: Props) {
   const flowStore = useStoreApi<CanvasNode, WiringEdge>();
   const boxSelection = useRef<readonly InstancePath[] | undefined>(undefined);
@@ -199,6 +201,8 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
   const projection = useMemo(() => projectTopology(project, instances, modulePath, expanded, measured, resizePreview),
     [project, instances, modulePath, expanded, measured, resizePreview]);
   const { nodes: items, rootKey, nodeByKey, scopes } = projection;
+  // An empty scope has nothing to fit. A queued fit would zoom to its first insertion.
+  const [fitInitialNodes] = useState(() => !initialViewport && items.length > 0);
   useEffect(() => {
     if (!focusMoved) return;
     const id = nodeId(hierarchyKey(focusMoved));
@@ -525,18 +529,32 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     add(item, flow.current.screenToFlowPosition(screen));
   }
 
-  function pastePosition(ports: readonly PortDefinition[]) {
+  useImperativeHandle(centerPlacement, () => ports => {
+    if (!topologyActive) return;
+    const position = viewportPosition(ports, true);
+    return position && { position, projection };
+  });
+
+  function viewportPosition(ports: readonly PortDefinition[], inserting = false) {
     if (!canvas.current || !flow.current) return;
     const screen = canvas.current.getBoundingClientRect();
-    const topLeft = flow.current.screenToFlowPosition({ x: screen.left, y: screen.top });
-    const bottomRight = flow.current.screenToFlowPosition({ x: screen.right, y: screen.bottom });
+    const left = inserting ? Math.max(0, screen.left) : screen.left;
+    const top = inserting ? Math.max(0, screen.top) : screen.top;
+    const right = inserting ? Math.min(window.innerWidth, screen.right) : screen.right;
+    const bottom = inserting ? Math.min(window.innerHeight, screen.bottom) : screen.bottom;
+    if (right <= left || bottom <= top) return;
+    const topLeft = flow.current.screenToFlowPosition({ x: left, y: top });
+    const bottomRight = flow.current.screenToFlowPosition({ x: right, y: bottom });
     const scope = nodeByKey.get(rootKey);
-    const extent = scope?.frame?.saved ? moduleExtent(scope.frame.base, frameInsets(scope.item.definition.ports)) : undefined;
+    const extent = !inserting && scope?.frame?.saved ? moduleExtent(scope.frame.base, frameInsets(scope.item.definition.ports)) : undefined;
     const visible: CoordinateExtent = extent ? [
       [Math.max(topLeft.x, extent[0][0]), Math.max(topLeft.y, extent[0][1])],
       [Math.min(bottomRight.x, extent[1][0]), Math.min(bottomRight.y, extent[1][1])],
     ] : [[topLeft.x, topLeft.y], [bottomRight.x, bottomRight.y]];
-    const { width, height } = estimatedBlockSize(ports);
+    const size = estimatedBlockSize(ports);
+    const width = inserting ? parseFloat(getComputedStyle(canvas.current).getPropertyValue('--v1-block-width-rem'))
+      * parseFloat(getComputedStyle(document.documentElement).fontSize) : size.width;
+    const height = size.height;
     const center = { x: (topLeft.x + bottomRight.x - width) / 2, y: (topLeft.y + bottomRight.y - height) / 2 };
     const occupied = scopes.get(rootKey)?.members.map(item => ({
       ...item.bounds, width: item.frame?.display.width ?? item.bounds.width, height: item.frame?.display.height ?? item.bounds.height,
@@ -548,12 +566,27 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
       const rect = { x: center.x + x * (width + 16), y: center.y + y * (height + 16), width, height };
       const limit = fits ? visible : extent;
       const position = limit ? keepNodeInside(rect, limit) : { x: rect.x, y: rect.y };
+      if (inserting && !fits) {
+        position.x = Math.max(topLeft.x - width / 2, Math.min(position.x, bottomRight.x - width / 2));
+        position.y = Math.max(topLeft.y - height / 2, Math.min(position.y, bottomRight.y - height / 2));
+      }
       const overlap = occupied.reduce((total, node) => total
         + Math.max(0, Math.min(node.x + node.width, position.x + width) - Math.max(node.x, position.x))
         * Math.max(0, Math.min(node.y + node.height, position.y + height) - Math.max(node.y, position.y)), 0);
       return { position, overlap };
     });
-    return candidates.reduce((best, candidate) => candidate.overlap < best.overlap ? candidate : best).position;
+    const best = candidates.reduce((best, candidate) => candidate.overlap < best.overlap ? candidate : best).position;
+    if (inserting && occupied.some(node => node.x === best.x && node.y === best.y)) {
+      // Stagger crowded insertions even when every visible candidate is already occupied.
+      const span = Math.min(40, (bottomRight.x - topLeft.x) / 4, (bottomRight.y - topLeft.y) / 4);
+      const count = occupied.length + 1;
+      for (let i = count; i > 0; i--) {
+        const offset = span * i / count;
+        const position = { x: center.x + offset, y: center.y + offset };
+        if (!occupied.some(node => node.x === position.x && node.y === position.y)) return position;
+      }
+    }
+    return best;
   }
 
   useEffect(() => {
@@ -598,7 +631,7 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
         if (!event.altKey && !event.shiftKey && key === 'c' && !event.repeat
           && (window.getSelection()?.isCollapsed ?? true) && copyModule()) {
           event.preventDefault();
-        } else if (!event.altKey && !event.shiftKey && key === 'v' && !event.repeat && pasteModule(pastePosition)) {
+        } else if (!event.altKey && !event.shiftKey && key === 'v' && !event.repeat && pasteModule(viewportPosition)) {
           event.preventDefault();
         } else if (key === 'z' || key === 'y') {
           event.preventDefault();
@@ -632,7 +665,7 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
       if (item) placeAt(item, { x: event.clientX, y: event.clientY });
     }}>
     <ReactFlow<CanvasNode, WiringEdge> nodes={nodes} edges={edges.map(edge => ({ ...edge, selected: selectedWiring === edge }))}
-      nodeTypes={nodeTypes} edgeTypes={edgeTypes} ariaLabelConfig={flowAriaLabels} fitView={!initialViewport} defaultViewport={initialViewport} fitViewOptions={canvasFitOptions}
+      nodeTypes={nodeTypes} edgeTypes={edgeTypes} ariaLabelConfig={flowAriaLabels} fitView={fitInitialNodes} defaultViewport={initialViewport} fitViewOptions={canvasFitOptions}
       viewport={viewport} onViewportChange={changeViewport} onInit={instance => { flow.current = instance; }}
       minZoom={0.001} maxZoom={2} deleteKeyCode={null} connectionMode={ConnectionMode.Loose}
       zIndexMode="manual" selectNodesOnDrag={false}

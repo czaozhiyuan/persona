@@ -116,6 +116,7 @@
   --v1-signal-CONTROL: #578779;
   --v1-wire-width: 2px;
   --v1-frame-fill: #edf2f0;
+  --v1-block-width-rem: 11;
   position: absolute; inset: 0; overflow: hidden; background: #f6faf9; isolation: isolate;
 }
 .v1-topology-canvas[data-space-pan="true"] .react-flow__viewport * { pointer-events: none; }
@@ -147,7 +148,7 @@
   position: absolute; top: 50%; left: 50%; translate: -50% -50%;
   text-align: center; color: #536867; pointer-events: none;
 }
-.v1-topology-device { width: 11rem; padding: .7rem .8rem; background: #fff; border: 1px solid #8faeab; border-radius: .55rem; box-shadow: 0 2px 8px #173e4014; }
+.v1-topology-device { width: calc(var(--v1-block-width-rem) * 1rem); padding: .7rem .8rem; background: #fff; border: 1px solid #8faeab; border-radius: .55rem; box-shadow: 0 2px 8px #173e4014; }
 .v1-topology-device.is-selected { outline: 2px solid #267e73; outline-offset: 2px; }
 .v1-topology-device.is-on-path, .v1-topology-device.has-folded-path { border-color: #526d69; }
 .v1-topology-path-label { position: absolute; bottom: 100%; left: 0; pointer-events: none; color: #42605f; font-size: .72rem; }
