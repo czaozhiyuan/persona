@@ -10,11 +10,14 @@ export const mediaLabels = {
 } satisfies Record<NonNullable<Connection['mediaKind']>, string>;
 
 export const componentIconLabels = {
-  laser: '激光器 / 光源',
+  laser: '激光器',
+  dml: '直调激光器（DML）',
+  multiWavelengthSource: '多波长光源',
   mzm: 'MZM 电光调制器',
   photodiode: 'PD / 光接收机',
   amplifier: 'RF 放大器',
-  attenuator: '衰减器',
+  opticalAttenuator: '光衰减器',
+  rfAttenuator: '射频衰减器',
   opticalSwitch: '光开关',
   dcSupply: '直流电源',
   dcConverter: 'DC/DC 变换器',

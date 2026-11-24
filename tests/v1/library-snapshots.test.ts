@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { definitionIcon } from '../../src/editors/topology/v1/device-icon';
 import { resolveHierarchy } from '../../src/engine/v1/hierarchy';
 import { builtInDefinitions } from '../../src/library/v1/built-in';
 import { addTemplateInstance, previewTemplateUpdate } from '../../src/library/v1/project-snapshots';
@@ -13,6 +14,18 @@ const empty: Project = {
   id: 'test', name: 'Test', rootModuleDefinitionId: 'system', componentDefinitions: [],
   moduleDefinitions: [{ id: 'system', name: 'System', kind: 'module', ports: [], instances: [] }],
 };
+
+test('factory templates use the confirmed component, module and enclosure symbols', () => {
+  const icons = Object.fromEntries(builtInDefinitions.map(item => [item.id, definitionIcon(item)]));
+  assert.deepEqual(icons, {
+    'library-rf-gain': 'amplifier', 'library-rf-stage': 'module', 'library-optical-source': 'multiWavelengthSource',
+    'library-empty-component': 'component', 'library-empty-module': 'module', 'library-empty-enclosure': 'enclosure',
+    'library-laser': 'laser', 'library-dml': 'dml', 'library-mzm': 'mzm', 'library-pd': 'photodiode',
+    'library-optical-switch': 'opticalSwitch', 'library-optical-attenuator': 'opticalAttenuator',
+    'library-rf-amplifier': 'amplifier', 'library-rf-attenuator': 'rfAttenuator',
+    'library-dc-supply': 'dcSupply', 'library-dc-converter': 'dcConverter', 'library-pcb': 'pcb',
+  });
+});
 
 test('copied and reused modules retain component icon choices through project JSON', () => {
   const template = { ...gain, name: 'Renamed template', iconKey: 'pcb' } as const;

@@ -35,7 +35,7 @@ export const builtInDefinitions = [
     transfers: [{ kind: 'rf', fromPortId: 'RF_IN', toPortId: 'RF_OUT', gainDb: parameter('gain') }],
   },
   {
-    kind: 'component', id: 'library-optical-source', iconKey: 'laser', name: '双通道光源', ports: [
+    kind: 'component', id: 'library-optical-source', iconKey: 'multiWavelengthSource', name: '双通道光源', ports: [
       { id: 'OPT_OUT', name: '光输出', type: 'OPTICAL', direction: 'out', opticalEmitter: emitter, channelIds: ['DWDM_CH28', 'DWDM_CH30'] },
     ], parameters: [laserPower],
   },
@@ -53,7 +53,7 @@ export const builtInDefinitions = [
   { kind: 'component', id: 'library-laser', iconKey: 'laser', name: '激光器', parameters: [laserPower],
     ports: [{ ...port('OPT_OUT', '光输出', 'OPTICAL', 'out'), opticalEmitter: emitter }] },
   {
-    kind: 'component', id: 'library-dml', iconKey: 'laser', name: '直调激光器（DML）',
+    kind: 'component', id: 'library-dml', iconKey: 'dml', name: '直调激光器（DML）',
     ports: [rfPorts[0], { ...opticalPorts[1], opticalEmitter: emitter }],
     parameters: [{ ...laserPower, name: '平均输出信号光功率 P0' },
       { ...numeric('slope', '加载 50 Ω 的直调系数 K(f)', 'W/V', { min: 0 }), valueKind: 'rfValue' }],
@@ -85,7 +85,7 @@ export const builtInDefinitions = [
     ],
   },
   {
-    kind: 'component', id: 'library-optical-attenuator', iconKey: 'attenuator', name: '光衰减器', ports: opticalPorts,
+    kind: 'component', id: 'library-optical-attenuator', iconKey: 'opticalAttenuator', name: '光衰减器', ports: opticalPorts,
     parameters: [attenuation],
     transfers: [{ kind: 'optical', fromPortId: 'OPT_IN', toPortId: 'OPT_OUT', gainDb: parameter('gain') }],
   },
@@ -95,7 +95,7 @@ export const builtInDefinitions = [
     transfers: [{ kind: 'rf', fromPortId: 'RF_IN', toPortId: 'RF_OUT', gainDb: parameter('gain'), nfDb: parameter('nf') }],
   },
   {
-    kind: 'component', id: 'library-rf-attenuator', iconKey: 'attenuator', name: '射频衰减器（RF）', ports: rfPorts,
+    kind: 'component', id: 'library-rf-attenuator', iconKey: 'rfAttenuator', name: '射频衰减器（RF）', ports: rfPorts,
     parameters: [attenuation],
     transfers: [{ kind: 'rf', fromPortId: 'RF_IN', toPortId: 'RF_OUT', gainDb: parameter('gain') }],
   },

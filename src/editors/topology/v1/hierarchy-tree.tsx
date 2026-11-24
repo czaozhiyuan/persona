@@ -6,6 +6,7 @@ import type { InstancePath, Project } from '../../../model/v1/types';
 import { moveWiringSummary, planInstanceMove } from '../../../state/v1/reparent-instance';
 import { createPathNames, structureLocations } from '../../../workbench/v1/structure-scope';
 import type { ApprovedMove } from './reparent-drop';
+import { definitionIcon, DeviceIcon } from './device-icon';
 import { hierarchyChildren, hierarchyKey } from './hierarchy-view';
 
 const dragType = 'application/x-persona-hierarchy-instance';
@@ -136,7 +137,7 @@ export function HierarchyTree({ project, focusMoved, move, instances, modulePath
             aria-current={key === active ? 'location' : undefined} aria-pressed={selectedKeys.has(key)}
             onClick={event => select(instancePath, event.ctrlKey || event.shiftKey || event.metaKey)}
             onDoubleClick={module ? () => enter(instancePath) : undefined}>
-            <span className={`v1-hierarchy-icon ${module ? 'module' : ''}`} aria-hidden="true" />
+            <DeviceIcon iconKey={definitionIcon(definition)} size={16} />
             <span>{name}</span>
           </button>
         </li>

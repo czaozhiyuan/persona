@@ -12,10 +12,10 @@ import { moveWiringSummary, planInstanceMoves } from '../../../state/v1/reparent
 import { defaultTopologyPosition } from '../../../state/v1/topology-position';
 import type { WiringSelection } from '../../../state/v1/remove-topology-object';
 import type { Connection } from '../../../model/v1/topology';
-import type { ComponentIconKey, EndpointRef, InstancePath, PortDefinition, PortMapping, Project, TopologyFrame, TopologyPlacement } from '../../../model/v1/types';
+import type { EndpointRef, InstancePath, PortDefinition, PortMapping, Project, TopologyFrame, TopologyPlacement } from '../../../model/v1/types';
 import { createPathNames, structureScope } from '../../../workbench/v1/structure-scope';
 import { BlockPorts } from './block-ports';
-import { DeviceIcon } from './device-icon';
+import { definitionIcon, DeviceIcon, type DeviceIconKey } from './device-icon';
 import { frameHeader, frameInsets, ModuleFrame } from './module-frame';
 import { keepNodeInside, moduleExtent } from './frame-geometry';
 import { ModulePlacement } from './module-placement';
@@ -43,7 +43,7 @@ type NodeData = {
   key: string;
   path: InstancePath;
   name: string;
-  iconKey?: ComponentIconKey | 'module';
+  iconKey: DeviceIconKey;
   ports: readonly PortDefinition[];
   pathPorts: ReadonlySet<string>;
   portValue?: (id: string) => string | undefined;
@@ -110,7 +110,7 @@ function Device({ id, data, selected }: NodeProps<DeviceNode>) {
 
 function Frame({ id, data, selected, width, height }: NodeProps<FrameNode>) {
   return <>
-    <ModuleFrame metricTitle={data.notes?.map(n => n.detail).join('\n')} portValue={data.portValue} id={id} width={width} height={height} name={data.name} ports={data.ports} highlighted={data.pathPorts} newPortId={data.newPortId} handleId={handleId}
+    <ModuleFrame iconKey={data.iconKey} metricTitle={data.notes?.map(n => n.detail).join('\n')} portValue={data.portValue} id={id} width={width} height={height} name={data.name} ports={data.ports} highlighted={data.pathPorts} newPortId={data.newPortId} handleId={handleId}
       editable outerHandles={data.outerHandles} selected={selected} wireState={data.wireState} openPort={data.openPort}
       controls={<>
         {data.locations.length > 0 && <span className="v1-inline-shared" title={data.locations.join('、')}
@@ -301,7 +301,7 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     const name = showName(path);
     const id = nodeId(key);
     const data: NodeData = { key, path, name, ports: definition.ports,
-      iconKey: definition.kind === 'module' ? 'module' : definition.iconKey,
+      iconKey: definitionIcon(definition),
       portValue: budgetHighlight?.annotations && (portId => budgetHighlight.annotations!.ports.get(signalPortKey({ instancePath: path, portId }))),
       notes: budgetHighlight?.annotations?.nodes.get(key),
       pathPorts: new Set(definition.ports.filter(port =>
