@@ -10,7 +10,7 @@ import { resolveHierarchy } from '../../src/engine/v1/hierarchy';
 import { blankModuleId } from '../../src/library/v1/built-in';
 import type { InstancePath, ModuleDefinition, Project } from '../../src/model/v1/types';
 import { createProjectStore } from '../../src/state/v1/project-store';
-import { removeTopologyInstance } from '../../src/state/v1/remove-topology-object';
+import { removeTopologyInstance, removeTopologyInstances } from '../../src/state/v1/remove-topology-object';
 import { parseProjectJson, serializeProjectJson } from '../../src/storage/v1/project-json';
 
 const instance = (id: string, definitionId = id) => ({ id, name: id, definitionId });
@@ -59,7 +59,7 @@ test('deletion preserves affected visible frames per occurrence and surviving de
   const before = projectView(initial);
   assert.equal(initial.layout?.topologyFrames, undefined);
   const remove = (id: string, view: ReturnType<typeof projectView>) => store.commit(project =>
-    preserveDeletionLayout(removeTopologyInstance(project, 'inner', id), 'inner', view, [], expanded, measured));
+    preserveDeletionLayout(removeTopologyInstance(project, 'inner', id), new Set(['inner']), view, [], expanded, measured));
 
   assert.deepEqual(remove('removed', before), { ok: true });
   const edited = store.getSnapshot().project;
@@ -80,6 +80,53 @@ test('deletion preserves affected visible frames per occurrence and surviving de
   assert.equal(store.getSnapshot().project, initial);
   store.redo();
   assert.equal(store.getSnapshot().project, edited);
+});
+
+test('batch deletion empties shared and independent parents using one projection and one undo entry', () => {
+  const store = createProjectStore(fixture);
+  const initial = store.getSnapshot().project;
+  const before = projectView(initial);
+  const paths = [['a', 'inner', 'device'], ['b', 'inner', 'removed'], ['b', 'inner', 'device'], ['other', 'device'], ['c']];
+  store.selectInstances(paths);
+  const edit = (paths: string[][]) => store.commit(project => {
+    const removed = removeTopologyInstances(project, paths);
+    return preserveDeletionLayout(removed.project, removed.affected, before, [], expanded, measured);
+  });
+  assert.equal(edit([...paths, ['missing']]).ok, false);
+  assert.equal(store.getSnapshot().project, initial);
+  assert.equal(store.getSnapshot().canUndo, false);
+  assert.deepEqual(edit(paths), { ok: true });
+  const edited = store.getSnapshot().project;
+  const restored = parseProjectJson(serializeProjectJson(edited));
+  for (const id of ['inner', 'other']) assert.deepEqual(restored.moduleDefinitions.find(d => d.id === id)?.instances, []);
+  assert.equal(resolveHierarchy(restored).resolveInstance(['c']), undefined);
+  const after = projectView(restored);
+  for (const path of [['a'], ['b'], ['a', 'inner'], ['b', 'inner'], ['other']]) {
+    assert.deepEqual(item(after, path).frame?.display, item(before, path).frame?.display);
+    assert.deepEqual(item(after, path).bounds, item(before, path).bounds);
+  }
+  assert.equal(store.getSnapshot().selection.instancePath, undefined);
+  assert.equal(store.getSnapshot().selection.instancePaths, undefined);
+  store.undo();
+  assert.equal(store.getSnapshot().project, initial);
+  assert.equal(store.getSnapshot().canUndo, false);
+  store.redo();
+  assert.equal(store.getSnapshot().project, edited);
+});
+
+test('a shared ancestor removed at another occurrence covers its selected descendants', () => {
+  const project = { ...fixture, moduleDefinitions: fixture.moduleDefinitions.map(d => d.id === 'root'
+    ? { ...d, instances: [...d.instances, instance('separate', 'inner'), instance('wrapper')] } : d).concat(
+    module('wrapper', [instance('deep', 'outer')])) };
+  const paths = [['b', 'inner', 'device'], ['wrapper', 'deep', 'inner'], ['wrapper', 'deep', 'inner', 'removed']];
+  for (const selection of [paths, [...paths].reverse()]) {
+    const result = removeTopologyInstances(project, selection);
+    assert.deepEqual([...result.affected], ['outer']);
+    const hierarchy = resolveHierarchy(result.project);
+    assert.equal(hierarchy.resolveInstance(['a', 'inner']), undefined);
+    assert.ok(hierarchy.resolveInstance(['separate', 'device']));
+    assert.ok(hierarchy.resolveInstance(['separate', 'removed']));
+  }
 });
 
 test('canvas insertion grows a saved frame as part of the edit', () => {

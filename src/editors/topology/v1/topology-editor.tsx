@@ -5,7 +5,7 @@ import { useState } from 'react';
 import type { PathResult } from '../../../engine/v1/path-resolver';
 import type { SignalGraph } from '../../../engine/v1/signal-graph';
 import type { LibraryItem } from '../../../library/v1/insert-library-item';
-import { removeTopologyInstance, removeWiring } from '../../../state/v1/remove-topology-object';
+import { removeTopologyInstances, removeWiring } from '../../../state/v1/remove-topology-object';
 import type { LocalEndpointRef } from '../../../model/v1/topology';
 import type { ApprovedMove, ReparentLayout } from './reparent-drop';
 import { groupModule } from '../../../state/v1/group-module';
@@ -117,10 +117,11 @@ export function TopologyEditor({ centerPlacement, linkControls, library, store, 
     return true;
   }
 
-  function deleteInstance(path: InstancePath, preserve: (project: Project, parentId: string) => Project) {
-    const parent = store.resolveInstance(path.slice(0, -1))?.definition;
-    if (parent?.kind !== 'module') return;
-    commit(draft => preserve(removeTopologyInstance(draft, parent.id, path.at(-1)!), parent.id));
+  function deleteInstances(paths: readonly InstancePath[], preserve: (project: Project, parentIds: ReadonlySet<string>) => Project) {
+    commit(draft => {
+      const removed = removeTopologyInstances(draft, paths);
+      return preserve(removed.project, removed.affected);
+    });
   }
 
   function deleteWiring(path: InstancePath, wire: WiringSelection) {
@@ -222,7 +223,7 @@ export function TopologyEditor({ centerPlacement, linkControls, library, store, 
         onAddPort={onAddPort} newPort={newPort}
         openPort={(path, portId) => { setMessage(''); setPortAction({ path, portId }); }}
         add={add} placingModule={placingModule} cancelPlacement={() => { setPlacingModule(false); setMessage(''); }}
-        deleteInstance={deleteInstance} deleteWiring={deleteWiring} rename={rename} copyModule={copyModule} pasteModule={pasteModule} report={setMessage} undo={store.undo} redo={store.redo}
+        deleteInstances={deleteInstances} deleteWiring={deleteWiring} rename={rename} copyModule={copyModule} pasteModule={pasteModule} report={setMessage} undo={store.undo} redo={store.redo}
         move={(moves, frame) => commit(draft => {
           const placed = moveTopologyNodes(draft, moves);
           return frame ? resizeTopologyFrame(placed, frame) : placed;
