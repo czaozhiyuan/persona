@@ -157,7 +157,7 @@ type Props = {
   placingModule: boolean;
   cancelPlacement: () => void;
   add: (item: LibraryItem, position: XYPosition) => boolean;
-  deleteInstance: (path: InstancePath, preserve: (project: Project, parentId: string) => Project) => void;
+  deleteInstances: (paths: readonly InstancePath[], preserve: (project: Project, parentIds: ReadonlySet<string>) => Project) => void;
   deleteWiring: (path: InstancePath, wire: WiringSelection) => boolean;
   rename: () => void;
   copyModule: () => boolean;
@@ -174,7 +174,7 @@ export function TopologyCanvas(props: Props) {
 
 function EditableTopologyCanvas({ project, instances, modulePath, selectedInstance, selectedPaths, pathResult, budgetHighlight, expanded,
   toggleModule, selectObject, selectObjects, enterModule, reparent, focusMoved, move, resize, connect, mapPort, add, placingModule, cancelPlacement,
-  deleteInstance, deleteWiring, rename, copyModule, pasteModule, centerPlacement, report, undo, redo, openPort, onAddPort, newPort,
+  deleteInstances, deleteWiring, rename, copyModule, pasteModule, centerPlacement, report, undo, redo, openPort, onAddPort, newPort,
   depth, fullPage, toggleFullPage, restoreView, viewHost, topologyActive }: Props) {
   const flowStore = useStoreApi<CanvasNode, WiringEdge>();
   const boxSelection = useRef<readonly InstancePath[] | undefined>(undefined);
@@ -633,10 +633,10 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
         event.preventDefault();
         rename();
       } else if (event.key === 'Delete') {
-        if (selectedNode && selectedNode.key !== rootKey) {
+        const targets = selectedPaths.filter(path => hierarchyKey(path) !== rootKey);
+        if (targets.length && targets.every(path => nodeByKey.has(hierarchyKey(path)))) {
           event.preventDefault();
-          const path = selectedNode.item.instancePath;
-          deleteInstance(path, (next, parentId) => preserveDeletionLayout(next, parentId, projection, modulePath, expanded, measured));
+          deleteInstances(targets, (next, parentIds) => preserveDeletionLayout(next, parentIds, projection, modulePath, expanded, measured));
         } else if (selectedWiring && selectedWiring.data) {
           event.preventDefault();
           if (deleteWiring(selectedWiring.data.scope, selectedWiring.data)) setSelectedEdgeKey(undefined);

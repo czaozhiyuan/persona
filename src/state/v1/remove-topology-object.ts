@@ -18,22 +18,53 @@ export function removeWiring(project: Project, moduleId: string, wire: WiringSel
 }
 
 export function removeTopologyInstance(project: Project, parentId: string, instanceId: string): Project {
-  const removedRoots: InstancePath[] = [];
-  for (const occurrence of resolveHierarchy(project).walkInstances()) {
-    if (occurrence.definition.id === parentId) removedRoots.push([...occurrence.instancePath, instanceId]);
+  return removeModuleChildren(project, parentId, new Set([instanceId]));
+}
+
+export function removeTopologyInstances(project: Project, paths: readonly InstancePath[]) {
+  const original = resolveHierarchy(project);
+  const byParent = new Map<string, InstancePath[]>();
+  for (const path of paths) {
+    if (!path.length || !original.resolveInstance(path)) throw new Error('所选对象已不存在或是编辑边界。');
+    const parentId = original.resolveInstance(path.slice(0, -1))!.definition.id;
+    const siblings = byParent.get(parentId);
+    if (siblings) siblings.push(path);
+    else byParent.set(parentId, [path]);
   }
-  const removed = (path: InstancePath) => removedRoots.some(root =>
-    root.length <= path.length && root.every((part, index) => path[index] === part));
+
+  // Maximum occurrence depth orders every parent definition before its descendants, even across reused modules.
+  const depth = new Map<string, number>();
+  for (const { definition, instancePath } of original.walkInstances()) {
+    if (byParent.has(definition.id)) depth.set(definition.id, Math.max(depth.get(definition.id) ?? 0, instancePath.length));
+  }
+  const parents = [...byParent.keys()].sort((a, b) => depth.get(a)! - depth.get(b)!);
+  const affected = new Set<string>();
+  for (const parentId of parents) {
+    const live = affected.size ? resolveHierarchy(project) : original;
+    const slots = new Set(byParent.get(parentId)!.filter(path => live.resolveInstance(path)).map(path => path.at(-1)!));
+    if (!slots.size) continue;
+    project = removeModuleChildren(project, parentId, slots, live);
+    affected.add(parentId);
+  }
+  return { project, affected };
+}
+
+function removeModuleChildren(project: Project, parentId: string, slots: ReadonlySet<string>, hierarchy = resolveHierarchy(project)): Project {
+  const parentPaths = new Set<string>();
+  for (const occurrence of hierarchy.walkInstances()) {
+    if (occurrence.definition.id === parentId) parentPaths.add(JSON.stringify(occurrence.instancePath));
+  }
+  const removed = (path: InstancePath) => path.some((id, index) => slots.has(id) && parentPaths.has(JSON.stringify(path.slice(0, index))));
   const updated = editModuleWiring(project, parentId, module => ({
     ...module,
-    instances: module.instances.filter(item => item.id !== instanceId),
-    connections: module.connections?.filter(item => item.from.instanceId !== instanceId && item.to.instanceId !== instanceId),
-    portMappings: module.portMappings?.filter(item => item.target.instanceId !== instanceId),
-    parameterMappings: module.parameterMappings?.filter(item => item.target.instanceId !== instanceId),
+    instances: module.instances.filter(item => !slots.has(item.id)),
+    connections: module.connections?.filter(item => !slots.has(item.from.instanceId) && !slots.has(item.to.instanceId)),
+    portMappings: module.portMappings?.filter(item => !slots.has(item.target.instanceId)),
+    parameterMappings: module.parameterMappings?.filter(item => !slots.has(item.target.instanceId)),
     cableBundles: module.cableBundles?.map(bundle => ({ ...bundle, cores: bundle.cores.map(core => ({
       ...core,
-      a: core.a.endpoint?.instanceId === instanceId ? { pin: core.a.pin } : core.a,
-      b: core.b.endpoint?.instanceId === instanceId ? { pin: core.b.pin } : core.b,
+      a: core.a.endpoint && slots.has(core.a.endpoint.instanceId) ? { pin: core.a.pin } : core.a,
+      b: core.b.endpoint && slots.has(core.b.endpoint.instanceId) ? { pin: core.b.pin } : core.b,
     })) })),
   }));
   const { layout } = updated;

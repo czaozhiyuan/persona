@@ -13,11 +13,11 @@ import { estimatedBlockSize, projectTopology } from './topology-projection';
 
 type Projection = ReturnType<typeof projectTopology>;
 
-export function preserveDeletionLayout(project: Project, parentId: string, before: Projection,
+export function preserveDeletionLayout(project: Project, parentIds: ReadonlySet<string>, before: Projection,
   scope: InstancePath, expanded: ReadonlySet<string>, measured: Parameters<typeof projectTopology>[4]): Project {
   const affected = new Set<string>();
   for (const { definition, path } of before.scopes.values()) {
-    if (definition.id !== parentId) continue;
+    if (!parentIds.has(definition.id)) continue;
     for (let depth = scope.length; depth <= path.length; depth++) {
       affected.add(hierarchyKey(path.slice(0, depth)));
     }

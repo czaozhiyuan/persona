@@ -7,7 +7,7 @@ import { insertLibraryItem } from '../../src/library/v1/insert-library-item';
 import type { ModuleDefinition, PortDefinition, Project } from '../../src/model/v1/types';
 import { createProjectStore } from '../../src/state/v1/project-store';
 import { editModule } from '../../src/state/v1/topology-edits';
-import { removeTopologyInstance, removeWiring } from '../../src/state/v1/remove-topology-object';
+import { removeTopologyInstance, removeTopologyInstances, removeWiring } from '../../src/state/v1/remove-topology-object';
 import { parseProjectJson, serializeProjectJson } from '../../src/storage/v1/project-json';
 
 const root: ModuleDefinition = { id: 'system', name: '系统', kind: 'module', ports: [], instances: [] };
@@ -134,6 +134,34 @@ test('deleting the required rf-feed wire clears both shared scopes and preserves
   store.undo();
   assert.equal(store.getSnapshot().project, before);
   assert.equal(store.getSnapshot().canUndo, false);
+});
+
+test('a mixed batch cleans cable attachments, mappings and occurrence references in the saved project', () => {
+  const base = sharedWiringFixture();
+  const source = { endpoint: { instancePath: ['TX_A', 'laser'], portId: 'OUT' }, channelId: 'DWDM_CH28' } as const;
+  const project = { ...base, instanceSettings: [{ instancePath: mzmB, name: 'Independent name' }],
+    namedLinks: base.namedLinks?.map(link => link.id === 'full'
+      ? { ...link, trial: { frequencyGHz: 2, opticalSources: [source] } } : link) };
+  const store = createProjectStore(project);
+  const initial = store.getSnapshot().project;
+  const paths = [['TX_A'], mzmA, mzmB, ['TX_B', 'optical-switch']];
+  assert.deepEqual(store.commit(draft => removeTopologyInstances(draft, paths).project), { ok: true });
+  const saved = roundTrip(store.getSnapshot().project);
+  const system = saved.moduleDefinitions.find(d => d.id === root.id)!;
+  const tx = saved.moduleDefinitions.find(d => d.id === 'tx')!;
+  assert.deepEqual(tx.ports, initial.moduleDefinitions.find(d => d.id === 'tx')!.ports);
+  assert.deepEqual(tx.portMappings, []);
+  assert.ok(tx.parameterMappings?.every(m => m.target.instanceId !== 'mzm'));
+  assert.deepEqual(system.cableBundles?.[0].cores[0].a, { pin: 1 });
+  assert.deepEqual(system.cableBundles?.[0].cores[0].b, { pin: 12, endpoint: { instanceId: 'RX_A', portId: 'OPT_IN' } });
+  assert.deepEqual(linkFrom(saved, 'full').trial?.opticalSources, []);
+  assert.ok(linkFrom(saved, 'full').via?.every(ref => ref.scopePath[0] !== 'TX_A'));
+  assert.deepEqual([linkFrom(saved, 'draft').from, linkFrom(saved, 'draft').to], [undefined, undefined]);
+  assert.deepEqual(saved.instanceSettings, []);
+  assert.ok(saved.layout?.physical?.every(p => p.enclosurePath[0] !== 'TX_A' && p.instancePath[1] !== 'mzm'));
+  assert.equal(saved.componentDefinitions.length, initial.componentDefinitions.length);
+  store.undo();
+  assert.equal(store.getSnapshot().project, initial);
 });
 
 test('deleting the shared modulator clears parent wires, scoped via, endpoints and placements as one edit', () => {
