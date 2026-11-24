@@ -16,8 +16,9 @@ export function Metric({ metric }: { metric?: BudgetMetric }) {
   return <>{metric.unit === 'ratio' ? `${(metric.value * 100).toFixed(1)}%` : `${metric.value.toFixed(1)} ${metric.unit}`}</>;
 }
 
-export function Rating({ check }: { check?: InputRatingCheck }) {
-  if (!check || check.status === 'within_range') return <>—</>;
+export function Rating({ check, showStatus = false }: { check?: InputRatingCheck; showStatus?: boolean }) {
+  if (!check) return <>{showStatus ? '未设置' : '—'}</>;
+  if (check.status === 'within_range') return <>{showStatus ? '在额定范围内' : '—'}</>;
   if (check.status === 'unknown') return <>无法判断 · {check.reason}</>;
   if (check.value === -Infinity) return <strong className="v1-budget-warning">无射频输入 · 低于下限 {check.limits.min} {check.limits.unit}</strong>;
   return <strong className="v1-budget-warning">

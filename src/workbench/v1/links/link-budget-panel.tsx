@@ -56,7 +56,7 @@ function PointDetails({ point, labels: { showEndpoint, showPort }, locate }: {
         <dl className="v1-budget-metrics">
           <div><dt>调制深度 m</dt><dd><Metric metric={segment.modulationDepth} />{segment.extrapolated && ' · 线性外推'}</dd></div>
           <div><dt>平均光电流</dt><dd><Metric metric={segment.averageCurrent} /></dd></div>
-          <div><dt>MZM 输入额定</dt><dd><Rating check={segment.inputRating} /></dd></div>
+          <div><dt>MZM 输入</dt><dd><Rating check={segment.inputRating} showStatus /></dd></div>
           <div><dt>探测器光功率</dt><dd data-metric="pd-power"><Metric metric={segment.pdPowerDbm} /></dd></div>
           <div><dt>转换段增益</dt><dd data-metric="conversion-gain"><Metric metric={segment.gainDb} /></dd></div>
           <div><dt>转换段输出射频功率</dt><dd><Metric metric={segment.rfOutputDbm} /></dd></div>
