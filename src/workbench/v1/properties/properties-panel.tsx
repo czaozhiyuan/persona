@@ -13,6 +13,7 @@ import { structureScope } from '../structure-scope';
 import { editModule } from '../../../state/v1/topology-edits';
 import { ReceiverPreview, receiverParameterVisible } from './receiver-properties';
 import type { ReceiverQuery } from './receiver-properties';
+import { AddConversion } from './add-conversion';
 import { AutosaveForm } from './autosave-form';
 import { PortFields, TransferFields } from './device-fields';
 import { choice, formatValue, numberField, ParameterField, readNumericParameter, readParameter, textField } from './value-fields';
@@ -112,6 +113,8 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
   }
 
   const detectors = definition.kind === 'component' ? definition.transfers?.filter(t => t.kind === 'oe') ?? [] : [];
+  const visibleParameters = definition.parameters?.filter(parameter =>
+    !detectors.length || receiverParameterVisible(occurrence, parameter.id));
   const name = instance?.name ?? definition.name;
   const nameField = <label>名称<input key={name} name="name" defaultValue={name} data-object-name={instance ? true : undefined} required
     onBlur={event => saveName(event.currentTarget)}
@@ -135,7 +138,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
       {instance && <div className="v1-common-properties">
         <p className="v1-property-effective">名称、状态和参数设置只应用于当前实例。</p>
         {nameField}
-        {definition.kind === 'component' && definition.switchStates && <label>开关状态
+        {definition.kind === 'component' && !!definition.switchStates?.length && <label>开关状态
           <select name="switch" value={instance.switchStateId ?? ''} onChange={event => {
             const switchStateId = event.currentTarget.value;
             if (switchStateId !== instance.switchStateId) changeInstance(current => ({ ...current, switchStateId }));
@@ -144,9 +147,8 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
             {definition.switchStates.map(state => <option key={state.id} value={state.id}>{state.name}</option>)}
           </select>
         </label>}
-        {!!definition.parameters?.length && <h3>参数</h3>}
-        {definition.parameters?.map(parameter => {
-          if (detectors.length && !receiverParameterVisible(occurrence, parameter.id)) return null;
+        {!!visibleParameters?.length && <h3>参数</h3>}
+        {visibleParameters?.map(parameter => {
           const effective = parameters.get(parameter.id);
           const source = effective?.source;
           const local = settings?.parameterOverrides;
@@ -277,31 +279,8 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
             </div>}
           </AutosaveForm>
         </details>)}
-        {definition.kind === 'component' && <form onSubmit={event => {
-          event.preventDefault();
-          const data = new FormData(event.currentTarget);
-          const fromPortId = choice(data, 'input'), toPortId = choice(data, 'output');
-          const from = definition.ports.find(port => port.id === fromPortId);
-          const to = definition.ports.find(port => port.id === toPortId);
-          const eoKind = choice(data, 'eoKind') === 'dml' ? 'dml' : 'eo';
-          const kind = from?.type === 'RF' && to?.type === 'OPTICAL' ? eoKind
-            : from?.type === 'OPTICAL' && to?.type === 'RF' ? 'oe' : undefined;
-          if (!kind) { setError('请选择射频输入与光输出，或光输入与射频输出。'); return; }
-          if (definition.transfers?.some(t => t.fromPortId === fromPortId && t.toPortId === toPortId)) {
-            setError('这两个端口已有传输。'); return;
-          }
-          changeDefinition(() => ({ ...definition, transfers: [...(definition.transfers ?? []), { kind, fromPortId, toPortId }] }));
-        }}>
-          {(['in', 'out'] as const).map(direction => <label key={direction}>{direction === 'in' ? '转换输入' : '转换输出'}
-            <select name={direction === 'in' ? 'input' : 'output'} required defaultValue="">
-              <option value="">请选择端口</option>
-              {definition.ports.filter(port => port.direction === direction && (port.type === 'RF' || port.type === 'OPTICAL'))
-                .map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true, definition.ports)}</option>)}
-            </select>
-          </label>)}
-          <label>电光转换方式<select name="eoKind"><option value="eo">外置调制器</option><option value="dml">直调激光器</option></select></label>
-          <button type="submit">添加电光或光电传输</button>
-        </form>}
+        {definition.kind === 'component' && <AddConversion definition={definition} add={transfer =>
+          changeDefinition(() => ({ ...definition, transfers: [...(definition.transfers ?? []), transfer] }))} />}
         {definition.kind === 'component' && definition.transfers?.map((transfer, index) => <details key={index}>
           <summary>传输 · {transferLabels[transfer.kind]} · {portDisplayName(definition.ports.find(port => port.id === transfer.fromPortId)!, true)} → {portDisplayName(definition.ports.find(port => port.id === transfer.toPortId)!, true)}</summary>
           <TransferFields transfer={transfer} definition={definition} occurrences={occurrences}
@@ -309,7 +288,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
               transfers: definition.transfers?.map((item, i) => i === index ? read() : item),
             }))} />
         </details>)}
-        {definition.kind === 'component' && definition.switchStates?.map(state => <details key={state.id}>
+        {definition.kind === 'component' && definition.switchStates?.filter(state => state.routes.length).map(state => <details key={state.id}>
           <summary>开关路由 · {state.name}</summary>
           {state.routes.map((route, index) => <TransferFields key={JSON.stringify([index, route])}
             transfer={{ ...route, kind: 'optical' }} definition={definition}
