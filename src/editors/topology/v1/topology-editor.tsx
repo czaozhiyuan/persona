@@ -20,7 +20,6 @@ import type { BindingPreview } from './port-binding-dialog';
 import { PortDeletionDialog } from './port-deletion-dialog';
 import type { BudgetHighlight } from './path-highlight';
 import { insertCanvasItem } from './topology-layout-edits';
-import { DepthControl } from './canvas-controls';
 import type { CanvasView } from './canvas-controls';
 import { TopologyCanvas } from './topology-canvas';
 import { displayDepth, hierarchyKey, inHierarchy, sharedParent } from './hierarchy-view';
@@ -245,12 +244,11 @@ export function TopologyEditor({ linkControls, library, store, state, module, pa
         })}
       </nav>
       {linkControls}
-      </div>
       {placingModule && <p className="v1-placement-hint" role="status">单击画布放置到「{moduleName}」 · Esc 取消</p>}
+      </div>
       {copyNotice && !message && <p className="v1-topology-message v1-module-copy-notice" role="status">{copyNotice}</p>}
       {message && !preview && !portAction && !bindingPreview && !groupDialog && <p className="v1-topology-message error" role="alert">{message}</p>}
     </div>
-    {topologyActive && viewHost && createPortal(<DepthControl depth={depth} showValue />, viewHost)}
     {topologyActive && toolsHost && createPortal(<div className="v1-module-tools">
       {groupPaths.length > 1 && <section className="v1-multi-operations">
         <p className="v1-property-effective" role="status">已选中 {groupPaths.length} 个对象。</p>

@@ -64,9 +64,6 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .v1-view-menus .v1-menu-items { right: 0; left: auto; }
 .v1-view-items button[aria-pressed="true"] { background: #deefe9; }
 .v1-view-canvas-settings:not(:empty) { border-top: 1px solid #dbe5e0; margin-top: .15rem; }
-.v1-view-canvas-settings .v1-hierarchy-depth { border: 0; gap: .25rem; padding-inline: .25rem; color: #36534c; }
-.v1-view-canvas-settings .v1-hierarchy-depth button { width: auto; padding-inline: .3rem; }
-.v1-view-canvas-settings output { font-size: .75rem; white-space: nowrap; }
 .toolbar .v1-new-module { min-height: 1.9rem; padding: .2rem .55rem; white-space: nowrap; font-size: .85rem; background: #c6e5dc; border-color: #c6e5dc; color: #183b31; }
 .toolbar .v1-new-module:hover:not(:disabled), .toolbar .v1-new-module[aria-pressed="true"] { background: #a0d7c7; }
 .toolbar .actions { gap: 0; }

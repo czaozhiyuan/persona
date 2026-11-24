@@ -629,9 +629,6 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
       const item = readLibraryItem(event.dataTransfer);
       if (item) placeAt(item, { x: event.clientX, y: event.clientY });
     }}>
-    {placingModule && !panWithSpace && <ModulePlacement
-      zoom={() => flow.current?.getZoom()}
-      place={screen => placeAt({ source: 'blank-module', id: blankModuleId, name: '新建模块', automaticName: true }, screen)} />}
     <ReactFlow<CanvasNode, WiringEdge> nodes={nodes} edges={edges.map(edge => ({ ...edge, selected: selectedWiring === edge }))}
       nodeTypes={nodeTypes} edgeTypes={edgeTypes} ariaLabelConfig={flowAriaLabels} fitView={!initialViewport} defaultViewport={initialViewport} fitViewOptions={canvasFitOptions}
       viewport={viewport} onViewportChange={changeViewport} onInit={instance => { flow.current = instance; }}
@@ -729,6 +726,9 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
       onNodeDragStop={finishDrag}>
       <Background />
       <ViewportPortal><div className="v1-frame-surfaces" aria-hidden="true">{frameSurfaces}</div></ViewportPortal>
+      {placingModule && !panWithSpace && <ModulePlacement
+        zoom={() => flow.current?.getZoom()}
+        place={screen => placeAt({ source: 'blank-module', id: blankModuleId, name: '新建模块', automaticName: true }, screen)} />}
       <CanvasControls depth={depth} fullPage={fullPage} canLocate={!!locateIds.length} locate={() => {
         if (locateIds.length) void flow.current?.fitView({ ...canvasFitOptions, nodes: locateIds.map(id => ({ id })), maxZoom: 1.2 });
       }} toggleFullPage={switchFullPage} />
