@@ -4,6 +4,7 @@ import { resolveHierarchy } from '../../src/engine/v1/hierarchy';
 import { builtInDefinitions } from '../../src/library/v1/built-in';
 import { addTemplateInstance, previewTemplateUpdate } from '../../src/library/v1/project-snapshots';
 import type { Project } from '../../src/model/v1/types';
+import { instantiateModule } from '../../src/state/v1/instantiate-module';
 import { createProjectStore } from '../../src/state/v1/project-store';
 import { parseProjectJson, serializeProjectJson } from '../../src/storage/v1/project-json';
 
@@ -12,6 +13,23 @@ const empty: Project = {
   id: 'test', name: 'Test', rootModuleDefinitionId: 'system', componentDefinitions: [],
   moduleDefinitions: [{ id: 'system', name: 'System', kind: 'module', ports: [], instances: [] }],
 };
+
+test('copied and reused modules retain component icon choices through project JSON', () => {
+  const template = { ...gain, name: 'Renamed template', iconKey: 'pcb' } as const;
+  const installed = addTemplateInstance(empty, [template, stage], stage.id, 'system', 'stage', 'Stage');
+  const reused = instantiateModule(installed.project, ['stage'], 'reuse', 'shared', () => assert.fail());
+  let sequence = 0;
+  const copy = instantiateModule(reused, ['stage'], 'copy', 'independent', () => `copy-${++sequence}`);
+  const json = serializeProjectJson(copy);
+  const tree = resolveHierarchy(parseProjectJson(json));
+  for (const id of ['stage', 'shared', 'independent']) {
+    const child = tree.resolveInstance([id, 'amplifier'])?.definition;
+    assert.equal(child?.kind === 'component' && child.iconKey, 'pcb');
+  }
+  const invalid = JSON.parse(json);
+  invalid.project.componentDefinitions[0].iconKey = 'https://example.invalid/icon.svg';
+  assert.throws(() => parseProjectJson(JSON.stringify(invalid)), /componentDefinitions\[0\]\.iconKey/);
+});
 
 test('template dependencies become self-contained snapshots and adding a reused ID keeps the existing definition', () => {
   const installed = addTemplateInstance(empty, builtInDefinitions, stage.id, 'system', 'stage', 'Stage');

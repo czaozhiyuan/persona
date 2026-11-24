@@ -1,9 +1,10 @@
 import { moduleName } from '../../../state/v1/module-name';
-import { portDisplayName, portTypeLabels, transferLabels } from '../labels';
+import { componentIconLabels, portDisplayName, portTypeLabels, transferLabels } from '../labels';
 import { useState } from 'react';
 import { PortDeletionDialog } from '../../../editors/topology/v1/port-deletion-dialog';
 import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
 import type { ParameterDefinition } from '../../../model/v1/parameters';
+import { componentIconKeys } from '../../../model/v1/types';
 import type { ComponentDefinition, InstancePath, InstanceSettings, ModuleDefinition, Project } from '../../../model/v1/types';
 import type { ProjectStore } from '../../../state/v1/project-store';
 import { editInstanceSettings } from '../../../state/v1/instance-settings';
@@ -235,6 +236,15 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
       <details className="v1-advanced-properties">
         <summary>高级设置 · 共享定义</summary>
         <p className="v1-property-effective">这里编辑共享定义。{sharedLocations.length > 0 && ` 改动会应用到 ${sharedLocations.join('、')}。`}</p>
+        {definition.kind === 'component' && <label>框图图标
+          <select value={definition.iconKey ?? ''} onChange={event => {
+            const iconKey = componentIconKeys.find(key => key === event.currentTarget.value);
+            changeDefinition(() => ({ ...definition, iconKey }));
+          }}>
+            <option value="">通用器件</option>
+            {componentIconKeys.map(key => <option key={key} value={key}>{componentIconLabels[key]}</option>)}
+          </select>
+        </label>}
         {instance && <form key={definition.name} onSubmit={event => {
           event.preventDefault();
           const name = textField(new FormData(event.currentTarget), 'name');
