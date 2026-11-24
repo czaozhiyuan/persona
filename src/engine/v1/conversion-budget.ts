@@ -14,7 +14,7 @@ import type { SignalStep } from './path-search';
 import { isRfFrequency, resolveRfStage } from './rf-budget';
 import type { RfBudgetInput } from './rf-budget';
 import { signalPortKey } from './signal-graph';
-import type { SignalGraph } from './signal-graph';
+import type { SignalGraph, SignalPort } from './signal-graph';
 
 export type ConversionBudgetInput = RfBudgetInput & { opticalSources?: readonly OpticalSource[] };
 
@@ -23,6 +23,8 @@ type ConversionSegment = {
   oeEdgeIndex: number;
   pdInput: EndpointRef;
   channelId?: OpticalChannelId;
+  vPi: BudgetMetric<'V'>;
+  responsivity: BudgetMetric<'A/W'>;
   modulationDepth: BudgetMetric<'ratio'>;
   averageCurrent: BudgetMetric<'A'>;
   inputRating?: InputRatingCheck;
@@ -60,9 +62,10 @@ export type ConversionBudget = {
   gainDb: BudgetMetric<'dB'>;
   nfDb: BudgetMetric<'dB'>;
   powerDbm: BudgetMetric<'dBm'>;
+  rfPorts: readonly { endpoint: EndpointRef; powerDbm: BudgetMetric<'dBm'> }[];
   segments: readonly ConversionSegment[];
   rfStages: readonly ExternalRfStage[];
-  continuousWave?: { pdInput: EndpointRef; optical: OpticalBudget; averageCurrent: BudgetMetric<'A'> };
+  continuousWave?: { pdInput: EndpointRef; optical: OpticalBudget; responsivity: BudgetMetric<'A/W'>; averageCurrent: BudgetMetric<'A'> };
   diagnostics: readonly Diagnostic[];
 };
 
@@ -107,13 +110,14 @@ export function createConversionPathBudget(graph: SignalGraph) {
 
   return function calculate(path: PathResult, input: ConversionBudgetInput): ConversionBudget {
     const { frequencyGHz, inputPowerDbm, opticalSources = [] } = input;
+    const rfPorts: { endpoint: EndpointRef; powerDbm: BudgetMetric<'dBm'> }[] = [];
     const diagnostics: Diagnostic[] = [];
     const segments: ConversionSegment[] = [];
     const rfStages: ExternalRfStage[] = [];
 
     function failed(problem: Diagnostic): ConversionBudget {
       return { status: 'error', frequencyGHz, gainDb: unavailable('dB', problem.reason), nfDb: noNf(),
-        powerDbm: unavailable('dBm', problem.reason), segments, rfStages, diagnostics: [problem] };
+        powerDbm: unavailable('dBm', problem.reason), rfPorts, segments, rfStages, diagnostics: [problem] };
     }
     if (!isRfFrequency(frequencyGHz)) {
       return failed({ code: 'invalid_frequency', reason: '射频频率须在 0 至 67 GHz 范围内。' });
@@ -139,7 +143,7 @@ export function createConversionPathBudget(graph: SignalGraph) {
         const rho = resolveEmpiricalValue('A/W', edge.source.transfer.responsivity, { channelId: optical.stages.at(-1)?.channelId },
           instances.get(JSON.stringify(edge.from.ref.instancePath)));
         const averageCurrent = photocurrent(optical.powerDbm, rho);
-        continuousWave = { pdInput: edge.from.ref, optical, averageCurrent };
+        continuousWave = { pdInput: edge.from.ref, optical, responsivity: rho, averageCurrent };
         block({ code: 'incomplete_conversion', reason: '连续光未携带射频调制。' });
       }
     }
@@ -160,10 +164,17 @@ export function createConversionPathBudget(graph: SignalGraph) {
     let gainDb = budgetValue('dB', 0);
     let powerDbm = inputPowerDbm === undefined ? unavailable('dBm', '未提供射频输入功率。') : budgetValue('dBm', inputPowerDbm);
 
+    function recordRfPower(port: SignalPort) {
+      if (port.definition.type === 'RF') rfPorts.push({ endpoint: port.ref, powerDbm });
+    }
+    recordRfPower(first.port);
     for (let i = 0; i < trace.edges.length; i++) {
       const edge = trace.edges[i];
       const source = edge.source;
-      if (source.kind !== 'transfer') continue;
+      if (source.kind !== 'transfer') {
+        recordRfPower(edge.to);
+        continue;
+      }
       const oeIndex = pairs.get(i);
       if (oeIndex !== undefined) {
         const pdInput = trace.edges[oeIndex].from.ref;
@@ -195,7 +206,7 @@ export function createConversionPathBudget(graph: SignalGraph) {
         gainDb = addGain(gainDb, gain);
         powerDbm = addGain(powerDbm, gain);
         segments.push({ eoEdgeIndex: i, oeEdgeIndex: oeIndex, pdInput, channelId, optical, pdPowerDbm, inputRating,
-          gainDb: gain, rfOutputDbm: powerDbm, modulationDepth, averageCurrent,
+          vPi, responsivity: rho, gainDb: gain, rfOutputDbm: powerDbm, modulationDepth, averageCurrent,
           extrapolated: modulationDepth.availability === 'available' && modulationDepth.value > 0.3 });
         i = oeIndex;
       } else if (source.transfer.kind === 'rf') {
@@ -210,6 +221,7 @@ export function createConversionPathBudget(graph: SignalGraph) {
       } else if (source.transfer.kind === 'eo' || source.transfer.kind === 'oe') {
         powerDbm = unavailable('dBm', '该转换没有匹配的电光—光电转换段。');
       }
+      recordRfPower(trace.edges[i].to);
     }
 
     if (blocked) {
@@ -219,7 +231,7 @@ export function createConversionPathBudget(graph: SignalGraph) {
     const hasResults = continuousWave?.optical.powerDbm.availability === 'available' || gainDb.availability === 'available' || segments.some(segment =>
       segment.optical && segment.optical.status !== 'error' || segment.gainDb.availability === 'available')
       || rfStages.some(stage => stage.gainDb.availability === 'available' || stage.nfDb.availability === 'available');
-    return { status: hasResults ? 'partial' : 'error', frequencyGHz, gainDb, powerDbm, nfDb: noNf(), segments, rfStages, continuousWave, diagnostics };
+    return { status: hasResults ? 'partial' : 'error', frequencyGHz, gainDb, powerDbm, nfDb: noNf(), rfPorts, segments, rfStages, continuousWave, diagnostics };
   };
 }
 

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { createLinkBudget } from '../../../engine/v1/link-budget';
+import type { createLinkBudget, LinkBudgetPoint } from '../../../engine/v1/link-budget';
 import type { OpticalBudget } from '../../../engine/v1/optical-budget';
 import type { PathResult } from '../../../engine/v1/path-resolver';
 import { signalPortKey } from '../../../engine/v1/signal-graph';
@@ -7,7 +7,7 @@ import { resolveOpticalChannel } from '../../../model/v1/channels';
 import type { LinkTrial, NamedLink } from '../../../model/v1/topology';
 import type { EndpointRef } from '../../../model/v1/types';
 import type { ProjectStore } from '../../../state/v1/project-store';
-import { EndpointLocation } from '../budgets/budget-dock';
+import { EndpointLocation } from '../budgets/budget-location';
 import { OpticalResult } from '../budgets/local-optical-panel';
 import { ChannelField } from '../properties/channel-field';
 import { LinkBudgetPanel } from './link-budget-panel';
@@ -19,6 +19,7 @@ import './link-editor.css';
 type Props = {
   store: ProjectStore;
   options: LinkOptions;
+  point?: LinkBudgetPoint;
   opticalLink: boolean;
   selected?: NamedLink;
   result?: PathResult;
@@ -69,7 +70,7 @@ function Diagnostics({ result, showEndpoint, locate }: {
   </div>;
 }
 
-export function LinkEditor({ store, options, selected, result, budget, conditions, setConditions,
+export function LinkEditor({ store, options, selected, result, budget, point, conditions, setConditions,
   draft, opticalLink, opticalResult, saveTrial, trialSaved, choose, locate, setDraftChannel }: Props) {
   const [error, setError] = useState('');
   const [fromKey, setFromKey] = useState(selected?.from ? signalPortKey(selected.from) : '');
@@ -101,6 +102,13 @@ export function LinkEditor({ store, options, selected, result, budget, condition
     return edit.ok;
   }
 
+  const trialControls = <div className="v1-trial-controls">
+    <span role="status">{trialSaved ? '已保存到工程的试算条件' : '临时试算条件，仅在本次会话使用'}</span>
+    <button type="button" onClick={saveTrial} disabled={draft || trialSaved
+      || !Number.isFinite(conditions.frequencyGHz) || conditions.frequencyGHz < 0 || conditions.frequencyGHz > 67}>保存试算条件</button>
+    {draft && <span>先保存链路，再保存试算条件。</span>}
+  </div>;
+  const diagnostics = result && <Diagnostics result={result} showEndpoint={options.showEndpoint} locate={locate} />;
   return <section className="panel v1-links" aria-labelledby="v1-links-title">
     <div className="v1-links-header">
       <h2 id="v1-links-title">链路</h2>
@@ -114,7 +122,6 @@ export function LinkEditor({ store, options, selected, result, budget, condition
       </select>
     </div>
     {error && <p className="error" role="alert">{error}</p>}
-    {result && <Diagnostics result={result} showEndpoint={options.showEndpoint} locate={locate} />}
     <details open={!selected || draft || undefined}>
       <summary>链路设置</summary>
       <form key={JSON.stringify(draft ? [selected?.from, selected?.to] : selected ?? null)} onSubmit={event => {
@@ -162,19 +169,13 @@ export function LinkEditor({ store, options, selected, result, budget, condition
         options={opticalLink && selected.from ? options.opticalSources.filter(item => item.key === signalPortKey(selected.from!)) : options.opticalSources}
         sources={conditions.opticalSources ?? []}
         onChange={opticalSources => setConditions({ ...conditions, opticalSources })} />}
-      {opticalLink ? (opticalResult && selected.to
+
+      {opticalLink ? <>{trialControls}{opticalResult && selected.to
         ? <OpticalResult result={opticalResult} target={selected.to} showEndpoint={options.showEndpoint} locate={locate} />
-        : <p role="status">{selected.via?.length ? '带必经边约束的光路可查看路径。请从光输出端口打开局部光功率，按供光条件试算。'
-          : '请选择光通道。可在「供光选择与临时覆盖」中设置试算功率。'}</p>)
-        : <LinkBudgetPanel link={selected} budget={budget} conditions={conditions} labels={options} locate={locate}
+        : <p role="status">请选择有效光路和光通道。可在「供光选择与临时覆盖」中设置试算功率。</p>}{diagnostics}</>
+        : point && <LinkBudgetPanel trialControls={trialControls} diagnostics={diagnostics} single={point} link={selected} budget={budget} conditions={conditions} labels={options} locate={locate}
           frequency={conditions.frequencyGHz} setFrequency={frequencyGHz => setConditions({ ...conditions, frequencyGHz })}
           setInputPower={inputPowerDbm => setConditions({ ...conditions, inputPowerDbm })} />}
-      <div className="v1-trial-controls">
-        <span role="status">{trialSaved ? '已保存到工程的试算条件' : '临时试算条件，仅在本次会话使用'}</span>
-        <button type="button" onClick={saveTrial} disabled={draft || trialSaved
-          || !Number.isFinite(conditions.frequencyGHz) || conditions.frequencyGHz < 0 || conditions.frequencyGHz > 67}>保存试算条件</button>
-        {draft && <span>先保存链路，再保存试算条件。</span>}
-      </div>
     </>}
   </section>;
 }

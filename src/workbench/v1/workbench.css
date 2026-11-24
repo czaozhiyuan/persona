@@ -81,20 +81,6 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 /* React Flow nodes set their own visibility. Hide the entire canvas without changing its measured size. */
 .v1-canvas-page[aria-hidden="true"] { visibility: hidden; opacity: 0; }
 .v1-page-scroll { overflow: auto; z-index: 1; background: #f1f5f4; }
-.v1-workbench-main { --budget-height: 0px; }
-.v1-workbench-main[data-budget="open"] { --budget-height: min(38%, 22rem); }
-.v1-workbench-main[data-budget="enlarged"] { --budget-height: 75%; }
-.v1-workbench-main[data-budget="collapsed"] { --budget-height: 2.35rem; }
-.v1-workbench-main[data-budget] .v1-canvas-page { bottom: var(--budget-height); }
-.v1-budget-dock {
-  position: absolute; inset: auto 0 0; z-index: 3; height: var(--budget-height); min-height: 0;
-  display: flex; flex-direction: column; background: #f7fbf9; border-top: 1px solid #96b5aa;
-}
-.v1-budget-dock > header { display: flex; gap: .35rem; padding: .18rem .45rem; border-bottom: 1px solid #cbdad5; }
-.v1-budget-dock > header button { min-height: 1.8rem; font-size: .8rem; }
-.v1-budget-dock > header button:last-child { margin-inline-start: auto; }
-#v1-budget-content { flex: 1; overflow: auto; }
-#v1-budget-content > .panel { margin: .4rem; padding: .7rem; }
 .v1-budget-locate { background: transparent; border: 0; padding: 0; color: #205e54; text-decoration: underline; text-align: left; font: inherit; }
 .v1-trial-controls { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-block: .65rem; font-size: .82rem; }
 .v1-project-status[data-modified="true"] { color: #ffe09b; }
@@ -194,9 +180,7 @@ button.primary:hover:not(:disabled) { background: #194f47; }
 .v1-workbench[data-full-page="true"] > .toolbar,
 .v1-workbench[data-full-page="true"] > .v1-workbench-notice,
 .v1-workbench[data-full-page="true"] .v1-side,
-.v1-workbench[data-full-page="true"] .v1-budget-dock,
 .v1-workbench[data-full-page="true"] .v1-topology-path { display: none; }
-.v1-workbench[data-full-page="true"] .v1-workbench-main[data-budget] .v1-canvas-page { bottom: 0; }
 
 .v1-context-actions { display: flex; flex-wrap: wrap; gap: .35rem; margin-block: .55rem; }
 .v1-context-actions button { max-width: 100%; overflow-wrap: anywhere; }

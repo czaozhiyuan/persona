@@ -1,8 +1,9 @@
 import { loadedVoltages } from '../../../engine/v1/conversion-budget';
+import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import type { createLinkBudget, LinkBudgetConditions, LinkBudgetPoint, RfScanRange } from '../../../engine/v1/link-budget';
 import type { EndpointRef } from '../../../model/v1/types';
-import { EndpointLocation } from '../budgets/budget-dock';
+import { EndpointLocation } from '../budgets/budget-location';
 import type { NamedLink } from '../../../model/v1/topology';
 import { RfScanPlot, scanMetrics } from './rf-scan-plot';
 import type { ScanMetric } from './rf-scan-plot';
@@ -54,6 +55,8 @@ function PointDetails({ point, labels: { showEndpoint, showPort }, locate }: {
       {point.segments.map(segment => <details key={segment.eoEdgeIndex}>
         <summary>电光—光电转换段 · {showEndpoint(segment.pdInput)}{segment.channelId && ` · ${segment.channelId}`}</summary>
         <dl className="v1-budget-metrics">
+          <div><dt>RF 半波电压 Vπ</dt><dd><Metric metric={segment.vPi} /></dd></div>
+          <div><dt>响应度</dt><dd><Metric metric={segment.responsivity} /></dd></div>
           <div><dt>调制深度 m</dt><dd><Metric metric={segment.modulationDepth} />{segment.extrapolated && ' · 线性外推'}</dd></div>
           <div><dt>平均光电流</dt><dd><Metric metric={segment.averageCurrent} /></dd></div>
           <div><dt>MZM 输入</dt><dd><Rating check={segment.inputRating} showStatus /></dd></div>
@@ -83,7 +86,10 @@ function PointDetails({ point, labels: { showEndpoint, showPort }, locate }: {
   </div>;
 }
 
-export function LinkBudgetPanel({ link, budget, conditions, frequency, setFrequency, setInputPower, labels, locate }: {
+export function LinkBudgetPanel({ trialControls, diagnostics, link, budget, single, conditions, frequency, setFrequency, setInputPower, labels, locate }: {
+  trialControls: ReactNode;
+  diagnostics: ReactNode;
+  single: LinkBudgetPoint;
   link: NamedLink;
   labels: PortLabels;
   budget: ReturnType<typeof createLinkBudget>;
@@ -94,13 +100,11 @@ export function LinkBudgetPanel({ link, budget, conditions, frequency, setFreque
   locate: (endpoint: EndpointRef) => void;
 }) {
   const [range, setRange] = useState<RfScanRange>();
-  const [scanFrequency, setScanFrequency] = useState<number>();
   const [metric, setMetric] = useState<ScanMetric>('gainDb');
-  const single = useMemo(() => budget.calculateNamedLink(link, { ...conditions, frequencyGHz: frequency }),
-    [budget, conditions, frequency, link]);
-  const scan = useMemo(() => range && budget.scanNamedLink(link, range, conditions), [budget, conditions, link, range]);
-  const selectedPoint = scan?.status === 'complete' &&
-    (scan.points.find(point => point.frequencyGHz === scanFrequency) ?? scan.points[0]);
+  const { inputPowerDbm, opticalSources } = conditions;
+  const scan = useMemo(() => range && budget.scanNamedLink(link, range, { inputPowerDbm, opticalSources }),
+    [budget, inputPowerDbm, opticalSources, link, range]);
+  const selectedPoint = scan?.points.find(point => point.frequencyGHz === frequency);
 
   return <section className="v1-link-budget" aria-labelledby="v1-link-budget-heading">
     <h3 id="v1-link-budget-heading">链路预算</h3>
@@ -113,15 +117,18 @@ export function LinkBudgetPanel({ link, budget, conditions, frequency, setFreque
           setInputPower(Number.isFinite(value) ? value : undefined);
         }} /></label>
     </div>
+    {trialControls}
     <div className="v1-single-point"><PointDetails point={single} labels={labels} locate={locate} /></div>
+    {diagnostics}
     <details>
       <summary>射频扫描 · 1 GHz 步长</summary>
       <form onSubmit={event => {
         event.preventDefault();
         const data = new FormData(event.currentTarget);
         const startGHz = Number(data.get('scanStart'));
-        setRange({ startGHz, stopGHz: Number(data.get('scanStop')) });
-        setScanFrequency(startGHz);
+        const stopGHz = Number(data.get('scanStop'));
+        setRange({ startGHz, stopGHz });
+        if (startGHz <= stopGHz) setFrequency(startGHz);
       }}>
         <div className="v1-link-fields">
           <label>起始频率 (GHz)<input name="scanStart" type="number" min={0} max={67} defaultValue={0} step={1} required /></label>
@@ -130,20 +137,21 @@ export function LinkBudgetPanel({ link, budget, conditions, frequency, setFreque
         <button type="submit">运行扫描</button>
       </form>
       {scan?.status === 'invalid_range' && <p className="error" role="alert">{scan.reason}</p>}
-      {scan?.status === 'complete' && selectedPoint && <>
+      {scan?.status === 'complete' && <>
         <div className="v1-link-fields">
           <label>曲线指标<select value={metric} onChange={event => setMetric(event.target.value as ScanMetric)}>
             {Object.entries(scanMetrics).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
           </select></label>
-          <label>查看频点<select name="scanPoint" value={selectedPoint.frequencyGHz}
-            onChange={event => setScanFrequency(Number(event.target.value))}>
+          <label>查看频点<select name="scanPoint" value={selectedPoint?.frequencyGHz ?? ''}
+            onChange={event => setFrequency(Number(event.target.value))}>
+            {!selectedPoint && <option value="" disabled>请选择扫描频点</option>}
             {scan.points.map(point => <option key={point.frequencyGHz} value={point.frequencyGHz}>
               {point.frequencyGHz} GHz · {statusLabels[point.status]}{point.kind === 'conversion' && point.segments.some(s => s.extrapolated) && ' · 线性外推'}
             </option>)}
           </select></label>
         </div>
-        <RfScanPlot points={scan.points} metric={metric} selected={selectedPoint.frequencyGHz} />
-        <div className="v1-scan-point"><PointDetails point={selectedPoint} labels={labels} locate={locate} /></div>
+        <RfScanPlot points={scan.points} metric={metric} selected={frequency} />
+        {selectedPoint && <div className="v1-scan-point"><PointDetails point={selectedPoint} labels={labels} locate={locate} /></div>}
       </>}
     </details>
   </section>;

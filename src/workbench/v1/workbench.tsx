@@ -19,7 +19,8 @@ import { moveTopologyNodes, resizeTopologyFrame } from '../../state/v1/topology-
 import type { ProjectStore } from '../../state/v1/project-store';
 import { parseProjectJson, projectErrorMessage, serializeProjectJson } from '../../storage/v1/project-json';
 import type { BudgetHighlight } from '../../editors/topology/v1/path-highlight';
-import { BudgetDock, enclosureContains } from './budgets/budget-dock';
+import { linkAnnotations } from '../../editors/topology/v1/link-annotations';
+import { enclosureContains } from './budgets/budget-location';
 import { projectFileName, sameTrial } from './budgets/trial-conditions';
 import { DcBudgetPanel } from './budgets/dc-budget-panel';
 import { LocalOpticalPanel } from './budgets/local-optical-panel';
@@ -42,7 +43,7 @@ type Props = {
   newProject: () => Project;
 };
 
-type Page = 'canvas' | 'project';
+type Page = 'canvas' | 'project' | 'budget';
 type BudgetPage = 'links' | 'optical' | 'dc';
 type SideTab = 'structure' | 'library';
 type Presentation = {
@@ -51,13 +52,10 @@ type Presentation = {
   selected: readonly InstancePath[];
   leftTab?: SideTab;
   propertiesOpen: boolean;
-  dock?: BudgetPage;
-  collapsed: boolean;
-  enlarged: boolean;
   expandedCanvas: ReadonlySet<string>;
   expandedHierarchy: ReadonlySet<string>;
 };
-const budgetTitles = { links: '查看链路预算', optical: '局部光功率', dc: '供电与功耗' };
+const budgetTitles = { links: '链路预算', optical: '局部光功率', dc: '直流供电预算' };
 const defaultTrial: LinkTrial = { frequencyGHz: 1 };
 
 function closeWorkbenchMenu() {
@@ -84,9 +82,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const topologyActive = page === 'canvas' && selection.view === 'topology';
   const [savedProject, setSavedProject] = useState(project);
   const modified = project !== savedProject;
-  const [dock, setDock] = useState<BudgetPage>();
-  const [collapsed, setCollapsed] = useState(false);
-  const [enlarged, setEnlarged] = useState(false);
+  const [category, setCategory] = useState<BudgetPage>('links');
+  const [showMetrics, setShowMetrics] = useState(true);
   const [draftLink, setDraftLink] = useState<NamedLink>();
   const [opticalTarget, setOpticalTarget] = useState<EndpointRef>();
   const [dcScope, setDcScope] = useState<InstancePath>();
@@ -121,32 +118,45 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const opticalLink = [selectedLink?.from, selectedLink?.to].every(endpoint =>
     endpoint && linkOptions.graph.ports.get(signalPortKey(endpoint))?.definition.type === 'OPTICAL');
   const activeTrial = selectedLink ? linkInputs.get(selectedLink.id) ?? selectedLink.trial ?? defaultTrial : defaultTrial;
-  const conditions = useMemo(() => {
+  const opticalSources = useMemo(() => {
     const ports = new Set(linkOptions.opticalSources.map(option => option.key));
-    return { ...activeTrial, opticalSources: activeTrial.opticalSources?.filter(source => ports.has(signalPortKey(source.endpoint))) };
-  }, [linkOptions, activeTrial]);
-  const pathResult = useMemo(() => dock === 'links' && selectedLink ? budget.resolveNamedLink(selectedLink, conditions) : undefined,
-    [dock, selectedLink, budget, conditions]);
+    return activeTrial.opticalSources?.filter(source => ports.has(signalPortKey(source.endpoint)));
+  }, [linkOptions, activeTrial.opticalSources]);
+  const conditions = useMemo(() => ({ ...activeTrial, opticalSources }), [activeTrial, opticalSources]);
+  const pathResult = useMemo(() => selectedLink ? budget.resolveNamedLink(selectedLink, { opticalSources }) : undefined,
+    [selectedLink, budget, opticalSources]);
+  const canvasPath = category === 'links' ? pathResult : undefined;
+  const point = useMemo(() => pathResult && !opticalLink ? budget.calculatePath(pathResult, conditions) : undefined,
+    [budget, pathResult, opticalLink, conditions]);
   const opticalBudget = useMemo(() => createOpticalBudgetForGraph(linkOptions.graph), [linkOptions]);
   const opticalResult = useMemo(() => {
     const query = localOptical.query;
-    return dock === 'optical' && query ? opticalBudget.calculateLocal('eo' in query ? { ...query, sources: localOptical.sources } : query) : undefined;
-  }, [dock, localOptical, opticalBudget]);
+    return category === 'optical' && query ? opticalBudget.calculateLocal('eo' in query ? { ...query, sources: localOptical.sources } : query) : undefined;
+  }, [category, localOptical, opticalBudget]);
   const linkedOpticalResult = useMemo(() => {
-    const { from, to, channelId, via } = selectedLink ?? {};
-    if (pathResult?.status !== 'resolved' || !from || !to || !channelId || via?.length || pathResult.trace.conversions.length) return undefined;
+    const { from, to } = selectedLink ?? {};
+    if (!opticalLink || pathResult?.status !== 'resolved' || !from || !to || pathResult.trace.conversions.length) return undefined;
+    const channels = pathResult.trace.steps[0]?.channelIds;
+    const channelId = channels?.length === 1 ? channels[0] : selectedLink?.channelId;
+    if (!channelId) return undefined;
     if (linkOptions.graph.ports.get(signalPortKey(to))?.definition.type !== 'OPTICAL') return undefined;
-    const source = conditions.opticalSources?.find(item => signalPortKey(item.endpoint) === signalPortKey(from) && item.channelId === channelId);
-    return opticalBudget.calculateLocal({ source: source ?? { endpoint: from, channelId }, to });
-  }, [selectedLink, pathResult, conditions, linkOptions, opticalBudget]);
+    const source = opticalSources?.find(item => signalPortKey(item.endpoint) === signalPortKey(from) && item.channelId === channelId);
+    return opticalBudget.calculateSourcePath(pathResult.trace, source ?? { endpoint: from, channelId });
+  }, [selectedLink, pathResult, opticalSources, linkOptions, opticalBudget, opticalLink]);
+  const annotations = useMemo(() => showMetrics && canvasPath
+    ? linkAnnotations(linkOptions.graph, canvasPath, point, linkedOpticalResult) : undefined,
+    [showMetrics, canvasPath, linkOptions, point, linkedOpticalResult]);
+  const issue = pathResult && pathResult.status !== 'resolved' ? pathResult.reason
+    : opticalLink && !linkedOpticalResult ? '请选择光通道并检查光路。'
+    : point?.kind === 'conversion' ? point.diagnostics[0]?.reason : point?.pathIssue?.reason ?? linkedOpticalResult?.pathIssue?.reason;
   const budgetHighlight = useMemo((): BudgetHighlight | undefined => {
-    if (dock === 'links') return { endpoints: [selectedLink?.from, selectedLink?.to].filter(ref => ref !== undefined) };
-    if (dock === 'optical') return {
+    if (category === 'links' && selectedLink) return { annotations, endpoints: [selectedLink.from, selectedLink.to].filter(ref => ref !== undefined) };
+    if (category === 'optical') return {
       endpoints: [localOptical.query?.to ?? opticalTarget, ...(opticalResult?.stages.map(stage => stage.endpoint) ?? [])]
         .filter(ref => ref !== undefined),
       edges: opticalResult?.stages.flatMap(stage => stage.incoming ? [stage.incoming.edge] : []),
     };
-    if (dock === 'dc' && dcScope) {
+    if (category === 'dc' && dcScope) {
       const inside = enclosureContains(project, dcScope);
       const ports = [...linkOptions.graph.ports.values()].filter(port => port.definition.type === 'DC_POWER' && inside(port.ref.instancePath));
       const keys = new Set(ports.map(port => signalPortKey(port.ref)));
@@ -154,8 +164,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
         edge.from.definition.type === 'DC_POWER' && edge.to.definition.type === 'DC_POWER'
         && (keys.has(signalPortKey(edge.from.ref)) || keys.has(signalPortKey(edge.to.ref)))) };
     }
-  }, [dock, selectedLink, opticalTarget, localOptical, opticalResult, dcScope, project, linkOptions]);
-  const showDock = dock && page === 'canvas';
+  }, [annotations, category, selectedLink, opticalTarget, localOptical, opticalResult, dcScope, project, linkOptions]);
 
   useEffect(() => {
     function dismiss(event: PointerEvent | KeyboardEvent) {
@@ -193,17 +202,13 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     if (!presentation) {
       setRestoredView(undefined);
       setPresentation({
-        view, scope: selection.modulePath, selected: selectedPaths, leftTab, propertiesOpen, dock,
-        collapsed, enlarged, expandedCanvas, expandedHierarchy,
+        view, scope: selection.modulePath, selected: selectedPaths, leftTab, propertiesOpen, expandedCanvas, expandedHierarchy,
       });
       return;
     }
 
     setLeftTab(presentation.leftTab);
     setPropertiesOpen(presentation.propertiesOpen);
-    setDock(presentation.dock);
-    setCollapsed(presentation.collapsed);
-    setEnlarged(presentation.enlarged);
     setExpandedCanvas(presentation.expandedCanvas);
     setExpandedHierarchy(presentation.expandedHierarchy);
     store.selectModule(presentation.scope);
@@ -376,7 +381,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
       moduleClipboard.current = undefined;
       setCopyNotice('');
       setSavedProject(store.getSnapshot().project);
-      setDock(undefined);
+      setCategory('links');
+      setShowMetrics(true);
       setDraftLink(undefined);
       setOpticalTarget(undefined);
       setDcScope(undefined);
@@ -451,20 +457,15 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   }
 
   function openBudget(kind: BudgetPage) {
-    if (dock !== kind) setEnlarged(false);
-    setDock(kind);
-    setCollapsed(false);
-    openPage('canvas');
+    setCategory(kind);
+    setPresentation(undefined);
+    openPage('budget');
   }
 
   function chooseLink(id?: string) {
+    setCategory('links');
     setDraftLink(undefined);
     store.selectLink(id);
-  }
-
-  function showLinks() {
-    if (!selectedLink) store.selectLink(project.namedLinks?.find(link => link.trial)?.id);
-    openBudget('links');
   }
 
   function showDc(scope?: InstancePath) {
@@ -475,7 +476,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   function selectBudgetPort(action: 'optical' | 'from' | 'to', ref: EndpointRef) {
     if (action === 'optical') {
       setOpticalTarget(ref);
-      setLocalOptical({ sources: [] });
+      setLocalOptical(current => ({ ...current, query: current.query && { ...current.query, to: ref } }));
       openBudget('optical');
     } else {
       setDraftLink({ ...(savedLink ? { id: crypto.randomUUID(), name: '新链路' } : draftLink ??
@@ -499,8 +500,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   }
 
   function locateBudgetPort(ref: EndpointRef) {
+    openPage('canvas');
     navigatePort(ref.instancePath, ref.portId);
-    setEnlarged(false);
     requestAnimationFrame(() => {
       const fit = document.querySelector<HTMLButtonElement>('.v1-topology button[aria-label="定位选中"]:enabled')
         ?? document.querySelector<HTMLButtonElement>('.v1-topology button[aria-label="适应画布"]');
@@ -601,11 +602,12 @@ export function Workbench({ store, loadExample, newProject }: Props) {
               store.setView('physical');
               openPage('canvas');
             }}>机箱布局</button>
+          <button type="button" aria-pressed={page === 'budget'} onClick={() => openBudget(category)}>参数计算</button>
         </div>
         <nav className="v1-main-menu v1-view-menus" aria-label="计算与视图菜单">
           <details name="workbench-menu" data-workbench-popup><summary>计算</summary>
             <div className="v1-menu-items">
-              <button type="button" onClick={showLinks}>查看链路预算</button>
+              <button type="button" onClick={() => openBudget('links')}>查看链路预算</button>
               <button type="button" onClick={() => { setOpticalTarget(undefined); openBudget('optical'); }}>局部光功率</button>
               <button type="button" onClick={() => showDc()}>直流供电预算</button>
             </div>
@@ -646,12 +648,21 @@ export function Workbench({ store, loadExample, newProject }: Props) {
             {active?.kind === 'module' && <LibraryPanel library={library} key={projectSession} store={store} state={state} module={active} />}
           </div>
         </aside>
-        <main className="v1-workbench-main" data-budget={dock ? collapsed ? 'collapsed' : enlarged ? 'enlarged' : 'open' : undefined}>
+        <main className="v1-workbench-main">
           <div className="v1-canvas-page" inert={page !== 'canvas' || selection.view !== 'topology'}
             aria-hidden={page !== 'canvas' || selection.view !== 'topology'}>
             {active?.kind === 'module' &&
               <TopologyEditor library={library.config} key={JSON.stringify(['topology', projectSession, selection.modulePath])}
-                store={store} state={state} module={active} pathResult={pathResult} graph={linkOptions.graph} rename={renameSelection}
+                linkControls={<div className="v1-canvas-link">
+                  <label>当前链路<select aria-label="框图当前链路" value={category === 'links' ? savedLink?.id ?? '' : ''} onChange={e => chooseLink(e.target.value || undefined)}>
+                    <option value="">{category !== 'links' ? budgetTitles[category] : draftLink ? '画布临时链路' : '未选择链路'}</option>
+                    {linkOptions.namedLinks.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+                  </select></label>
+                  {category === 'links' && selectedLink && <><label><input type="checkbox" checked={showMetrics} onChange={e => setShowMetrics(e.target.checked)} />显示指标</label>
+                    {!opticalLink && Number.isFinite(conditions.frequencyGHz) && <small>{conditions.frequencyGHz} GHz</small>}
+                    {issue && <small role="status" title={issue}>{issue}</small>}</>}
+                </div>}
+                store={store} state={state} module={active} pathResult={canvasPath} graph={linkOptions.graph} rename={renameSelection}
                 expanded={expandedCanvas} setExpanded={setExpandedCanvas} budgetHighlight={budgetHighlight}
                 onPortBudget={selectBudgetPort} onDcBudget={showDc} onAddPort={setPortTarget} newPort={newPort}
                 onSelectObject={selectObject} onSelectObjects={selectObjects}
@@ -667,9 +678,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
             aria-hidden={page !== 'canvas' || selection.view !== 'physical'}>
             <LayoutEditor key={projectSession} store={store} state={state} onDcBudget={showDc} />
           </div>
-        {page !== 'canvas' && <div className="v1-page-scroll">
-          <div className="workspace">
-        {page === 'project' && <div className="columns">
+          {page === 'project' && <div className="v1-page-scroll">
+          <div className="workspace columns">
           <section className="panel" aria-labelledby="module-title">
             <div className="panel-header">
               <h2 id="module-title">当前模块</h2>
@@ -729,24 +739,29 @@ export function Workbench({ store, loadExample, newProject }: Props) {
               <div><dt>布局记录</dt><dd>{layout?.length ?? 0}</dd></div>
             </dl>
           </section>
-        </div>}
-           </div>
-        </div>}
-          {showDock && dock && <BudgetDock title={budgetTitles[dock]} collapsed={collapsed} enlarged={enlarged}
-            toggle={() => setCollapsed(value => !value)} enlarge={() => setEnlarged(value => !value)}
-            close={() => setDock(undefined)}>
-            {dock === 'links' && <LinkEditor key={JSON.stringify([selectedLink?.id, !savedLink && draftLink?.from, !savedLink && draftLink?.to])} store={store}
-              options={linkOptions} opticalLink={opticalLink} draft={!savedLink && !!draftLink} selected={selectedLink} result={pathResult} budget={budget}
-              conditions={conditions} opticalResult={linkedOpticalResult} trialSaved={sameTrial(savedLink?.trial, conditions)}
-              saveTrial={saveTrial} choose={chooseLink} locate={locateBudgetPort}
-              setDraftChannel={channelId => setDraftLink(current => current && { ...current, channelId })}
-              setConditions={next => {
-                if (selectedLink) setLinkInputs(previous => new Map(previous).set(selectedLink.id, next));
-              }} />}
-            {dock === 'optical' && <LocalOpticalPanel key={opticalTarget && signalPortKey(opticalTarget)} options={linkOptions}
-              settings={localOptical} onChange={setLocalOptical} target={opticalTarget} result={opticalResult} locate={locateBudgetPort} />}
-            {dock === 'dc' && <DcBudgetPanel project={project} labels={linkOptions} scope={dcScope} locate={locateBudgetPort} />}
-          </BudgetDock>}
+          </div>
+          </div>}
+          <section className="v1-page-scroll" aria-label="参数计算" hidden={page !== 'budget'}>
+            <div className="workspace">
+              <h2>参数计算</h2>
+              <label>计算类别<select value={category} onChange={e => openBudget(e.target.value as BudgetPage)}>
+                {(Object.keys(budgetTitles) as BudgetPage[]).map(k => <option key={k} value={k}>{budgetTitles[k]}</option>)}
+              </select></label>
+              <div hidden={category !== 'links'}>
+                <LinkEditor key={JSON.stringify([projectSession, selectedLink?.id, !savedLink && draftLink?.from, !savedLink && draftLink?.to])} store={store}
+                  options={linkOptions} opticalLink={opticalLink} draft={!savedLink && !!draftLink} selected={selectedLink} result={pathResult} point={point} budget={budget}
+                  conditions={conditions} opticalResult={linkedOpticalResult} trialSaved={sameTrial(savedLink?.trial, conditions)}
+                  saveTrial={saveTrial} choose={chooseLink} locate={locateBudgetPort}
+                  setDraftChannel={channelId => setDraftLink(current => current && { ...current, channelId })}
+                  setConditions={next => {
+                    if (selectedLink) setLinkInputs(previous => new Map(previous).set(selectedLink.id, next));
+                  }} />
+              </div>
+              {category === 'optical' && <LocalOpticalPanel key={opticalTarget && signalPortKey(opticalTarget)} options={linkOptions}
+                settings={localOptical} onChange={setLocalOptical} target={opticalTarget} result={opticalResult} locate={locateBudgetPort} />}
+              {category === 'dc' && <DcBudgetPanel project={project} labels={linkOptions} scope={dcScope} locate={locateBudgetPort} />}
+            </div>
+          </section>
         </main>
         <aside className="v1-side v1-side-right" aria-label="属性栏">
           <div className="v1-side-tools">
@@ -760,7 +775,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
                 store={store} occurrence={properties} occurrences={linkOptions.graph.instances} jumpToParameter={jumpToParameter} onAddPort={setPortTarget}
                 receiverQuery={portId => {
                   const key = signalPortKey({ instancePath: properties.instancePath, portId });
-                  const step = pathResult?.trace?.steps.find(item => signalPortKey(item.port.ref) === key);
+                  const step = canvasPath?.trace?.steps.find(item => signalPortKey(item.port.ref) === key);
                   const channelId = step?.channelIds?.length === 1 ? step.channelIds[0]
                     : opticalResult?.stages.find(stage => signalPortKey(stage.endpoint) === key)?.channelId;
                   const frequencyGHz = step && !opticalLink && isRfFrequency(conditions.frequencyGHz)

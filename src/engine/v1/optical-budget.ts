@@ -171,6 +171,11 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
     return finish(stages, propagate(stages, path.edges, budgetValue('dB', 0)));
   }
 
+  function calculateSourcePath(path: SignalPath, source: OpticalSource) {
+    const problem = sourceIssue(source, path.steps[0].port);
+    return problem ? fail('invalid_reference', source.endpoint, problem) : calculateOpticalPath(path, source);
+  }
+
   function calculateEoSupply(supply: SignalPath, source: OpticalSource, eo: SignalEdge) {
     const stages = start(supply.steps[0].port, source);
     const gain = propagate(stages, supply.edges, budgetValue('dB', 0));
@@ -234,5 +239,5 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
     return calculateEoPath(supplied.path, supplied.source, edge, path.path.edges);
   }
 
-  return { calculateLocal, calculateEoPath, calculateOpticalPath };
+  return { calculateLocal, calculateEoPath, calculateOpticalPath, calculateSourcePath };
 }

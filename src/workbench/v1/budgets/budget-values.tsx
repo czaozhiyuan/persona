@@ -1,3 +1,4 @@
+import { formatMetric } from './format-metric';
 import type { BudgetMetric, InputRatingCheck } from '../../../engine/v1/budget-metric';
 import './budget-reports.css';
 
@@ -6,14 +7,7 @@ export function Metric({ metric }: { metric?: BudgetMetric }) {
   if (metric.availability === 'unavailable') {
     return <span className="v1-budget-unavailable" title={metric.reason}>不可用 · {metric.reason}</span>;
   }
-  if (metric.value === -Infinity) return <>−∞ {metric.unit}{metric.unit === 'dBm' && '（无射频输出）'}</>;
-  if (metric.unit === 'V' || metric.unit === 'A') {
-    const magnitude = Math.abs(metric.value);
-    const [scale, prefix] = magnitude === 0 || magnitude >= 1 ? [1, ''] as const
-      : magnitude >= 0.001 ? [1e3, 'm'] as const : [1e6, 'µ'] as const;
-    return <>{Number((metric.value * scale).toPrecision(6))} {prefix}{metric.unit}</>;
-  }
-  return <>{metric.unit === 'ratio' ? `${(metric.value * 100).toFixed(1)}%` : `${metric.value.toFixed(1)} ${metric.unit}`}</>;
+  return <>{formatMetric(metric)}</>;
 }
 
 export function Rating({ check, showStatus = false }: { check?: InputRatingCheck; showStatus?: boolean }) {

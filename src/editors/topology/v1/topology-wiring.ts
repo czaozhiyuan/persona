@@ -17,6 +17,7 @@ type ScopedPort = CanvasPort & { module: ModuleDefinition; scope: InstancePath }
 export type WiringEdge = Edge<WiringSelection & {
   scope: InstancePath;
   portType: PortType;
+  caption?: string;
   fan?: { x: number; y: number };
 }, 'signal'>;
 
@@ -84,7 +85,7 @@ export function projectWiring(projection: ReturnType<typeof projectTopology>,
 
     function edge(localId: string, selection: WiringSelection, portType: PortType, details: Omit<WiringEdge, 'id' | 'data' | 'type'>) {
       const active = highlighted?.has(localId);
-      edges.push({ ...details, id: JSON.stringify([scope, localId]), type: 'signal', data: { ...selection, scope, portType },
+      edges.push({ ...details, id: JSON.stringify([scope, localId]), type: 'signal', data: { ...selection, scope, portType, caption: highlights.get(key)?.captions?.get(localId) },
         zIndex: active ? 1 : 0, className: active ? 'v1-path-edge' : undefined });
     }
 

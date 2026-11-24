@@ -3,7 +3,7 @@ import { calculateDcBudget } from '../../../engine/v1/dc-budget';
 import type { DcBudget } from '../../../engine/v1/dc-budget';
 import type { EndpointRef, InstancePath, Project } from '../../../model/v1/types';
 import type { LinkOptions } from '../links/link-options';
-import { enclosureContains, EndpointLocation } from './budget-dock';
+import { enclosureContains, EndpointLocation } from './budget-location';
 import { Metric, Rating } from './budget-values';
 
 type Output = DcBudget['supplies'][number];

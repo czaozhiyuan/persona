@@ -41,6 +41,8 @@ type NodeData = {
   name: string;
   ports: readonly PortDefinition[];
   pathPorts: ReadonlySet<string>;
+  portValue?: (id: string) => string | undefined;
+  notes?: { text: string; detail: string }[];
   foldedPath?: boolean;
   toggle?: () => void;
   openPort: (id: string) => void;
@@ -86,19 +88,24 @@ function AddPortButton({ data }: { data: NodeData }) {
     onClick={event => { event.stopPropagation(); data.addPort?.(); }}>＋端口</button>;
 }
 
+function NodeCaption({ notes }: Pick<NodeData, 'notes'>) {
+  return notes?.length ? <div className="v1-node-caption" aria-hidden="true">{notes.slice(0, 3).map(n => n.text).join(' · ')}</div> : null;
+}
+
 function Device({ id, data, selected }: NodeProps<DeviceNode>) {
   const updateInternals = useUpdateNodeInternals();
-  useEffect(() => updateInternals(id), [id, data.ports, data.foldedPath, updateInternals]);
-  return <div className={`v1-topology-device${selected ? ' is-selected' : ''}${data.foldedPath ? ' has-folded-path' : ''}`}>
+  useEffect(() => updateInternals(id), [id, data.ports, updateInternals]);
+  return <div title={data.notes?.map(n => n.detail).join('\n')} className={`v1-topology-device${data.pathPorts.size ? ' is-on-path' : ''}${selected ? ' is-selected' : ''}${data.foldedPath ? ' has-folded-path' : ''}`}>
     <div className="v1-block-title"><strong>{data.name}</strong><AddPortButton data={data} /><ExpandButton data={data} expanded={false} /></div>
     {data.foldedPath && <span className="v1-topology-path-label">路径经过内部</span>}
-    <BlockPorts ports={data.ports} highlighted={data.pathPorts} newPortId={data.newPortId} handleId={handleId} editable wireState={data.wireState} openPort={data.openPort} />
+    <NodeCaption notes={data.notes} />
+    <BlockPorts portValue={data.portValue} ports={data.ports} highlighted={data.pathPorts} newPortId={data.newPortId} handleId={handleId} editable wireState={data.wireState} openPort={data.openPort} />
   </div>;
 }
 
 function Frame({ id, data, selected, width, height }: NodeProps<FrameNode>) {
   return <>
-    <ModuleFrame id={id} width={width} height={height} name={data.name} ports={data.ports} highlighted={data.pathPorts} newPortId={data.newPortId} handleId={handleId}
+    <ModuleFrame metricTitle={data.notes?.map(n => n.detail).join('\n')} portValue={data.portValue} id={id} width={width} height={height} name={data.name} ports={data.ports} highlighted={data.pathPorts} newPortId={data.newPortId} handleId={handleId}
       editable outerHandles={data.outerHandles} selected={selected} wireState={data.wireState} openPort={data.openPort}
       controls={<>
         {data.locations.length > 0 && <span className="v1-inline-shared" title={data.locations.join('、')}
@@ -106,6 +113,7 @@ function Frame({ id, data, selected, width, height }: NodeProps<FrameNode>) {
         <AddPortButton data={data} />
         <ExpandButton data={data} expanded />
       </>} />
+    <NodeCaption notes={data.notes} />
     {data.resize && <FrameResizeHandles {...data.resize} />}
   </>;
 }
@@ -285,6 +293,8 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     const name = showName(path);
     const id = nodeId(key);
     const data: NodeData = { key, path, name, ports: definition.ports,
+      portValue: budgetHighlight?.annotations && (portId => budgetHighlight.annotations!.ports.get(signalPortKey({ instancePath: path, portId }))),
+      notes: budgetHighlight?.annotations?.nodes.get(key),
       pathPorts: new Set(definition.ports.filter(port =>
         highlight?.ports.has(signalPortKey({ instancePath: path, portId: port.id }))).map(port => port.id)),
       foldedPath: !frame && !!item.instance && parentHighlight?.folded.has(item.instance.id),
