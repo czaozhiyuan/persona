@@ -125,6 +125,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const conditions = useMemo(() => ({ ...activeTrial, opticalSources }), [activeTrial, opticalSources]);
   const pathResult = useMemo(() => selectedLink ? budget.resolveNamedLink(selectedLink, { opticalSources }) : undefined,
     [selectedLink, budget, opticalSources]);
+  const canvasPath = category === 'links' ? pathResult : undefined;
   const point = useMemo(() => pathResult && !opticalLink ? budget.calculatePath(pathResult, conditions) : undefined,
     [budget, pathResult, opticalLink, conditions]);
   const opticalBudget = useMemo(() => createOpticalBudgetForGraph(linkOptions.graph), [linkOptions]);
@@ -142,14 +143,14 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     const source = opticalSources?.find(item => signalPortKey(item.endpoint) === signalPortKey(from) && item.channelId === channelId);
     return opticalBudget.calculateSourcePath(pathResult.trace, source ?? { endpoint: from, channelId });
   }, [selectedLink, pathResult, opticalSources, linkOptions, opticalBudget, opticalLink]);
-  const annotations = useMemo(() => showMetrics && selectedLink
-    ? linkAnnotations(linkOptions.graph, pathResult, point, linkedOpticalResult) : undefined,
-    [showMetrics, selectedLink, linkOptions, pathResult, point, linkedOpticalResult]);
+  const annotations = useMemo(() => showMetrics && canvasPath
+    ? linkAnnotations(linkOptions.graph, canvasPath, point, linkedOpticalResult) : undefined,
+    [showMetrics, canvasPath, linkOptions, point, linkedOpticalResult]);
   const issue = pathResult && pathResult.status !== 'resolved' ? pathResult.reason
     : opticalLink && !linkedOpticalResult ? '请选择光通道并检查光路。'
     : point?.kind === 'conversion' ? point.diagnostics[0]?.reason : point?.pathIssue?.reason ?? linkedOpticalResult?.pathIssue?.reason;
   const budgetHighlight = useMemo((): BudgetHighlight | undefined => {
-    if (selectedLink) return { annotations, endpoints: [selectedLink?.from, selectedLink?.to].filter(ref => ref !== undefined) };
+    if (category === 'links' && selectedLink) return { annotations, endpoints: [selectedLink.from, selectedLink.to].filter(ref => ref !== undefined) };
     if (category === 'optical') return {
       endpoints: [localOptical.query?.to ?? opticalTarget, ...(opticalResult?.stages.map(stage => stage.endpoint) ?? [])]
         .filter(ref => ref !== undefined),
@@ -462,6 +463,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   }
 
   function chooseLink(id?: string) {
+    setCategory('links');
     setDraftLink(undefined);
     store.selectLink(id);
   }
@@ -652,15 +654,15 @@ export function Workbench({ store, loadExample, newProject }: Props) {
             {active?.kind === 'module' &&
               <TopologyEditor library={library.config} key={JSON.stringify(['topology', projectSession, selection.modulePath])}
                 linkControls={<div className="v1-canvas-link">
-                  <label>当前链路<select aria-label="框图当前链路" value={savedLink?.id ?? ''} onChange={e => chooseLink(e.target.value || undefined)}>
-                    <option value="">{draftLink ? '画布临时链路' : '未选择链路'}</option>
+                  <label>当前链路<select aria-label="框图当前链路" value={category === 'links' ? savedLink?.id ?? '' : ''} onChange={e => chooseLink(e.target.value || undefined)}>
+                    <option value="">{category !== 'links' ? budgetTitles[category] : draftLink ? '画布临时链路' : '未选择链路'}</option>
                     {linkOptions.namedLinks.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
                   </select></label>
-                  {selectedLink && <><label><input type="checkbox" checked={showMetrics} onChange={e => setShowMetrics(e.target.checked)} />显示指标</label>
+                  {category === 'links' && selectedLink && <><label><input type="checkbox" checked={showMetrics} onChange={e => setShowMetrics(e.target.checked)} />显示指标</label>
                     {!opticalLink && Number.isFinite(conditions.frequencyGHz) && <small>{conditions.frequencyGHz} GHz</small>}
                     {issue && <small role="status" title={issue}>{issue}</small>}</>}
                 </div>}
-                store={store} state={state} module={active} pathResult={pathResult} graph={linkOptions.graph} rename={renameSelection}
+                store={store} state={state} module={active} pathResult={canvasPath} graph={linkOptions.graph} rename={renameSelection}
                 expanded={expandedCanvas} setExpanded={setExpandedCanvas} budgetHighlight={budgetHighlight}
                 onPortBudget={selectBudgetPort} onDcBudget={showDc} onAddPort={setPortTarget} newPort={newPort}
                 onSelectObject={selectObject} onSelectObjects={selectObjects}
@@ -773,7 +775,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
                 store={store} occurrence={properties} occurrences={linkOptions.graph.instances} jumpToParameter={jumpToParameter} onAddPort={setPortTarget}
                 receiverQuery={portId => {
                   const key = signalPortKey({ instancePath: properties.instancePath, portId });
-                  const step = pathResult?.trace?.steps.find(item => signalPortKey(item.port.ref) === key);
+                  const step = canvasPath?.trace?.steps.find(item => signalPortKey(item.port.ref) === key);
                   const channelId = step?.channelIds?.length === 1 ? step.channelIds[0]
                     : opticalResult?.stages.find(stage => signalPortKey(stage.endpoint) === key)?.channelId;
                   const frequencyGHz = step && !opticalLink && isRfFrequency(conditions.frequencyGHz)
