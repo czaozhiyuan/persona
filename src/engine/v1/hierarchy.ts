@@ -1,3 +1,5 @@
+import { isPowerPort } from '../../model/v1/types';
+import { portVoltage } from '../../model/v1/display-names';
 import type { SwitchState } from '../../model/v1/device';
 import type { ParameterValue } from '../../model/v1/parameters';
 import type { ComponentDefinition, EndpointRef, Instance, InstancePath, InstanceSettings, ModuleDefinition, Project } from '../../model/v1/types';
@@ -23,6 +25,7 @@ export type ResolvedInstance = {
   readonly settings?: InstanceSettings;
   readonly parameters: ReadonlyMap<string, EffectiveParameter>;
   readonly switchState?: SwitchState;
+  readonly mappedVoltages?: ReadonlyMap<string, number>;
 };
 
 /** The chain starts at the requested port and includes each verified mapping target. */
@@ -72,6 +75,40 @@ function applySettings(slot: Instance, settings?: InstanceSettings): Instance {
   };
 }
 
+/** An undeclared module voltage label follows its mapping without adding a budget constraint. */
+export function withMappedVoltages(item: ResolvedInstance, definitions: ReadonlyMap<string, Definition>,
+  settingsByPath?: ReadonlyMap<string, InstanceSettings>): ResolvedInstance {
+  if (item.definition.kind !== 'module' || !item.definition.portMappings?.length) return item;
+  const voltages = new Map<string, number>();
+  for (const port of item.definition.ports) {
+    if (!isPowerPort(port.type) || port.inputVoltageV || port.outputVoltageV) continue;
+    const value = mappedVoltage(port.id);
+    if (value !== undefined) voltages.set(port.id, value);
+  }
+  return voltages.size ? { ...item, mappedVoltages: voltages } : item;
+
+  function mappedVoltage(portId: string) {
+    let { definition, parameters, instancePath } = item;
+    const visited = new Set<string>();
+    // A library draft can temporarily contain a cycle before validation.
+    while (definition.kind === 'module' && !visited.has(definition.id)) {
+      visited.add(definition.id);
+      const target = definition.portMappings?.find(m => m.portId === portId)?.target;
+      const slot = target && definition.instances.find(i => i.id === target.instanceId);
+      const child = slot && definitions.get(slot.definitionId);
+      const port = child?.ports.find(p => p.id === target?.portId);
+      if (!slot || !child || !port) return;
+      const path = [...instancePath, slot.id];
+      const instance = applySettings(slot, settingsByPath?.get(JSON.stringify(path)));
+      parameters = readChildParameters(child, instance, definition, parameters, () => instancePath);
+      if (port.inputVoltageV || port.outputVoltageV) return portVoltage(port, { parameters });
+      definition = child;
+      instancePath = path;
+      portId = port.id;
+    }
+  }
+}
+
 function selectedSwitchState(definition: Definition, instance?: Instance): SwitchState | undefined {
   return definition.kind === 'component'
     ? definition.switchStates?.find(state => state.id === instance?.switchStateId)
@@ -108,7 +145,8 @@ export function resolveHierarchy(project: Project) {
       parameters = readChildParameters(childDefinition, instance, definition, parameters, () => instancePath.slice(0, depth));
       definition = childDefinition;
     }
-    return { instancePath: [...instancePath], instance, settings, definition, parameters, switchState: selectedSwitchState(definition, instance) };
+    return withMappedVoltages({ instancePath: [...instancePath], instance, settings, definition, parameters,
+      switchState: selectedSwitchState(definition, instance) }, definitions, settingsByPath);
   }
 
   /** Walks occurrences from the root, reusing each parent's resolved parameters. */
@@ -125,11 +163,11 @@ export function resolveHierarchy(project: Project) {
         const settings = settingsByPath.get(JSON.stringify(instancePath));
         const instance = applySettings(slot, settings);
         const definition = definitions.get(instance.definitionId)!;
-        pending.push({
+        pending.push(withMappedVoltages({
           instancePath, instance, settings, definition,
           parameters: readChildParameters(definition, instance, parent.definition, parent.parameters, () => parent.instancePath),
           switchState: selectedSwitchState(definition, instance),
-        });
+        }, definitions, settingsByPath));
       }
     }
   }

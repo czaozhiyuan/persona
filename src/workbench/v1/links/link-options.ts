@@ -22,7 +22,7 @@ export function createLinkOptions(project: Project) {
     const occurrence = instances.get(JSON.stringify(ref.instancePath));
     const ports = occurrence?.definition.ports;
     const port = ports?.find(item => item.id === ref.portId);
-    return port ? portDisplayName(port, false, ports, occurrence?.parameters) : '未找到的端口';
+    return port ? portDisplayName(port, false, ports, occurrence) : '未找到的端口';
   };
   const showEndpoint = (ref: EndpointRef) => `${showPath(ref.instancePath)} / ${showPort(ref)}`;
   const endpoints: Option<EndpointRef>[] = [];

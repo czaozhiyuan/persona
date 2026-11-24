@@ -237,7 +237,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
         {sharedLocations.length > 0 && <p className="v1-property-effective">共享定义 · 影响 {sharedLocations.join('、')}</p>}
         {!definition.ports.length && <p className="empty">暂无端口。</p>}
         {definition.ports.map(port => <details key={port.id} data-port-id={port.id}>
-          <summary>{portDisplayName(port, false, definition.ports, parameters)}<span className="v1-parameter-value">
+          <summary>{portDisplayName(port, false, definition.ports, occurrence)}<span className="v1-parameter-value">
             {portTypeLabels[port.type]} · {port.direction === 'in' ? '输入' : '输出'}
           </span></summary>
           <p className="v1-property-effective">端口属于共享结构。{sharedLocations.length > 0 && ` 影响 ${sharedLocations.join('、')}。`}</p>
@@ -296,7 +296,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
         {definition.kind === 'component' && <AddConversion definition={definition} add={transfer =>
           changeDefinition(() => ({ ...definition, transfers: [...(definition.transfers ?? []), transfer] }))} />}
         {definition.kind === 'component' && definition.transfers?.map((transfer, index) => <details key={index}>
-          <summary>传输 · {transferLabels[transfer.kind]} · {portDisplayName(definition.ports.find(port => port.id === transfer.fromPortId)!, true, definition.ports, parameters)} → {portDisplayName(definition.ports.find(port => port.id === transfer.toPortId)!, true, definition.ports, parameters)}</summary>
+          <summary>传输 · {transferLabels[transfer.kind]} · {portDisplayName(definition.ports.find(port => port.id === transfer.fromPortId)!, true, definition.ports, occurrence)} → {portDisplayName(definition.ports.find(port => port.id === transfer.toPortId)!, true, definition.ports, occurrence)}</summary>
           <TransferFields effective={parameters} transfer={transfer} definition={definition} occurrences={occurrences}
             save={read => changeDefinition(() => ({ ...definition,
               transfers: definition.transfers?.map((item, i) => i === index ? read() : item),

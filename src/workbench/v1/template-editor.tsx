@@ -1,5 +1,5 @@
 import { transferTypes } from '../../model/v1/validate-device';
-import { readParameters } from '../../engine/v1/hierarchy';
+import { readParameters, withMappedVoltages } from '../../engine/v1/hierarchy';
 import { useRef, useState } from 'react';
 import type { LibraryDefinition } from '../../library/v1/project-snapshots';
 import type { Transfer } from '../../model/v1/device';
@@ -35,7 +35,8 @@ export function TemplateEditor({ initial, definitions, hidden, save, cancel, rep
   });
   const activeKind = availableKinds.some(([k]) => k === kind) ? kind : 'rf';
   const parameters = draft.parameters ?? [];
-  const occurrence = { definition: draft, instancePath: [], parameters: readParameters(draft) };
+  const byId = new Map(definitions.map(d => [d.id, d]));
+  const occurrence = withMappedVoltages({ definition: draft, instancePath: [], parameters: readParameters(draft) }, byId);
   function updatePort(port: PortDefinition) {
     edit(prev => ({ ...prev, ports: prev.ports.map(p => p.id === port.id ? port : p) }));
     return true;
@@ -83,7 +84,7 @@ export function TemplateEditor({ initial, definitions, hidden, save, cancel, rep
   return <div ref={body}>
     <label>模板名称<input value={draft.name} onChange={e => edit({ ...draft, name: e.target.value })} /></label>
     <section className="template-ports"><h3>端口</h3>{draft.ports.map(p => <details key={p.id}>
-      <summary>{portDisplayName(p, false, draft.ports, occurrence.parameters)}</summary>
+      <summary>{portDisplayName(p, false, draft.ports, occurrence)}</summary>
       <PortFields port={p} occurrence={occurrence} save={updatePort} remove={() => edit({ ...draft,
         ports: draft.ports.filter(other => other.id !== p.id),
         ...(draft.kind === 'module' && { portMappings: draft.portMappings?.filter(m => m.portId !== p.id) }) })} />
@@ -95,7 +96,7 @@ export function TemplateEditor({ initial, definitions, hidden, save, cancel, rep
         remove={() => edit({ ...draft, parameters: parameters.filter(other => other.id !== p.id) })} />
     </details>)}<button onClick={() => edit({ ...draft, parameters: [...parameters, { id: crypto.randomUUID(), name: '新参数',
       kind: 'numeric', unit: 'dB', valueKind: 'fixed', overridable: true }] })}>添加参数</button></section>
-    {draft.kind === 'module' ? <TemplateModule module={draft} definitions={definitions} hidden={hidden} change={edit} /> : <section><h3>传输关系</h3>
+    {draft.kind === 'module' ? <TemplateModule occurrence={occurrence} module={draft} definitions={definitions} hidden={hidden} change={edit} /> : <section><h3>传输关系</h3>
       {rows.map(({ key, transfer }) => <details key={key} className="template-transfer" onChange={event => {
         const select = event.target;
         if (!(select instanceof HTMLSelectElement) || (select.name !== 'from' && select.name !== 'to')) return;

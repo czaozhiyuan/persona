@@ -88,7 +88,9 @@ function PortVoltage({ port, occurrence }: { port: PortDefinition; occurrence: R
   const parameters = voltageParameters(occurrence.definition.parameters);
   const parameterId = value?.kind === 'parameter' ? value.parameterId : '';
   const effective = parameterId ? resolveEmpiricalValue('V', value, {}, occurrence) : undefined;
+  const mapped = !value ? occurrence.mappedVoltages?.get(port.id) : undefined;
   return <>
+    {mapped !== undefined && <p className="v1-property-effective">内部端口电压 · {mapped} {port.type === 'AC_POWER' ? 'V RMS' : 'V'}</p>}
     {!!parameters.length && <label>{port.direction === 'in' ? '标称输入电压来源' : '输出电压来源'}
       <select name={port.direction === 'in' ? 'inputVoltageParameter' : 'outputVoltageParameter'} value={parameterId} onChange={() => { /* Saved by the form's change handler. */ }}>
         <option value="">固定值或留空</option>
@@ -168,10 +170,10 @@ function TransferForm({ transfer, definition, effective, occurrences = [], save,
     save(() => readTransfer(data, transfer));
   }}>
     <label>输入端口<select name="from" defaultValue={transfer.fromPortId} required>
-      {inputPorts.map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true, definition.ports, effective)} · {portTypeLabels[port.type]}</option>)}
+      {inputPorts.map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true, definition.ports, effective && { parameters: effective })} · {portTypeLabels[port.type]}</option>)}
     </select></label>
     <label>输出端口<select name="to" defaultValue={transfer.toPortId} required>
-      {outputPorts.map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true, definition.ports, effective)} · {portTypeLabels[port.type]}</option>)}
+      {outputPorts.map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true, definition.ports, effective && { parameters: effective })} · {portTypeLabels[port.type]}</option>)}
     </select></label>
     {(transfer.kind === 'optical' || transfer.kind === 'eo' || transfer.kind === 'dml' || transfer.kind === 'oe'
       || transfer.kind === 'digitalTx' || transfer.kind === 'digitalRx') &&

@@ -51,17 +51,26 @@ export function editablePortName(port: DisplayPort): string {
   return port.name?.replace(uuid, portFallback(port)) ?? '';
 }
 
-export type PortParameters = ReadonlyMap<string, { value: ParameterValue }>;
+export type PortLabelContext = {
+  parameters: ReadonlyMap<string, { value: ParameterValue }>;
+  mappedVoltages?: ReadonlyMap<string, number>;
+};
 
-export function portDisplayName(port: DisplayPort, includeCode = false, peers?: readonly DisplayPort[], parameters?: PortParameters): string {
+export function portVoltage(port: DisplayPort, context?: PortLabelContext): number | undefined {
+  const voltage = port.direction === 'in' ? port.inputVoltageV : port.outputVoltageV;
+  if (!voltage) return context?.mappedVoltages?.get(port.id);
+  const effective = voltage.kind === 'parameter' ? context?.parameters.get(voltage.parameterId)?.value : voltage;
+  return typeof effective === 'object' && effective.kind === 'fixed' ? effective.value : undefined;
+}
+
+export function portDisplayName(port: DisplayPort, includeCode = false, peers?: readonly DisplayPort[], context?: PortLabelContext): string {
   function label(p: DisplayPort) {
     if (isPowerPort(p.type) && p.direction) {
-      const voltage = p.direction === 'in' ? p.inputVoltageV : p.outputVoltageV;
-      const effective = voltage?.kind === 'parameter' ? parameters?.get(voltage.parameterId)?.value : voltage;
+      const value = portVoltage(p, context);
       const ac = p.type === 'AC_POWER';
       const direction = p.direction.toUpperCase();
-      if (typeof effective !== 'object' || effective.kind !== 'fixed') return `${ac ? 'AC' : 'DC'} ?V ${direction}`;
-      return ac ? `${effective.value}V~ ${direction}` : `+${effective.value}V ${direction}`;
+      if (value === undefined) return `${ac ? 'AC' : 'DC'} ?V ${direction}`;
+      return ac ? `${value}V~ ${direction}` : `+${value}V ${direction}`;
     }
     const { id } = p;
     const name = editablePortName(p);

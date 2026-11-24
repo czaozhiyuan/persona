@@ -77,7 +77,7 @@ export function planPortDeletion(project: Project, definitionId: string, portId:
     impacts.push({ kind, name, definitionId: scope, paths: path === undefined ? pathsByDefinition.get(scope) ?? [] : [path] });
   }
   const removedLabel = (path?: InstancePath) => portDisplayName(removedPort, false, definitions.get(definitionId)?.ports,
-    path && hierarchy.resolveInstance(path)?.parameters);
+    path && hierarchy.resolveInstance(path));
   reportEndpoints('端口', definitionId, removedLabel);
 
   function reportEndpoints(kind: ImpactKind, scope: string, describe: (path?: InstancePath) => string) {
@@ -98,13 +98,13 @@ export function planPortDeletion(project: Project, definitionId: string, portId:
     const child = path && hierarchy.resolveInstance([...path, instance.id]);
     const ports = definitions.get(instance.definitionId)?.ports;
     const port = ports?.find(port => port.id === ref.portId);
-    return `${child?.instance?.name || instance.name} · ${port ? portDisplayName(port, false, ports, child?.parameters) : '未找到的端口'}`;
+    return `${child?.instance?.name || instance.name} · ${port ? portDisplayName(port, false, ports, child) : '未找到的端口'}`;
   }
 
   const componentDefinitions = project.componentDefinitions.map(component => {
     if (component.id !== definitionId) return component;
     const portName = (id: string, path?: InstancePath) => portDisplayName(component.ports.find(p => p.id === id)!, false, component.ports,
-      path && hierarchy.resolveInstance(path)?.parameters);
+      path && hierarchy.resolveInstance(path));
     const clearSupply = component.dcSupply?.portId === portId;
     const clearLoad = component.dcLoad?.portId === portId;
     if (clearSupply) reportEndpoints('直流电源', component.id, removedLabel);
@@ -151,7 +151,7 @@ export function planPortDeletion(project: Project, definitionId: string, portId:
         if (removed) {
           const port = module.ports.find(port => port.id === mapping.portId)!;
           reportEndpoints('端口映射', module.id, path =>
-            `${portDisplayName(port, false, module.ports, path && hierarchy.resolveInstance(path)?.parameters)} ↔ ${endpointLabel(module, mapping.target, path)}`);
+            `${portDisplayName(port, false, module.ports, path && hierarchy.resolveInstance(path))} ↔ ${endpointLabel(module, mapping.target, path)}`);
         }
         return !removed;
       }),

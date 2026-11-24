@@ -1,4 +1,4 @@
-import type { PortParameters } from '../../../model/v1/display-names';
+import type { PortLabelContext } from '../../../model/v1/display-names';
 import { signalColor } from './signal-wire';
 import { portDisplayName, portTypeLabels } from '../../../workbench/v1/labels';
 import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react';
@@ -23,14 +23,14 @@ export function frameInsets(ports: readonly PortDefinition[]) {
   };
 }
 
-export function ModuleFrame({ parameters, iconKey, metricTitle, portValue, id, width, height, name, ports, highlighted, newPortId, handleId, editable = false, outerHandles = false, selected = false, wireState, controls, openPort }: {
+export function ModuleFrame({ labelContext, iconKey, metricTitle, portValue, id, width, height, name, ports, highlighted, newPortId, handleId, editable = false, outerHandles = false, selected = false, wireState, controls, openPort }: {
   iconKey: DeviceIconKey;
   id: string;
   width?: number;
   height?: number;
   name: string;
   ports: readonly PortDefinition[];
-  parameters?: PortParameters;
+  labelContext?: PortLabelContext;
   metricTitle?: string;
   portValue?: (id: string) => string | undefined;
   newPortId?: string;
@@ -57,14 +57,14 @@ export function ModuleFrame({ parameters, iconKey, metricTitle, portValue, id, w
       {ports.filter(port => boundaryPortSide(port.direction) === side).map(port => {
         const input = port.direction === 'in';
         return <div key={port.id} className={`v1-topology-port${highlighted.has(port.id) ? ' is-on-path' : ''}${port.id === newPortId ? ' is-new-port' : ''}`}
-          title={`${portDisplayName(port, false, ports, parameters)} · ${portTypeLabels[port.type]}`} data-port-direction={port.direction}>
+          title={`${portDisplayName(port, false, ports, labelContext)} · ${portTypeLabels[port.type]}`} data-port-direction={port.direction}>
           <Handle id={handleId(port.id, true)} type={input ? 'source' : 'target'}
             position={input ? Position.Right : Position.Left} className={`${port.type} v1-frame-inner-handle`} style={{ background: signalColor(port.type) }} data-wire={wireState?.(port.id, true)}
             isConnectable={editable} />
           {outerHandles && <Handle id={handleId(port.id, false)} type={input ? 'target' : 'source'}
             position={input ? Position.Left : Position.Right} className={`${port.type} v1-frame-outer-handle`} style={{ background: signalColor(port.type) }} data-wire={wireState?.(port.id, false)}
             isConnectable={editable} />}
-          <PortLabel parameters={parameters} value={portValue?.(port.id)} port={port} ports={ports} open={openPort} />
+          <PortLabel labelContext={labelContext} value={portValue?.(port.id)} port={port} ports={ports} open={openPort} />
         </div>;
       })}
     </div>)}

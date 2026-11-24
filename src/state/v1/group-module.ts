@@ -45,7 +45,7 @@ export function groupModule(project: Project, paths: readonly InstancePath[], na
       portIds.add(id);
       exposed.set(key, id);
       const name = `${hierarchy.resolveInstance([...scope, child.id])?.instance?.name ?? child.name} · ${portDisplayName(port)}`;
-      ports.push(boundaryPort(port, id, name, parent, child.id));
+      ports.push(boundaryPort(port, id, name));
       portMappings.push({ portId: id, target: ref });
     }
     return { instanceId, portId: id };

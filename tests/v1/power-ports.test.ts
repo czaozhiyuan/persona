@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { calculateDcBudget } from '../../src/engine/v1/dc-budget';
 import { resolveHierarchy } from '../../src/engine/v1/hierarchy';
+import { groupModule } from '../../src/state/v1/group-module';
+import { planDissolveModule } from '../../src/state/v1/dissolve-module';
+import { connectBoundaryPort, exposeModulePort } from '../../src/state/v1/module-ports';
 import { factory, factoryLibrary, libraryDefinitions, parseLibrary } from '../../src/library/v1/user-library';
 import { portDisplayName } from '../../src/model/v1/display-names';
 import type { ComponentDefinition, ModuleDefinition, PortDefinition, Project } from '../../src/model/v1/types';
@@ -48,15 +51,58 @@ test('labels resolve voltage at the selected occurrence, keep port IDs and ignor
   for (const [i, label] of ['+3.3V IN', '+12V IN', 'DC ?V IN'].entries()) {
     for (const path of [[String(i)], [String(i), 'amp']]) {
       const item = tree.resolveInstance(path)!;
-      assert.equal(portDisplayName(item.definition.ports[0], true, item.definition.ports, item.parameters), label);
+      assert.equal(portDisplayName(item.definition.ports[0], true, item.definition.ports, item), label);
     }
   }
+  const exposed = exposeModulePort(project, [], { instanceId: '0', portId: 'P' }, '');
+  function rootLabel(p: Project) {
+    const item = resolveHierarchy(p).resolveInstance([])!;
+    return portDisplayName(item.definition.ports[0], false, item.definition.ports, item);
+  }
+  assert.equal(exposed.moduleDefinitions[0].ports[0].inputVoltageV, undefined);
+  assert.equal(rootLabel(exposed), '+3.3V IN');
+  const nested = { ...exposed, moduleDefinitions: [exposed.moduleDefinitions[0], { ...box, ports: [{ ...port, inputVoltageV: undefined }] }] };
+  assert.equal(rootLabel(nested), '+3.3V IN');
+  const outer = nested.moduleDefinitions[0];
+  const explicit = { ...nested, moduleDefinitions: [{ ...outer, parameters: device.parameters, ports: [port] }, nested.moduleDefinitions[1]] };
+  assert.equal(rootLabel(explicit), 'DC ?V IN');
+  assert.equal(rootLabel(connectBoundaryPort(exposed, 'root', 'P', { instanceId: '1', portId: 'P' })), '+12V IN');
+  assert.equal(rootLabel(connectBoundaryPort(exposed, 'root', 'P', { instanceId: '2', portId: 'P' })), 'DC ?V IN');
+  assert.equal(rootLabel(connectBoundaryPort(exposed, 'root', 'P')), 'DC ?V IN');
   const ac: PortDefinition = { id: 'A', name: 'Old AC name', type: 'AC_POWER', direction: 'out', outputVoltageV: fixed(110) };
   const ports = [ac, { ...ac, id: 'B' }];
   assert.deepEqual(ports.map(p => portDisplayName(p, true, ports)), ['110V~ OUT（1）', '110V~ OUT（2）']);
   assert.equal(portDisplayName({ ...ac, direction: 'in', inputVoltageV: fixed(220) }), '220V~ IN');
   assert.equal(portDisplayName({ ...ac, outputVoltageV: undefined }), 'AC ?V OUT');
   assert.equal(portDisplayName({ id: 'RF_IN', name: '驱动', type: 'RF', direction: 'in' }), '驱动');
+});
+
+test('grouped fixed supply output follows internal edits, while an explicit boundary still constrains the route', () => {
+  const source: ComponentDefinition = { kind: 'component', id: 'source', name: 'Source',
+    ports: [{ id: 'V', type: 'DC_POWER', direction: 'out', outputVoltageV: fixed(5) }], dcSupply: { portId: 'V' } };
+  const load: ComponentDefinition = { kind: 'component', id: 'load', name: 'Load',
+    ports: [{ id: 'IN', type: 'DC_POWER', direction: 'in' }], dcLoad: { portId: 'IN', powerW: fixed(1) } };
+  const project: Project = { ...base, componentDefinitions: [source, load, { kind: 'component', id: 'aux', name: 'Aux', ports: [] }],
+    moduleDefinitions: [{ ...root, instances: [slot('source'), slot('aux'), slot('load')],
+      connections: [{ id: 'wire', from: { instanceId: 'source', portId: 'V' }, to: { instanceId: 'load', portId: 'IN' } }] }] };
+  const grouped = parseProjectJson(serializeProjectJson(groupModule(project, [['source'], ['aux']], 'Grouped', 'g', 'group')));
+  const [parent, group] = grouped.moduleDefinitions;
+  assert.deepEqual(group.ports, [{ id: 'V', type: 'DC_POWER', direction: 'out' }]);
+  assert.ok(planDissolveModule(grouped, ['g']).ok);
+  const changed = { ...grouped, componentDefinitions: [{ ...source, ports: [{ ...source.ports[0], outputVoltageV: fixed(12) }] },
+    ...grouped.componentDefinitions.slice(1)] };
+  const item = resolveHierarchy(changed).resolveInstance(['g'])!;
+  assert.equal(portDisplayName(item.definition.ports[0], false, item.definition.ports, item), '+12V OUT');
+  const budget = calculateDcBudget(changed);
+  const twelveVolts = { unit: 'V', availability: 'available', value: 12 };
+  assert.deepEqual(budget.ports.find(p => p.endpoint.portId === 'IN')?.voltageV, twelveVolts);
+  assert.deepEqual(budget.supplies[0].demandW, { unit: 'W', availability: 'available', value: 1 });
+  const direct = planDissolveModule(changed, ['g']);
+  assert.ok(direct.ok);
+  assert.deepEqual(calculateDcBudget(direct.project).ports.find(p => p.endpoint.portId === 'IN')?.voltageV, twelveVolts);
+  const explicit = { ...changed, moduleDefinitions: [parent, { ...group, ports: [{ ...group.ports[0], outputVoltageV: fixed(5) }] }] };
+  assert.ok(calculateDcBudget(explicit).diagnostics.some(d => d.code === 'voltage_conflict'));
+  assert.equal(planDissolveModule(explicit, ['g']).ok, false);
 });
 
 test('AC wiring stays outside DC calculations and nominal inputs are neither limits nor supplies', () => {

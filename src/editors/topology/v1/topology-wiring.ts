@@ -69,8 +69,8 @@ export function projectWiring(projection: ReturnType<typeof projectTopology>,
     const child = (id: string) => nodeId(children.get(id)!.key);
     const childPort = ({ instanceId, portId }: LocalEndpointRef) => children.get(instanceId)!.item.definition.ports.find(port => port.id === portId)!;
     const childLabel = (ref: LocalEndpointRef) => {
-      const { definition, parameters } = children.get(ref.instanceId)!.item;
-      return portDisplayName(childPort(ref), false, definition.ports, parameters);
+      const occurrence = children.get(ref.instanceId)!.item;
+      return portDisplayName(childPort(ref), false, occurrence.definition.ports, occurrence);
     };
     for (const [id, member] of children) {
       for (const port of member.item.definition.ports) {
@@ -108,7 +108,7 @@ export function projectWiring(projection: ReturnType<typeof projectTopology>,
       const [from, to] = outward ? [inner, outer] : [outer, inner];
       edge(canvasEdgeKey('mapping', mapping.portId), { kind: 'mapping', id: mapping.portId }, port.type, {
         source: from.id, target: to.id, sourceHandle: from.handle, targetHandle: to.handle,
-        ariaLabel: `连接到内部端口：${portDisplayName(port, false, module.ports, projection.nodeByKey.get(key)?.item.parameters)} · ${childLabel(mapping.target)}`,
+        ariaLabel: `连接到内部端口：${portDisplayName(port, false, module.ports, projection.nodeByKey.get(key)?.item)} · ${childLabel(mapping.target)}`,
       });
     }
     for (const [index, bundle] of (module.cableBundles ?? []).entries()) {

@@ -1,20 +1,13 @@
 import { resolveHierarchy } from '../../engine/v1/hierarchy';
 import { isPowerPort } from '../../model/v1/types';
-import type { InstancePath, ModuleDefinition, PortDefinition, Project } from '../../model/v1/types';
+import type { InstancePath, PortDefinition, Project } from '../../model/v1/types';
 import type { LocalEndpointRef } from '../../model/v1/topology';
 import { editModule } from './topology-edits';
 
-export function boundaryPort(inner: PortDefinition, id: string, name: string, parent: ModuleDefinition, childId: string): PortDefinition {
+export function boundaryPort(inner: PortDefinition, id: string, name: string): PortDefinition {
   const port: PortDefinition = { id, type: inner.type, direction: inner.direction };
   if (!isPowerPort(inner.type)) port.name = name.trim();
   if (inner.channelIds) port.channelIds = inner.channelIds;
-  const field = inner.direction === 'in' ? 'inputVoltageV' : 'outputVoltageV';
-  const voltage = inner[field];
-  if (voltage?.kind === 'fixed') port[field] = voltage;
-  if (voltage?.kind === 'parameter') {
-    const mapping = parent.parameterMappings?.find(m => m.target.instanceId === childId && m.target.parameterId === voltage.parameterId);
-    if (mapping) port[field] = { kind: 'parameter', parameterId: mapping.parameterId };
-  }
   return port;
 }
 
@@ -27,7 +20,7 @@ export function exposeModulePort(project: Project, scope: InstancePath, target: 
   const used = new Set(module.ports.map(port => port.id));
   let id = inner.id;
   for (let suffix = 2; used.has(id); suffix++) id = `${inner.id}_${suffix}`;
-  const port = boundaryPort(inner, id, name, module, target.instanceId);
+  const port = boundaryPort(inner, id, name);
   return editModule(project, module.id, current => ({
     ...current,
     ports: [...current.ports, port],
