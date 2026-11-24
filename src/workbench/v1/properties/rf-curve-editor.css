@@ -1,0 +1,33 @@
+.v1-curve-dialog {
+  width: min(68rem, calc(100vw - 1.5rem)); max-height: calc(100dvh - 1.5rem); overflow: auto;
+  margin: auto; padding: 1rem 1.25rem; border: 1px solid #8faeab; border-radius: .65rem; color: #183039;
+}
+.v1-curve-dialog::backdrop { background: #172d3b62; }
+.v1-curve-dialog header, .v1-curve-dialog footer, .v1-curve-meta, .v1-curve-point, .v1-curve-start {
+  display: flex; align-items: center; flex-wrap: wrap; gap: .55rem 1rem;
+}
+.v1-curve-dialog header { flex-wrap: nowrap; justify-content: space-between; border-bottom: 1px solid #d2dfdb; padding-bottom: .75rem; }
+.v1-curve-dialog h2 { margin: 0; font-size: 1.16rem; }
+.v1-curve-dialog header p, .v1-curve-meta { margin: .35rem 0 0; color: #536867; font-size: .82rem; }
+.v1-curve-dialog header button { flex: none; font-size: 1.2rem; }
+.v1-curve-dialog footer { justify-content: end; margin-top: .9rem; border-top: 1px solid #d2dfdb; padding-top: .75rem; }
+.v1-curve-dialog input, .v1-curve-dialog select { max-width: 100%; margin-left: .4rem; min-height: 2rem; }
+.v1-curve-dialog input { width: 9rem; }
+.v1-curve-meta { margin: .7rem 0; }
+.v1-curve-chart { position: relative; padding: 1.5rem 1.1rem 2.9rem 4rem; }
+.v1-curve-chart > svg { display: block; overflow: visible; width: 100%; height: clamp(10rem, 62dvh, 36rem); touch-action: none; cursor: crosshair; }
+.v1-curve-chart > svg:focus-visible { outline: 2px solid #679489; outline-offset: 2px; }
+.v1-curve-unit, .v1-curve-frequency { position: absolute; font-size: .78rem; color: #405b55; }
+.v1-curve-unit { top: 0; left: .5rem; }
+.v1-curve-frequency { right: .25rem; bottom: .1rem; }
+.v1-curve-chart line { stroke: #d4e2de; pointer-events: none; }
+.v1-curve-chart .v1-curve-zero { stroke: #809d96; stroke-width: 1.5px; }
+.v1-curve-chart text { font-size: 12px; fill: #536867; pointer-events: none; }
+.v1-curve-paper { fill: #f6faf9; stroke: #9ab1aa; }
+.v1-curve-line { pointer-events: none; stroke: #18786d; stroke-width: 2px; }
+.v1-curve-dot { fill: #fff; stroke: #18786d; stroke-width: 2px; }
+.v1-curve-chart [data-curve-point] { cursor: grab; }
+.v1-curve-chart .is-selected .v1-curve-dot { fill: #18786d; stroke: #17483f; }
+.v1-curve-point, .v1-curve-start { font-size: .85rem; margin-top: .65rem; }
+.v1-curve-original pre { max-height: 40vh; overflow: auto; }
+.v1-curve-field pre { max-height: 8rem; overflow: auto; font-size: .8rem; }

@@ -6,6 +6,7 @@ import { projectErrorMessage } from '../../storage/v1/project-json';
 import { portDisplayName, transferLabels } from './labels';
 import { PortFields, readPort, readTransfer, TransferFields } from './properties/device-fields';
 import { readParameter } from './properties/value-fields';
+import { curveProblem } from './properties/curve-graph';
 import { readPower, TemplatePower } from './template-power';
 import { TemplateSwitch, readSwitchStates } from './template-switch';
 import { TemplateModule } from './template-module';
@@ -37,6 +38,13 @@ export function TemplateEditor({ initial, definitions, hidden, save, cancel, rep
         if (!form.reportValidity()) throw new Error('请检查参数「' + p.name + '」。');
         const value = readParameter(new FormData(form), 'value', p);
         if (!p.name.trim()) throw new Error('请填写参数名称。');
+        if (p.kind === 'numeric' && typeof value === 'object' && value.kind === 'rfCurve') {
+          const original = initial.parameters?.find(parameter => parameter.id === p.id);
+          if (original?.kind !== 'numeric' || original.unit !== p.unit || JSON.stringify(original.defaultValue) !== JSON.stringify(value)) {
+            const problem = curveProblem(value.points, p.unit, p.range);
+            if (problem) throw new Error(`参数「${p.name}」：${problem}`);
+          }
+        }
         return p.kind === 'numeric' ? { ...p, defaultValue: typeof value === 'object' ? value : undefined }
           : { ...p, defaultValue: typeof value === 'string' ? value : undefined };
       });
