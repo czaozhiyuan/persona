@@ -177,7 +177,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
                 setError((error as Error).message);
               }
             }}>
-              <ParameterField parameter={parameter} value={current} label="当前实例值（留空恢复默认）" autosave />
+              <ParameterField parameter={parameter} value={current} inherited={effective?.value} label="当前实例值（留空恢复默认）" autosave />
               {current !== undefined && <button type="button" data-skip-autosave onClick={() => changeInstance(item => {
                 const overrides = { ...item.parameterOverrides };
                 delete overrides[parameter.id];
@@ -269,7 +269,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
             }
           }}>
             <label>参数名称<input name="name" defaultValue={parameter.name} required /></label>
-            <ParameterField parameter={parameter} value={parameter.defaultValue} label="默认值" autosave />
+            <ParameterField parameter={parameter} value={parameter.defaultValue} label="共享定义默认值" autosave />
             {parameter.kind === 'numeric' && <div className="v1-property-pair">
               <label>允许下限<input type="number" step="any" name="min" defaultValue={parameter.range?.min} /></label>
               <label>允许上限<input type="number" step="any" name="max" defaultValue={parameter.range?.max} /></label>
@@ -301,7 +301,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
         </form>}
         {definition.kind === 'component' && definition.transfers?.map((transfer, index) => <details key={index}>
           <summary>传输 · {transferLabels[transfer.kind]} · {portDisplayName(definition.ports.find(port => port.id === transfer.fromPortId)!, true)} → {portDisplayName(definition.ports.find(port => port.id === transfer.toPortId)!, true)}</summary>
-          <TransferFields key={JSON.stringify(transfer)} transfer={transfer} definition={definition} occurrences={occurrences}
+          <TransferFields transfer={transfer} definition={definition} occurrences={occurrences}
             save={read => changeDefinition(() => ({ ...definition,
               transfers: definition.transfers?.map((item, i) => i === index ? read() : item),
             }))} />

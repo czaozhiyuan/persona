@@ -122,9 +122,23 @@ export function readTransfer(data: FormData, transfer: Transfer): Transfer {
   }
 }
 
-export function TransferFields({ transfer, definition, occurrences = [], save, draft }: {
+type TransferFieldProps = {
   draft?: boolean; occurrences?: readonly ResolvedInstance[];
-  transfer: Transfer; definition: ComponentDefinition; save: (read: () => Transfer) => void;
+  transfer: Transfer; definition: ComponentDefinition; save: (read: () => Transfer) => void | boolean;
+};
+
+export function TransferFields(props: TransferFieldProps) {
+  const version = JSON.stringify(props.transfer);
+  const [fields, setFields] = useState({ version, revision: 0 });
+  // Preserve sibling drafts on a single curve commit. Reload the whole form after undo or replacement.
+  if (fields.version !== version) setFields({ version, revision: fields.revision + 1 });
+  return <TransferForm key={fields.revision} {...props} saveCurve={next => {
+    if (props.save(() => next) !== false) setFields({ ...fields, version: JSON.stringify(next) });
+  }} />;
+}
+
+function TransferForm({ transfer, definition, occurrences = [], save, draft, saveCurve }: TransferFieldProps & {
+  saveCurve: (next: Transfer) => void;
 }) {
   const receiver = transfer.kind === 'oe' ? transfer.receiver : undefined;
   const [selection, setSelection] = useState(typeof receiver === 'object' ? 'param:' + receiver.parameterId : receiver ?? '');
@@ -159,14 +173,17 @@ export function TransferFields({ transfer, definition, occurrences = [], save, d
       <ChannelField name="toChannel" label="输出通道" value={transfer.toChannelId} required />
     </div>}
     {transfer.kind === 'rf' && <>
-      <QuantityField name="gain" label="增益" kinds={rfKinds} value={transfer.gainDb} parameters={parameters} />
-      <QuantityField name="nf" label="噪声系数" kinds={rfKinds} value={transfer.nfDb} parameters={parameters} />
+      <QuantityField name="gain" label="增益" kinds={rfKinds} value={transfer.gainDb} parameters={parameters}
+        onCurveApply={draft ? undefined : gainDb => saveCurve({ ...transfer, gainDb })} />
+      <QuantityField name="nf" label="噪声系数" kinds={rfKinds} value={transfer.nfDb} parameters={parameters}
+        onCurveApply={draft ? undefined : nfDb => saveCurve({ ...transfer, nfDb })} />
     </>}
     {transfer.kind === 'eo' && <>
       <QuantityField name="insertionLoss" label="最大透过状态光插损" kinds={opticalKinds}
         value={transfer.insertionLossDb} parameters={parameters} minimum={0} />
       <QuantityField name="vPi" label="RF 半波电压 Vπ" unit="V" kinds={rfKinds}
-        value={transfer.vPi} parameters={parameters} minimum={Number.MIN_VALUE} />
+        value={transfer.vPi} parameters={parameters} minimum={Number.MIN_VALUE}
+        onCurveApply={draft ? undefined : vPi => saveCurve({ ...transfer, vPi })} />
       <p>正交偏置自动计入 3.0103 dB 损耗。固定 Vπ 按平坦响应估算。</p>
     </>}
     {transfer.kind === 'oe' && <>
@@ -180,8 +197,10 @@ export function TransferFields({ transfer, definition, occurrences = [], save, d
       {!mode && !mixed && <p>先选择接收结构。{reference && '请设置引用参数的有效值。'}</p>}
       <QuantityField hidden={!mixed && !usesReceiverField(mode, 'responsivity')} name="responsivity"
         label={mode === 'active50' && !mixed ? '响应度（可选，仅用于平均光电流）' : '响应度'} unit="A/W" kinds={opticalKinds} value={transfer.responsivity} parameters={parameters} minimum={0} />
-      <QuantityField hidden={!mixed && !usesReceiverField(mode, 'responseDb')} name="responseDb" label="无源 PD 归一化幅频响应（可选，未填按 0 dB 假定平坦）" kinds={rfKinds} value={transfer.responseDb} parameters={parameters} />
-      <QuantityField hidden={!mixed && !usesReceiverField(mode, 'loadedGain')} name="loadedGain" label="有源 RF 预算必填 · 加载转换增益 C(f)（外接 50 Ω）" unit="V/W" kinds={rfKinds} value={transfer.loadedGain} parameters={parameters} />
+      <QuantityField hidden={!mixed && !usesReceiverField(mode, 'responseDb')} name="responseDb" label="无源 PD 归一化幅频响应（可选，未填按 0 dB 假定平坦）" kinds={rfKinds} value={transfer.responseDb} parameters={parameters}
+        onCurveApply={draft ? undefined : responseDb => saveCurve({ ...transfer, responseDb })} />
+      <QuantityField hidden={!mixed && !usesReceiverField(mode, 'loadedGain')} name="loadedGain" label="有源 RF 预算必填 · 加载转换增益 C(f)（外接 50 Ω）" unit="V/W" kinds={rfKinds} value={transfer.loadedGain} parameters={parameters}
+        onCurveApply={draft ? undefined : loadedGain => saveCurve({ ...transfer, loadedGain })} />
     </>}
     {(transfer.kind === 'optical' || transfer.kind === 'wavelengthConversion') &&
       <QuantityField name="gain" label="增益" kinds={opticalKinds} value={transfer.gainDb} parameters={parameters} />}
