@@ -20,12 +20,14 @@ export function frameInsets(ports: readonly PortDefinition[]) {
   };
 }
 
-export function ModuleFrame({ id, width, height, name, ports, highlighted, newPortId, handleId, editable = false, outerHandles = false, selected = false, wireState, controls, openPort }: {
+export function ModuleFrame({ metricTitle, portValue, id, width, height, name, ports, highlighted, newPortId, handleId, editable = false, outerHandles = false, selected = false, wireState, controls, openPort }: {
   id: string;
   width?: number;
   height?: number;
   name: string;
   ports: readonly PortDefinition[];
+  metricTitle?: string;
+  portValue?: (id: string) => string | undefined;
   newPortId?: string;
   highlighted: ReadonlySet<string>;
   handleId: (portId: string, inner: boolean) => string;
@@ -41,7 +43,7 @@ export function ModuleFrame({ id, width, height, name, ports, highlighted, newPo
 
   return <div className={`v1-module-frame${selected ? ' is-selected' : ''}`}>
     <div className="v1-frame-title">
-      <strong title={name}>{name}</strong>
+      <strong title={metricTitle ?? name}>{name}</strong>
       {controls}
     </div>
     {portSides.map(side => <div key={side} className={`v1-module-pins ${side}`} style={{ width: framePortColumn }}>
@@ -55,7 +57,7 @@ export function ModuleFrame({ id, width, height, name, ports, highlighted, newPo
           {outerHandles && <Handle id={handleId(port.id, false)} type={input ? 'target' : 'source'}
             position={input ? Position.Left : Position.Right} className={`${port.type} v1-frame-outer-handle`} style={{ background: signalColor(port.type) }} data-wire={wireState?.(port.id, false)}
             isConnectable={editable} />}
-          <PortLabel port={port} ports={ports} open={openPort} />
+          <PortLabel value={portValue?.(port.id)} port={port} ports={ports} open={openPort} />
         </div>;
       })}
     </div>)}

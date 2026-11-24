@@ -30,7 +30,8 @@ import './topology.css';
 
 import type { LibraryConfig } from '../../../library/v1/user-library';
 
-export function TopologyEditor({ library, store, state, module, pathResult, graph, rename, expanded, setExpanded, budgetHighlight, onPortBudget, onDcBudget, onAddPort, newPort, onSelectObject, onSelectObjects, moveAcrossLevels, focusMoved, copyModule, pasteModule, copyNotice, fullPage, toggleFullPage, restoreView, placingModule, setPlacingModule, toolsHost, viewHost, topologyActive }: {
+export function TopologyEditor({ linkControls, library, store, state, module, pathResult, graph, rename, expanded, setExpanded, budgetHighlight, onPortBudget, onDcBudget, onAddPort, newPort, onSelectObject, onSelectObjects, moveAcrossLevels, focusMoved, copyModule, pasteModule, copyNotice, fullPage, toggleFullPage, restoreView, placingModule, setPlacingModule, toolsHost, viewHost, topologyActive }: {
+  linkControls: import('react').ReactNode;
   library: LibraryConfig;
   store: ProjectStore; state: ProjectStoreSnapshot; module: ModuleDefinition; pathResult?: PathResult; graph: SignalGraph; rename: () => void;
   expanded: ReadonlySet<string>; setExpanded: (value: ReadonlySet<string>) => void;
@@ -232,6 +233,7 @@ export function TopologyEditor({ library, store, state, module, pathResult, grap
           ...current, connections: [...(current.connections ?? []), { ...connection, id: crypto.randomUUID() }],
         }))}
         mapPort={(path, mapping) => requestBinding(path, mapping.portId, mapping.target)} />
+      <div className="v1-canvas-heading">
       <nav className="v1-topology-path" aria-label="模块路径">
         {Array.from({ length: scope.length + 1 }, (_, index) => {
           const path = scope.slice(0, index);
@@ -242,6 +244,8 @@ export function TopologyEditor({ library, store, state, module, pathResult, grap
             : <span key={index}><button type="button" onClick={() => store.selectModule(path)}>{name}</button><span aria-hidden="true">›</span></span>;
         })}
       </nav>
+      {linkControls}
+      </div>
       {placingModule && <p className="v1-placement-hint" role="status">单击画布放置到「{moduleName}」 · Esc 取消</p>}
       {copyNotice && !message && <p className="v1-topology-message v1-module-copy-notice" role="status">{copyNotice}</p>}
       {message && !preview && !portAction && !bindingPreview && !groupDialog && <p className="v1-topology-message error" role="alert">{message}</p>}

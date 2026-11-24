@@ -52,8 +52,7 @@ export function createLinkBudget(project: Project) {
     });
   }
 
-  function prepare(link: NamedLink, conditions: LinkBudgetConditions): (frequencyGHz: number) => LinkBudgetPoint {
-    const path = resolveNamedLink(link, conditions);
+  function prepare(path: PathResult, conditions: LinkBudgetConditions): (frequencyGHz: number) => LinkBudgetPoint {
     if (path.status !== 'resolved' && !path.trace) {
       return frequencyGHz => unresolved(frequencyGHz, { status: path.status, reason: path.reason, endpoint: path.endpoint });
     }
@@ -68,11 +67,15 @@ export function createLinkBudget(project: Project) {
     return frequencyGHz => ({ kind: 'rf', ...evaluateRf(path, { ...conditions, frequencyGHz }) });
   }
 
-  function calculateNamedLink(link: NamedLink, { frequencyGHz, ...conditions }: LinkBudgetInput): LinkBudgetPoint {
+  function calculatePath(path: PathResult, { frequencyGHz, ...conditions }: LinkBudgetInput): LinkBudgetPoint {
     if (!isRfFrequency(frequencyGHz)) {
       return unresolved(frequencyGHz, { status: 'invalid_frequency', reason: '射频频率须在 0 至 67 GHz 范围内。' });
     }
-    return prepare(link, conditions)(frequencyGHz);
+    return prepare(path, conditions)(frequencyGHz);
+  }
+
+  function calculateNamedLink(link: NamedLink, input: LinkBudgetInput) {
+    return calculatePath(resolveNamedLink(link, input), input);
   }
 
   function scanNamedLink(link: NamedLink, { startGHz, stopGHz }: RfScanRange,
@@ -82,7 +85,7 @@ export function createLinkBudget(project: Project) {
       return { status: 'invalid_range', points: [],
         reason: '起止频率须为 0 至 67 GHz 范围内的整数，且起始频率不得大于终止频率。' };
     }
-    const evaluate = prepare(link, conditions);
+    const evaluate = prepare(resolveNamedLink(link, conditions), conditions);
     const points: LinkBudgetPoint[] = [];
     for (let frequencyGHz = startGHz; frequencyGHz <= stopGHz; frequencyGHz++) {
       points.push(evaluate(frequencyGHz));
@@ -90,5 +93,5 @@ export function createLinkBudget(project: Project) {
     return { status: 'complete', points };
   }
 
-  return { calculateNamedLink, scanNamedLink, resolveNamedLink };
+  return { calculatePath, calculateNamedLink, scanNamedLink, resolveNamedLink };
 }

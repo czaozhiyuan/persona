@@ -7,7 +7,7 @@ import type { LinkOptions, Option } from '../links/link-options';
 import { LinkSupplyFields } from '../links/link-supply-fields';
 import { ChannelField } from '../properties/channel-field';
 import type { EndpointRef } from '../../../model/v1/types';
-import { EndpointLocation } from './budget-dock';
+import { EndpointLocation } from './budget-location';
 import { Metric, Rating } from './budget-values';
 
 type OpticalQuery = Extract<LocalOpticalRequest, { source: OpticalSource }>

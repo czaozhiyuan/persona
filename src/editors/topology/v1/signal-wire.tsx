@@ -5,10 +5,10 @@ import type { WiringEdge } from './topology-wiring';
 
 export const signalColor = (type: PortType) => `var(--v1-signal-${type})`;
 
-function fannedCurve(edge: EdgeProps<WiringEdge>): string {
+function fannedCurve(edge: EdgeProps<WiringEdge>) {
   const { sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data } = edge;
   const { x = 0, y = 0 } = data?.fan ?? {};
-  if (!x && !y) return getBezierPath(edge)[0];
+  if (!x && !y) return getBezierPath(edge);
 
   // Handles face left or right. Bend only the control points and keep the endpoints on the handles.
   const control = (start: number, end: number, side: Position) => {
@@ -19,15 +19,16 @@ function fannedCurve(edge: EdgeProps<WiringEdge>): string {
   };
   const sx = control(sourceX, targetX, sourcePosition);
   const tx = control(targetX, sourceX, targetPosition);
-  return `M ${sourceX},${sourceY} C ${sx},${sourceY + x} ${tx},${targetY + y} ${targetX},${targetY}`;
+  return [`M ${sourceX},${sourceY} C ${sx},${sourceY + x} ${tx},${targetY + y} ${targetX},${targetY}`, (sourceX + targetX + 3 * (sx + tx)) / 8, (sourceY + targetY) / 2 + 3 * (x + y) / 8] as const;
 }
 
 export function SignalWire(edge: EdgeProps<WiringEdge>) {
-  const path = fannedCurve(edge);
+  const [path, labelX, labelY] = fannedCurve(edge);
   const dash = edge.data?.kind === 'mapping' ? '6 4' : undefined;
   return <g className="v1-signal-wire" style={{ color: edge.data && signalColor(edge.data.portType) }} strokeDasharray={dash}>
     <path d={path} className="v1-wire-halo" />
     <path d={path} className="v1-wire-casing" />
     <BaseEdge id={edge.id} path={path} interactionWidth={8} className="v1-wire-main" style={{ stroke: 'currentColor' }} />
+    {edge.data?.caption && <text x={labelX} y={labelY - 5} className="v1-wire-caption" textAnchor="middle">{edge.data.caption}</text>}
   </g>;
 }

@@ -10,16 +10,17 @@ export const blockPortRows = (ports: readonly PortDefinition[]) => {
   return Math.max(left, ports.length - left);
 };
 
-export function PortLabel({ port, ports, open }: { port: PortDefinition; ports: readonly PortDefinition[]; open?: (id: string) => void }) {
+export function PortLabel({ port, ports, open, value }: { value?: string; port: PortDefinition; ports: readonly PortDefinition[]; open?: (id: string) => void }) {
   const label = portDisplayName(port, false, ports);
-  return open ? <button type="button" className="v1-port-label nodrag nopan" title={label}
+  return open ? <button type="button" className="v1-port-label nodrag nopan" title={value ? label + ' · ' + value : label}
     aria-label={`操作端口 ${label}`} aria-haspopup="dialog"
     onClick={event => { event.stopPropagation(); open(port.id); }}
     onDoubleClick={event => event.stopPropagation()}>{label}</button> : <span>{label}</span>;
 }
 
-export function BlockPorts({ ports, highlighted, newPortId, handleId, editable = false, wireState, openPort }: {
+export function BlockPorts({ portValue, ports, highlighted, newPortId, handleId, editable = false, wireState, openPort }: {
   ports: readonly PortDefinition[];
+  portValue?: (id: string) => string | undefined;
   newPortId?: string;
   highlighted: ReadonlySet<string>;
   handleId: (id: string) => string;
@@ -34,7 +35,7 @@ export function BlockPorts({ ports, highlighted, newPortId, handleId, editable =
           title={`${portDisplayName(port, false, ports)} · ${portTypeLabels[port.type]}`} data-port-direction={port.direction} data-wire={wireState?.(port.id)}>
           <Handle id={handleId(port.id)} type={port.direction === 'in' ? 'target' : 'source'}
             position={side === 'left' ? Position.Left : Position.Right} className={port.type} style={{ background: signalColor(port.type) }} isConnectable={editable} />
-          <PortLabel port={port} ports={ports} open={openPort} />
+          <PortLabel value={portValue?.(port.id)} port={port} ports={ports} open={openPort} />
         </div>)}
     </div>)}
   </div>;

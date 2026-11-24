@@ -3,9 +3,10 @@
 .v1-topology-path, .v1-canvas-zoom {
   border: 1px solid #ccdad5; border-radius: .45rem; background: #fbfdfc; box-shadow: 0 2px 10px #203d3910;
 }
-.v1-topology-path { position: absolute; z-index: 2; }
+.v1-canvas-heading { position: absolute; z-index: 2; top: 14px; left: 14px; right: 14px; display: flex; align-items: flex-start; flex-wrap: wrap; gap: .35rem; pointer-events: none; }
+.v1-canvas-heading > * { pointer-events: auto; }
 .v1-topology-path {
-  top: 14px; left: 14px; max-width: calc(100% - 28px); height: 32px;
+  max-width: 100%; height: 32px;
   display: flex; align-items: center; gap: .45rem; padding: 0 .55rem; overflow-x: auto;
   white-space: nowrap; font-size: .78rem; color: #214d46;
 }
@@ -140,8 +141,8 @@
 }
 .v1-topology-device { width: 11rem; padding: .7rem .8rem; background: #fff; border: 1px solid #8faeab; border-radius: .55rem; box-shadow: 0 2px 8px #173e4014; }
 .v1-topology-device.is-selected { outline: 2px solid #267e73; outline-offset: 2px; }
-.v1-topology-device.has-folded-path { border-color: #526d69; }
-.v1-topology-path-label { display: block; margin-bottom: .2rem; color: #42605f; font-size: .72rem; }
+.v1-topology-device.is-on-path, .v1-topology-device.has-folded-path { border-color: #526d69; }
+.v1-topology-path-label { position: absolute; bottom: 100%; left: 0; pointer-events: none; color: #42605f; font-size: .72rem; }
 .v1-topology-port.is-on-path { background: #e2ece9; color: #234643; border-radius: .25rem; }
 .v1-topology-port[data-wire="origin"] .react-flow__handle, .react-flow__handle[data-wire="origin"] { outline: 2px solid #526d69; }
 .v1-topology-port[data-wire="target"] .react-flow__handle, .react-flow__handle[data-wire="target"] { outline: 3px solid #0a8a6c; }
@@ -172,3 +173,10 @@
 .v1-topology-dialog::backdrop { background: #172d3b55; }
 .v1-topology-dialog h3 { margin-top: 0; }
 .v1-topology-dialog li { overflow-wrap: anywhere; }
+
+.v1-canvas-link { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; max-width: 100%; min-height: 32px; padding: .2rem .45rem; border: 1px solid #ccdad5; border-radius: .4rem; background: #fbfdfc; font-size: .76rem; }
+.v1-canvas-link select { max-width: 11rem; min-height: 1.6rem; }
+.v1-canvas-link label { display: inline-flex; align-items: center; gap: .25rem; }
+.v1-canvas-link small { max-width: 18rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.v1-node-caption { position: absolute; top: calc(100% + 2px); left: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: normal; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; padding: .12rem .35rem; color: #234842; background: #f3faf6ed; border-radius: .25rem; font-size: .69rem; pointer-events: none; }
+.v1-wire-caption { font-size: 10px; fill: currentColor; stroke: #f7fbf9; stroke-width: 3px; paint-order: stroke; pointer-events: none; }
