@@ -1,4 +1,4 @@
-import { findOpticalSupply } from './optical-supply';
+import { cascadedModulation, findOpticalSupply } from './optical-supply';
 import { resolveOpticalChannel } from '../../model/v1/channels';
 import type { OpticalChannelId } from '../../model/v1/channels';
 import type { CableCoreRef, NamedLink } from '../../model/v1/topology';
@@ -15,7 +15,7 @@ export type PathOptions = {
   opticalSources?: readonly (EndpointRef & { channelId?: OpticalChannelId })[];
 };
 
-type ConversionStep = { kind: 'eo' | 'oe'; edgeIndex: number };
+type ConversionStep = { kind: 'eo' | 'dml' | 'oe'; edgeIndex: number };
 type SupplyBranch = { edgeIndex: number; endpoint: EndpointRef } & (
   | { status: 'resolved'; path: SignalPath }
   | { status: 'missing' | 'ambiguous' | 'feedback_loop' | 'search_limit' }
@@ -63,6 +63,8 @@ export function createPathResolver(project: Project) {
   }
 
   const getPort = (ref: EndpointRef) => graph.ports.get(signalPortKey(ref));
+  const dmlEdges = graph.edges.filter(edge => edge.source.kind === 'transfer' && edge.source.transfer.kind === 'dml');
+
 
   function followBoundary(start: SignalPort, required: SignalEdge[]): SignalPort {
     let port = start;
@@ -80,12 +82,13 @@ export function createPathResolver(project: Project) {
     for (const [edgeIndex, edge] of path.edges.entries()) {
       if (edge.source.kind !== 'transfer') continue;
       const kind = edge.source.transfer.kind;
-      if (kind !== 'eo' && kind !== 'oe') continue;
+      if (kind !== 'eo' && kind !== 'dml' && kind !== 'oe') continue;
       conversions.push({ kind, edgeIndex });
       if (!edge.supply) continue;
 
       const supply = findOpticalSupply(graph, outgoing, edge.supply, steps[edgeIndex + 1].channelIds, sources);
       const endpoint = edge.supply.ref;
+      if (supply.status === 'cascaded_modulation') return { status: 'unreachable', endpoint, reason: cascadedModulation };
       if (supply.status !== 'resolved') {
         supplies.push({ edgeIndex, endpoint, status: supply.status === 'unreachable' ? 'missing' : supply.status });
         continue;
@@ -173,6 +176,30 @@ export function createPathResolver(project: Project) {
               ?? outputs.find(port => forwardPorts.some(other => inside(port.ref.instancePath, other.ref.instancePath)));
             if (open) return { status: 'incomplete', endpoint: open.ref, reason: '路径所需的模块端口缺少内部映射。' };
           }
+        }
+        const reachedDml = dmlEdges.filter(edge => result.reached.has(edge.from));
+        if (reachedDml.length === 1 && from.definition.type === 'RF') {
+          const dml = reachedDml[0];
+          // Retain only an unambiguous, reachable optical prefix when the far endpoint is blocked.
+          let last = dml.to;
+          const visited = new Set([last]);
+          while (result.reached.has(last)) {
+            const next = outgoing.get(last)?.filter(edge => edge.to.definition.type === 'OPTICAL' && result.reached.has(edge.to));
+            if (next?.length !== 1 || visited.has(next[0].to)) break;
+            last = next[0].to;
+            visited.add(last);
+          }
+          const prefix = searchSignalPath({ starts: [from], target: last, adjacent: outgoing, carrier });
+          const trace = prefix.status === 'resolved' ? traceSupplies(prefix.path, sources).trace : undefined;
+          const cascaded = graph.edges.some(edge => edge.supply && visited.has(edge.supply));
+          const rejected = !result.reached.has(dml.to) ? dml : outgoing.get(last)?.find(edge => !result.reached.has(edge.to));
+          const channel = trace?.steps.at(-1)?.channelIds?.join(' / ') ?? request.channelId;
+          const switched = graph.instances.find(item => JSON.stringify(item.instancePath) === JSON.stringify(last.ref.instancePath))?.switchState;
+          const reason = cascaded ? cascadedModulation
+            : rejected ? `直调路径的端口或传输不支持光通道${channel ? ' ' + channel : ''}。`
+            : switched ? `光开关在「${switched.name}」状态下未接通到目标的光路。`
+            : '直调光路未接通到所选目标，或未经过指定连接。';
+          return { status: 'unreachable', endpoint: rejected?.to.ref ?? last.ref, trace, reason };
         }
         return { status: 'unreachable', reason: '没有路径满足端点与路由约束。' };
       }

@@ -53,6 +53,13 @@ export const builtInDefinitions = [
   { kind: 'component', id: 'library-laser', iconKey: 'laser', name: '激光器', parameters: [laserPower],
     ports: [{ ...port('OPT_OUT', '光输出', 'OPTICAL', 'out'), opticalEmitter: emitter }] },
   {
+    kind: 'component', id: 'library-dml', iconKey: 'laser', name: '直调激光器（DML）',
+    ports: [rfPorts[0], { ...opticalPorts[1], opticalEmitter: emitter }],
+    parameters: [{ ...laserPower, name: '平均输出信号光功率 P0' },
+      { ...numeric('slope', '加载 50 Ω 的直调系数 K(f)', 'W/V', { min: 0 }), valueKind: 'rfValue' }],
+    transfers: [{ kind: 'dml', fromPortId: 'RF_IN', toPortId: 'OPT_OUT', modulationSlope: parameter('slope') }],
+  },
+  {
     kind: 'component', id: 'library-mzm', iconKey: 'mzm', name: '调制器（MZM）',
     ports: [port('RF_IN', '射频输入', 'RF', 'in'), port('LASER_IN', '激光输入', 'OPTICAL', 'in'), port('OPT_OUT', '光输出', 'OPTICAL', 'out')],
     parameters: [{ ...numeric('intrinsicLoss', '最大透过状态光插损', 'dB', { min: 0 }), valueKind: 'opticalValue' },

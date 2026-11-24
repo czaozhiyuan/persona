@@ -78,7 +78,7 @@ export function buildSignalGraph(project: Project): SignalGraph {
     let channels: SignalChannels = { kind: 'none' };
     if (transfer?.kind === 'wavelengthConversion') {
       channels = { kind: 'convert', fromChannelId: transfer.fromChannelId, toChannelId: transfer.toChannelId };
-    } else if (transfer?.kind === 'eo') {
+    } else if (transfer?.kind === 'eo' || transfer?.kind === 'dml') {
       channels = { kind: 'enter', channelIds };
     } else if (transfer?.kind === 'oe') {
       channels = { kind: 'exit', channelIds };

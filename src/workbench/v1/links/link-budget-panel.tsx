@@ -19,8 +19,9 @@ function PointDetails({ point, labels: { showEndpoint, showPort }, locate }: {
 }) {
   const issue = point.kind !== 'conversion' ? point.pathIssue : undefined;
   const voltages = loadedVoltages(point.powerDbm);
+  const dml = point.kind === 'conversion' && (point.partialDml || point.segments.some(s => s.transmitter.kind === 'dml'));
   return <div className="v1-point-details" data-budget-status={point.status}>
-    <h4>{Number.isFinite(point.frequencyGHz) ? `${point.frequencyGHz} GHz` : '频率未设'} · {point.frequencyGHz === 0 && '低频极限参考 · '}{point.kind === 'conversion' && '正交小信号幅度估算 · '}{statusLabels[point.status]}</h4>
+    <h4>{Number.isFinite(point.frequencyGHz) ? `${point.frequencyGHz} GHz` : '频率未设'} · {point.frequencyGHz === 0 && '低频极限参考 · '}{point.kind === 'conversion' && (dml ? '直调小信号幅度估算 · ' : '正交小信号幅度估算 · ')}{statusLabels[point.status]}</h4>
     <dl className="v1-budget-metrics">
       {(['gainDb', 'powerDbm', 'nfDb'] as const).map(key => <div key={key}>
         <dt>{key === 'gainDb' && point.kind === 'conversion' ? '小信号射频增益' : scanMetrics[key]}</dt><dd data-metric={key}><Metric metric={point[key]} /></dd>
@@ -43,11 +44,20 @@ function PointDetails({ point, labels: { showEndpoint, showPort }, locate }: {
       </tr>)}</tbody></table></div>
     </details>}
     {point.kind === 'conversion' && <>
-      {point.segments.some(segment => segment.extrapolated) && <p className="v1-budget-warning">超出小信号范围，结果为线性外推</p>}
+      {(point.segments.some(segment => segment.extrapolated) || point.partialDml?.extrapolated) &&
+        <p className="v1-budget-warning">超出小信号范围，结果为线性外推</p>}
       {point.diagnostics.length > 0 && <ul className="v1-budget-reasons">{point.diagnostics.map((item, index) => <li key={index}>
         {item.code === 'missing_gain' ? '缺少参数 · ' : ''}
         {item.reason}{item.endpoint && ` · ${showEndpoint(item.endpoint)}`}
       </li>)}</ul>}
+      {point.partialDml && <dl className="v1-budget-metrics">
+        <div><dt>DML 平均输出光功率 P0</dt><dd><Metric metric={point.partialDml.emission.mean} /></dd></div>
+        <div><dt>直调系数 K(f)</dt><dd><Metric metric={point.partialDml.emission.slope} /></dd></div>
+        <div><dt>调制深度 m</dt><dd><Metric metric={point.partialDml.emission.modulationDepth} /></dd></div>
+        {point.partialDml.optical?.stages.slice(1).map(stage => <div key={JSON.stringify(stage.endpoint)}>
+          <dt>{showEndpoint(stage.endpoint)} · 光功率</dt><dd><Metric metric={stage.powerDbm} /></dd>
+        </div>)}
+      </dl>}
       {point.continuousWave && <dl className="v1-budget-metrics">
         <div><dt>探测器平均信号光功率</dt><dd><Metric metric={point.continuousWave.optical.powerDbm} /></dd></div>
         <div><dt>平均光电流</dt><dd><Metric metric={point.continuousWave.averageCurrent} /></dd></div>
@@ -55,11 +65,21 @@ function PointDetails({ point, labels: { showEndpoint, showPort }, locate }: {
       {point.segments.map(segment => <details key={segment.eoEdgeIndex}>
         <summary>电光—光电转换段 · {showEndpoint(segment.pdInput)}{segment.channelId && ` · ${segment.channelId}`}</summary>
         <dl className="v1-budget-metrics">
-          <div><dt>RF 半波电压 Vπ</dt><dd><Metric metric={segment.vPi} /></dd></div>
+          {segment.transmitter.kind === 'mzm'
+            ? <div><dt>RF 半波电压 Vπ</dt><dd><Metric metric={segment.transmitter.vPi} /></dd></div>
+            : <>
+              <div><dt>DML 平均输出光功率 P0</dt><dd><Metric metric={segment.transmitter.mean} /></dd></div>
+              <div><dt>直调系数 K(f)</dt><dd><Metric metric={segment.transmitter.slope} /></dd></div>
+              <div><dt>DML 射频输入峰值电压</dt><dd><Metric metric={segment.transmitter.inputPeak} /></dd></div>
+              <div><dt>DML 交流光功率峰值</dt><dd><Metric metric={segment.transmitter.opticalPeak} /></dd></div>
+              <div><dt>PD 交流光功率峰值</dt><dd><Metric metric={segment.transmitter.receivedPeak} /></dd></div>
+              <div><dt>PD 已加载转换系数</dt><dd><Metric metric={segment.transmitter.loadedResponse} /></dd></div>
+              <div><dt>PD 射频输出峰值电压</dt><dd><Metric metric={loadedVoltages(segment.rfOutputDbm).vpk} /></dd></div>
+            </>}
           <div><dt>响应度</dt><dd><Metric metric={segment.responsivity} /></dd></div>
           <div><dt>调制深度 m</dt><dd><Metric metric={segment.modulationDepth} />{segment.extrapolated && ' · 线性外推'}</dd></div>
           <div><dt>平均光电流</dt><dd><Metric metric={segment.averageCurrent} /></dd></div>
-          <div><dt>MZM 输入</dt><dd><Rating check={segment.inputRating} showStatus /></dd></div>
+          <div><dt>{segment.transmitter.kind === 'dml' ? 'DML' : 'MZM'} 输入</dt><dd><Rating check={segment.inputRating} showStatus /></dd></div>
           <div><dt>探测器光功率</dt><dd data-metric="pd-power"><Metric metric={segment.pdPowerDbm} /></dd></div>
           <div><dt>转换段增益</dt><dd data-metric="conversion-gain"><Metric metric={segment.gainDb} /></dd></div>
           <div><dt>转换段输出射频功率</dt><dd><Metric metric={segment.rfOutputDbm} /></dd></div>

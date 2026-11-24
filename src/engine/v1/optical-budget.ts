@@ -1,6 +1,6 @@
 import { createPathNames } from './path-names';
 import { portDisplayName } from '../../model/v1/display-names';
-import { findOpticalSupply } from './optical-supply';
+import { cascadedModulation, findOpticalSupply } from './optical-supply';
 import type { Carrier } from './path-search';
 import { resolveOpticalChannel } from '../../model/v1/channels';
 import type { OpticalChannelId } from '../../model/v1/channels';
@@ -197,7 +197,8 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
       const problem = sourceIssue(source, port);
       if (!port || problem) return fail('invalid_reference', source.endpoint, problem ?? '光源端口不存在。');
       const path = search([port], target, source.channelId);
-      if (path.status !== 'resolved') return pathFailure(path, target);
+      if (path.status !== 'resolved') return pathFailure(path, target,
+        !port.definition.channelIds || port.definition.channelIds.includes(source.channelId) ? start(port, source) : []);
       return calculateOpticalPath(path.path, source);
     }
 
@@ -225,6 +226,7 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
       selected.set(port, [...(selected.get(port) ?? []), source.channelId]);
     }
     const candidate = findOpticalSupply(graph, outgoing, supply, [channelId], selected);
+    if (candidate.status === 'cascaded_modulation') return fail('unreachable', supply.ref, cascadedModulation);
     if (candidate.status !== 'resolved') return pathFailure(candidate, supply, [], true);
     const first = candidate.path.steps[0];
     if (first.channelIds?.length !== 1) return fail('ambiguous', first.port.ref, '请选择光源通道。');

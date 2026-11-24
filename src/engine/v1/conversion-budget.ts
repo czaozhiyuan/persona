@@ -1,6 +1,7 @@
 import { createPathNames } from './path-names';
 import type { OpticalChannelId } from '../../model/v1/channels';
 import { loadedResponse } from './receiver-response';
+import { dmlEmission, dmlReception } from './dml-response';
 import type { NamedLink } from '../../model/v1/topology';
 import type { EndpointRef, Project } from '../../model/v1/types';
 import { addGain, budgetValue, checkInputRating, logZero, unavailable } from './budget-metric';
@@ -23,7 +24,8 @@ type ConversionSegment = {
   oeEdgeIndex: number;
   pdInput: EndpointRef;
   channelId?: OpticalChannelId;
-  vPi: BudgetMetric<'V'>;
+  transmitter: { kind: 'mzm'; vPi: BudgetMetric<'V'> } | ({ kind: 'dml'; receivedPeak: BudgetMetric<'W'>;
+    loadedResponse: BudgetMetric<'V/W'> } & ReturnType<typeof dmlEmission>);
   responsivity: BudgetMetric<'A/W'>;
   modulationDepth: BudgetMetric<'ratio'>;
   averageCurrent: BudgetMetric<'A'>;
@@ -51,9 +53,9 @@ type Diagnostic = {
 };
 
 export function loadedVoltages(power: BudgetMetric<'dBm'>) {
-  if (power.availability === 'unavailable') return { vrms: unavailable('V', power.reason), vpp: unavailable('V', power.reason) };
+  if (power.availability === 'unavailable') return { vpk: unavailable('V', power.reason), vrms: unavailable('V', power.reason), vpp: unavailable('V', power.reason) };
   const rms = Math.sqrt(50 * 10 ** ((power.value - 30) / 10));
-  return { vrms: budgetValue('V', rms), vpp: budgetValue('V', 2 * Math.SQRT2 * rms) };
+  return { vpk: budgetValue('V', Math.SQRT2 * rms), vrms: budgetValue('V', rms), vpp: budgetValue('V', 2 * Math.SQRT2 * rms) };
 }
 
 export type ConversionBudget = {
@@ -65,6 +67,7 @@ export type ConversionBudget = {
   rfPorts: readonly { endpoint: EndpointRef; powerDbm: BudgetMetric<'dBm'> }[];
   segments: readonly ConversionSegment[];
   rfStages: readonly ExternalRfStage[];
+  partialDml?: { output: EndpointRef; optical?: OpticalBudget; emission: ReturnType<typeof dmlEmission>; extrapolated: boolean };
   continuousWave?: { pdInput: EndpointRef; optical: OpticalBudget; responsivity: BudgetMetric<'A/W'>; averageCurrent: BudgetMetric<'A'> };
   diagnostics: readonly Diagnostic[];
 };
@@ -77,6 +80,7 @@ const supplyFailure = {
 };
 
 const noNf = () => unavailable('dB', '跨域链路未建模噪声系数。');
+const beyondSmallSignal = (depth: BudgetMetric<'ratio'>) => depth.availability === 'available' && depth.value > 0.3;
 
 function selectOpticalSource(first: SignalStep, sources: readonly OpticalSource[]): OpticalSource | undefined {
   const key = signalPortKey(first.port.ref);
@@ -95,6 +99,14 @@ export function createConversionPathBudget(graph: SignalGraph) {
 
   function opticalSegment(trace: PathTrace, eoIndex: number, oeIndex: number, sources: readonly OpticalSource[]) {
     const eo = trace.edges[eoIndex];
+    if (eo.source.kind === 'transfer' && eo.source.transfer.kind === 'dml') {
+      const first = trace.steps[eoIndex + 1];
+      const channelId = first.channelIds?.length === 1 ? first.channelIds[0] : undefined;
+      if (!channelId) return { problem: { code: 'optical_supply', endpoint: eo.to.ref, reason: '请选择直调激光器的输出光通道。' } } as const;
+      const path = { steps: trace.steps.slice(eoIndex + 1, oeIndex + 1), edges: trace.edges.slice(eoIndex + 1, oeIndex) };
+      const optical = opticalBudget.calculateOpticalPath(path, { endpoint: eo.to.ref, channelId });
+      return { optical, channelId: optical.stages.at(-1)!.channelId };
+    }
     const terminal = eo.supply?.ref ?? eo.to.ref;
     const supply = trace.supplies.find(item => item.edgeIndex === eoIndex);
     if (supply?.status !== 'resolved') {
@@ -132,6 +144,7 @@ export function createConversionPathBudget(graph: SignalGraph) {
     const first = trace.steps[0];
     const firstConversion = trace.conversions[0];
     let continuousWave: ConversionBudget['continuousWave'];
+    let partialDml: ConversionBudget['partialDml'];
     if (first.port.definition.type === 'OPTICAL' && firstConversion?.kind === 'oe') {
       const index = firstConversion.edgeIndex;
       const edge = trace.edges[index];
@@ -150,7 +163,7 @@ export function createConversionPathBudget(graph: SignalGraph) {
     const pairs = new Map<number, number>();
     for (const [i, eo] of trace.conversions.entries()) {
       const oe = trace.conversions[i + 1];
-      if (eo.kind === 'eo' && oe?.kind === 'oe') pairs.set(eo.edgeIndex, oe.edgeIndex);
+      if ((eo.kind === 'eo' || eo.kind === 'dml') && oe?.kind === 'oe') pairs.set(eo.edgeIndex, oe.edgeIndex);
     }
     function block(problem: Diagnostic) {
       blocked ??= problem;
@@ -162,7 +175,8 @@ export function createConversionPathBudget(graph: SignalGraph) {
     }
 
     let gainDb = budgetValue('dB', 0);
-    let powerDbm = inputPowerDbm === undefined ? unavailable('dBm', '未提供射频输入功率。') : budgetValue('dBm', inputPowerDbm);
+    let powerDbm = inputPowerDbm === undefined ? unavailable('dBm', '未提供射频输入功率。')
+      : inputPowerDbm === -Infinity ? logZero('dBm') : budgetValue('dBm', inputPowerDbm);
 
     function recordRfPower(port: SignalPort) {
       if (port.definition.type === 'RF') rfPorts.push({ endpoint: port.ref, powerDbm });
@@ -182,32 +196,50 @@ export function createConversionPathBudget(graph: SignalGraph) {
         if (problem) diagnostics.push(problem);
         const pdPowerDbm = optical?.powerDbm ?? unavailable('dBm', problem?.reason ?? '无法确定探测器输入光功率。');
         const receiver = trace.edges[oeIndex].source;
-        if (source.transfer.kind !== 'eo' || receiver.kind !== 'transfer' || receiver.transfer.kind !== 'oe') continue;
+        if ((source.transfer.kind !== 'eo' && source.transfer.kind !== 'dml') || receiver.kind !== 'transfer' || receiver.transfer.kind !== 'oe') continue;
         const eoInput = edge.from.ref;
         const modulator = instances.get(JSON.stringify(eoInput.instancePath));
         const detector = instances.get(JSON.stringify(pdInput.instancePath));
         const pd = receiver.transfer;
         const query = { frequencyGHz, channelId };
-        const vPi = resolveEmpiricalValue('V', source.transfer.vPi, query, modulator);
+
         const rho = resolveEmpiricalValue('A/W', pd.responsivity, query, detector);
         const conversion = loadedResponse(pd, detector, rho, frequencyGHz);
         const averageCurrent = photocurrent(pdPowerDbm, rho);
-        const modulationDepth = vPi.availability === 'unavailable' ? unavailable('ratio', `RF Vπ：${vPi.reason}`)
-          : powerDbm.availability === 'unavailable' ? unavailable('ratio', powerDbm.reason)
-          : budgetValue('ratio', Math.PI * Math.sqrt(100 * 10 ** ((powerDbm.value - 30) / 10)) / vPi.value);
-        const gain = vPi.availability === 'unavailable' ? unavailable('dB', `${showPath(eoInput.instancePath)} RF Vπ：${vPi.reason}`)
-          : conversion.availability === 'unavailable' ? unavailable('dB', `${showPath(pdInput.instancePath)} 光电转换：${conversion.reason}`)
-          : pdPowerDbm.availability === 'unavailable' ? unavailable('dB', pdPowerDbm.reason)
-          : conversion.value === 0 ? logZero('dB')
-          : budgetValue('dB', 2 * (pdPowerDbm.value - 30) + 20 * Math.log10(Math.PI * Math.abs(conversion.value) / vPi.value));
+        let transmitter: ConversionSegment['transmitter'];
+        let gain: BudgetMetric<'dB'>;
+        let modulationDepth: BudgetMetric<'ratio'>;
+        let missingAt = pdInput;
+        if (source.transfer.kind === 'dml') {
+          const slope = resolveEmpiricalValue('W/V', source.transfer.modulationSlope, query, modulator);
+          const mean = optical?.stages[0].powerDbm ?? resolveEmpiricalValue('dBm', edge.to.definition.opticalEmitter?.powerDbm, {}, modulator);
+          const emission = dmlEmission(slope, powerDbm, mean);
+          const received = dmlReception(emission, optical?.gainDb ?? unavailable('dB', problem!.reason), conversion);
+          transmitter = { kind: 'dml', ...emission, receivedPeak: received.receivedPeak, loadedResponse: conversion };
+          modulationDepth = emission.modulationDepth;
+          gain = received.gain;
+          if (slope.availability === 'unavailable') missingAt = eoInput;
+        } else {
+          const vPi = resolveEmpiricalValue('V', source.transfer.vPi, query, modulator);
+          transmitter = { kind: 'mzm', vPi };
+          modulationDepth = vPi.availability === 'unavailable' ? unavailable('ratio', `RF Vπ：${vPi.reason}`)
+            : powerDbm.availability === 'unavailable' ? unavailable('ratio', powerDbm.reason)
+            : budgetValue('ratio', Math.PI * Math.sqrt(100 * 10 ** ((powerDbm.value - 30) / 10)) / vPi.value);
+          gain = vPi.availability === 'unavailable' ? unavailable('dB', `${showPath(eoInput.instancePath)} RF Vπ：${vPi.reason}`)
+            : conversion.availability === 'unavailable' ? unavailable('dB', `${showPath(pdInput.instancePath)} 光电转换：${conversion.reason}`)
+            : pdPowerDbm.availability === 'unavailable' ? unavailable('dB', pdPowerDbm.reason)
+            : conversion.value === 0 ? logZero('dB')
+            : budgetValue('dB', 2 * (pdPowerDbm.value - 30) + 20 * Math.log10(Math.PI * Math.abs(conversion.value) / vPi.value));
+          if (vPi.availability === 'unavailable') missingAt = eoInput;
+        }
         if (gain.availability === 'unavailable') diagnostics.push({ code: 'missing_gain',
-          endpoint: vPi.availability === 'unavailable' ? eoInput : pdInput, reason: gain.reason });
+          endpoint: missingAt, reason: gain.reason });
         const inputRating = checkInputRating(eoInput, edge.from.definition.inputRating, powerDbm);
         gainDb = addGain(gainDb, gain);
         powerDbm = addGain(powerDbm, gain);
         segments.push({ eoEdgeIndex: i, oeEdgeIndex: oeIndex, pdInput, channelId, optical, pdPowerDbm, inputRating,
-          vPi, responsivity: rho, gainDb: gain, rfOutputDbm: powerDbm, modulationDepth, averageCurrent,
-          extrapolated: modulationDepth.availability === 'available' && modulationDepth.value > 0.3 });
+          transmitter, responsivity: rho, gainDb: gain, rfOutputDbm: powerDbm, modulationDepth, averageCurrent,
+          extrapolated: beyondSmallSignal(modulationDepth) });
         i = oeIndex;
       } else if (source.transfer.kind === 'rf') {
         const instance = instances.get(JSON.stringify(edge.from.ref.instancePath));
@@ -218,6 +250,14 @@ export function createConversionPathBudget(graph: SignalGraph) {
         rfStages.push({ edgeIndex: i, input: edge.from.ref, output: edge.to.ref, ...values, powerDbm, rating });
         if (values.gainDb.availability === 'unavailable') diagnostics.push({ code: 'missing_gain',
           endpoint: edge.from.ref, reason: values.gainDb.reason });
+      } else if (source.transfer.kind === 'dml') {
+        const { optical } = opticalSegment(trace, i, trace.edges.length, opticalSources);
+        const instance = instances.get(JSON.stringify(edge.from.ref.instancePath));
+        const slope = resolveEmpiricalValue('W/V', source.transfer.modulationSlope, { frequencyGHz }, instance);
+        const mean = optical?.stages[0].powerDbm ?? resolveEmpiricalValue('dBm', edge.to.definition.opticalEmitter?.powerDbm, {}, instance);
+        const emission = dmlEmission(slope, powerDbm, mean);
+        partialDml = { output: edge.to.ref, optical, emission, extrapolated: beyondSmallSignal(emission.modulationDepth) };
+        break;
       } else if (source.transfer.kind === 'eo' || source.transfer.kind === 'oe') {
         powerDbm = unavailable('dBm', '该转换没有匹配的电光—光电转换段。');
       }
@@ -228,10 +268,10 @@ export function createConversionPathBudget(graph: SignalGraph) {
       gainDb = unavailable('dB', blocked.reason);
       powerDbm = unavailable('dBm', blocked.reason);
     }
-    const hasResults = continuousWave?.optical.powerDbm.availability === 'available' || gainDb.availability === 'available' || segments.some(segment =>
+    const hasResults = !!partialDml || continuousWave?.optical.powerDbm.availability === 'available' || gainDb.availability === 'available' || segments.some(segment =>
       segment.optical && segment.optical.status !== 'error' || segment.gainDb.availability === 'available')
       || rfStages.some(stage => stage.gainDb.availability === 'available' || stage.nfDb.availability === 'available');
-    return { status: hasResults ? 'partial' : 'error', frequencyGHz, gainDb, powerDbm, nfDb: noNf(), rfPorts, segments, rfStages, continuousWave, diagnostics };
+    return { status: hasResults ? 'partial' : 'error', frequencyGHz, gainDb, powerDbm, nfDb: noNf(), rfPorts, segments, rfStages, partialDml, continuousWave, diagnostics };
   };
 }
 
