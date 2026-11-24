@@ -41,8 +41,14 @@ type DefinitionIdentity = {
 
 export type PhysicalFootprint = { widthMm: number; depthMm: number };
 
+export const componentIconKeys = [
+  'laser', 'mzm', 'photodiode', 'amplifier', 'attenuator', 'opticalSwitch', 'dcSupply', 'dcConverter', 'pcb',
+] as const;
+export type ComponentIconKey = typeof componentIconKeys[number];
+
 export type ComponentDefinition = DefinitionIdentity & {
   kind: 'component';
+  iconKey?: ComponentIconKey;
   physicalFootprint?: PhysicalFootprint;
   transfers?: readonly Transfer[];
   switchStates?: readonly SwitchState[];

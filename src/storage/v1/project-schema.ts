@@ -1,4 +1,5 @@
 import { receiverModes } from '../../model/v1/device';
+import { componentIconKeys } from '../../model/v1/types';
 import type { Project } from '../../model/v1/types';
 
 export class ProjectStructureError extends Error {
@@ -137,6 +138,7 @@ const transfer = byKind({
 const definition = { ...identity, ports: list(port) };
 const footprint = { widthMm: number, depthMm: number };
 const component = shape({ ...definition, kind: oneOf('component') }, {
+  iconKey: oneOf(...componentIconKeys),
   physicalFootprint: shape(footprint),
   parameters: list(parameter), transfers: list(transfer),
   switchStates: list(shape({ ...identity, routes: list(shape(portPair, opticalOptions)) })),

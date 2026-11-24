@@ -22,6 +22,7 @@
       {
         "kind": "component",
         "id": "mzm",
+        "iconKey": "mzm",
         "name": "调制器（MZM）",
         "ports": [
           {
@@ -103,6 +104,7 @@
       {
         "kind": "component",
         "id": "pd",
+        "iconKey": "photodiode",
         "name": "探测器（PD）",
         "ports": [
           {
@@ -155,6 +157,7 @@
       {
         "kind": "component",
         "id": "layoutDemo-mzm-optical",
+        "iconKey": "mzm",
         "name": "马赫–曾德尔调制器",
         "ports": [
           {
@@ -168,6 +171,7 @@
       {
         "kind": "component",
         "id": "deviceDemo-rf-pcb",
+        "iconKey": "pcb",
         "physicalFootprint": {
           "widthMm": 80,
           "depthMm": 55
@@ -221,6 +225,7 @@
       {
         "kind": "component",
         "id": "deviceDemo-mzm",
+        "iconKey": "mzm",
         "name": "外部供光调制器（MZM）",
         "ports": [
           {
@@ -285,6 +290,7 @@
       {
         "kind": "component",
         "id": "deviceDemo-pd850",
+        "iconKey": "photodiode",
         "name": "850 nm 探测器（PD）",
         "ports": [
           {
@@ -438,6 +444,7 @@
       {
         "kind": "component",
         "id": "deviceDemo-switch",
+        "iconKey": "opticalSwitch",
         "name": "1×2 光开关",
         "ports": [
           {
@@ -508,6 +515,7 @@
       {
         "kind": "component",
         "id": "demo-laser",
+        "iconKey": "laser",
         "name": "激光器",
         "ports": [
           {
@@ -545,6 +553,7 @@
       {
         "kind": "component",
         "id": "demo-switch",
+        "iconKey": "opticalSwitch",
         "name": "光开关",
         "ports": [
           {
@@ -585,6 +594,7 @@
       {
         "kind": "component",
         "id": "demo-rf10",
+        "iconKey": "amplifier",
         "name": "射频放大器（10 dB）",
         "ports": [
           {
@@ -619,6 +629,7 @@
       {
         "kind": "component",
         "id": "demo-rf5",
+        "iconKey": "amplifier",
         "name": "射频放大器（5 dB）",
         "ports": [
           {
@@ -653,6 +664,7 @@
       {
         "kind": "component",
         "id": "demo-supply",
+        "iconKey": "dcSupply",
         "name": "直流电源",
         "ports": [
           {
@@ -680,6 +692,7 @@
       {
         "kind": "component",
         "id": "demo-converter",
+        "iconKey": "dcConverter",
         "name": "直流变换器（DC/DC）",
         "ports": [
           {

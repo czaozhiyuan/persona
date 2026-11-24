@@ -1,4 +1,5 @@
 import type { Transfer } from '../../model/v1/device';
+import type { ComponentIconKey } from '../../model/v1/types';
 import type { Connection } from '../../model/v1/topology';
 export { editablePortName, portDisplayName, portTypeLabels } from '../../model/v1/display-names';
 
@@ -7,6 +8,18 @@ export const mediaLabels = {
   RF_COAX: '射频同轴线',
   RJ45_CABLE: 'RJ45 线缆',
 } satisfies Record<NonNullable<Connection['mediaKind']>, string>;
+
+export const componentIconLabels = {
+  laser: '激光器 / 光源',
+  mzm: 'MZM 电光调制器',
+  photodiode: 'PD / 光接收机',
+  amplifier: 'RF 放大器',
+  attenuator: '衰减器',
+  opticalSwitch: '光开关',
+  dcSupply: '直流电源',
+  dcConverter: 'DC/DC 变换器',
+  pcb: '电路板（PCB）',
+} satisfies Record<ComponentIconKey, string>;
 
 export const transferLabels = {
   rf: '射频传输',

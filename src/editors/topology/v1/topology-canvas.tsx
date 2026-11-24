@@ -12,9 +12,10 @@ import { moveWiringSummary, planInstanceMoves } from '../../../state/v1/reparent
 import { defaultTopologyPosition } from '../../../state/v1/topology-position';
 import type { WiringSelection } from '../../../state/v1/remove-topology-object';
 import type { Connection } from '../../../model/v1/topology';
-import type { EndpointRef, InstancePath, PortDefinition, PortMapping, Project, TopologyFrame, TopologyPlacement } from '../../../model/v1/types';
+import type { ComponentIconKey, EndpointRef, InstancePath, PortDefinition, PortMapping, Project, TopologyFrame, TopologyPlacement } from '../../../model/v1/types';
 import { createPathNames, structureScope } from '../../../workbench/v1/structure-scope';
 import { BlockPorts } from './block-ports';
+import { DeviceIcon } from './device-icon';
 import { frameHeader, frameInsets, ModuleFrame } from './module-frame';
 import { keepNodeInside, moduleExtent } from './frame-geometry';
 import { ModulePlacement } from './module-placement';
@@ -39,6 +40,7 @@ type NodeData = {
   key: string;
   path: InstancePath;
   name: string;
+  iconKey?: ComponentIconKey | 'module';
   ports: readonly PortDefinition[];
   pathPorts: ReadonlySet<string>;
   portValue?: (id: string) => string | undefined;
@@ -96,7 +98,7 @@ function Device({ id, data, selected }: NodeProps<DeviceNode>) {
   const updateInternals = useUpdateNodeInternals();
   useEffect(() => updateInternals(id), [id, data.ports, updateInternals]);
   return <div title={data.notes?.map(n => n.detail).join('\n')} className={`v1-topology-device${data.pathPorts.size ? ' is-on-path' : ''}${selected ? ' is-selected' : ''}${data.foldedPath ? ' has-folded-path' : ''}`}>
-    <div className="v1-block-title"><strong>{data.name}</strong><AddPortButton data={data} /><ExpandButton data={data} expanded={false} /></div>
+    <div className="v1-block-title"><DeviceIcon iconKey={data.iconKey} /><strong>{data.name}</strong><AddPortButton data={data} /><ExpandButton data={data} expanded={false} /></div>
     {data.foldedPath && <span className="v1-topology-path-label">路径经过内部</span>}
     <NodeCaption notes={data.notes} />
     <BlockPorts portValue={data.portValue} ports={data.ports} highlighted={data.pathPorts} newPortId={data.newPortId} handleId={handleId} editable wireState={data.wireState} openPort={data.openPort} />
@@ -293,6 +295,7 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     const name = showName(path);
     const id = nodeId(key);
     const data: NodeData = { key, path, name, ports: definition.ports,
+      iconKey: definition.kind === 'module' ? 'module' : definition.iconKey,
       portValue: budgetHighlight?.annotations && (portId => budgetHighlight.annotations!.ports.get(signalPortKey({ instancePath: path, portId }))),
       notes: budgetHighlight?.annotations?.nodes.get(key),
       pathPorts: new Set(definition.ports.filter(port =>
