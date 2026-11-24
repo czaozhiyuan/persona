@@ -3,14 +3,14 @@ import type { ComponentDefinition, PortDefinition } from '../../../model/v1/type
 import { portDisplayName } from '../labels';
 
 type Candidate = { input: PortDefinition; outputs: PortDefinition[] };
-type Conversion = { kind: 'eo' | 'dml' | 'oe'; fromPortId: string; toPortId: string };
+type Conversion = { kind: 'eo' | 'dml' | 'oe' | 'digitalTx' | 'digitalRx'; fromPortId: string; toPortId: string };
 
 export function conversionCandidates({ ports, transfers }: ComponentDefinition): Candidate[] {
   const candidates: Candidate[] = [];
   for (const input of ports) {
-    if (input.direction !== 'in' || (input.type !== 'RF' && input.type !== 'OPTICAL')) continue;
-    const outputType = input.type === 'RF' ? 'OPTICAL' : 'RF';
-    const outputs = ports.filter(port => port.direction === 'out' && port.type === outputType &&
+    if (input.direction !== 'in' || input.type === 'DC_POWER') continue;
+    const outputs = ports.filter(port => port.direction === 'out' &&
+      (input.type === 'OPTICAL' ? port.type === 'RF' || port.type === 'CONTROL' : port.type === 'OPTICAL') &&
       !transfers?.some(transfer => transfer.fromPortId === input.id && transfer.toPortId === port.id));
     if (outputs.length) candidates.push({ input, outputs });
   }
@@ -20,7 +20,7 @@ export function conversionCandidates({ ports, transfers }: ComponentDefinition):
 export function AddConversion({ definition, add }: { definition: ComponentDefinition; add: (conversion: Conversion) => void }) {
   const candidates = conversionCandidates(definition);
   if (!candidates.length) return null;
-  const pairs = candidates.map(({ input, outputs }) => [input.id, input.type, outputs.map(port => port.id)]);
+  const pairs = candidates.map(({ input, outputs }) => [input.id, input.type, outputs.map(port => [port.id, port.type])]);
   return <details>
     <summary>添加传输关系</summary>
     <ConversionForm key={JSON.stringify(pairs)} candidates={candidates} ports={definition.ports} add={add} />
@@ -39,7 +39,8 @@ function ConversionForm({ candidates, ports, add }: {
     const data = new FormData(event.currentTarget);
     const output = outputs.find(port => port.id === data.get('output'));
     if (!output) return;
-    const kind = input.type === 'OPTICAL' ? 'oe' : data.get('eoKind') === 'dml' ? 'dml' : 'eo';
+    const kind = input.type === 'CONTROL' ? 'digitalTx' : output.type === 'CONTROL' ? 'digitalRx'
+      : input.type === 'OPTICAL' ? 'oe' : data.get('eoKind') === 'dml' ? 'dml' : 'eo';
     add({ fromPortId: input.id, toPortId: output.id, kind });
   }}>
     <label>转换输入<select name="input" value={inputId} onChange={event => setInputId(event.currentTarget.value)}>
@@ -49,6 +50,6 @@ function ConversionForm({ candidates, ports, add }: {
     {input.type === 'RF' && <label>电光转换方式<select name="eoKind">
       <option value="eo">外置调制器</option><option value="dml">直调激光器</option>
     </select></label>}
-    <button type="submit">添加电光或光电传输</button>
+    <button type="submit">添加传输</button>
   </form>;
 }

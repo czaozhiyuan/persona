@@ -11,7 +11,7 @@ import { isRfFrequency } from '../../engine/v1/rf-budget';
 import { createLinkBudget } from '../../engine/v1/link-budget';
 import { createOpticalBudgetForGraph } from '../../engine/v1/optical-budget';
 import type { LinkTrial, NamedLink } from '../../model/v1/topology';
-import { signalPortKey } from '../../engine/v1/signal-graph';
+import { isDigitalEdge, signalPortKey } from '../../engine/v1/signal-graph';
 import type { EndpointRef, InstancePath, PortDefinition, Project } from '../../model/v1/types';
 import { pasteModule } from '../../state/v1/instantiate-module';
 import { planDissolveModule } from '../../state/v1/dissolve-module';
@@ -117,7 +117,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const budget = useMemo(() => createLinkBudget(project), [project]);
   const savedLink = project.namedLinks?.find(link => link.id === selection.linkId);
   const selectedLink = savedLink ?? draftLink;
-  const opticalLink = [selectedLink?.from, selectedLink?.to].every(endpoint =>
+  const pureOptical = [selectedLink?.from, selectedLink?.to].every(endpoint =>
     endpoint && linkOptions.graph.ports.get(signalPortKey(endpoint))?.definition.type === 'OPTICAL');
   const activeTrial = selectedLink ? linkInputs.get(selectedLink.id) ?? selectedLink.trial ?? defaultTrial : defaultTrial;
   const opticalSources = useMemo(() => {
@@ -127,6 +127,12 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const conditions = useMemo(() => ({ ...activeTrial, opticalSources }), [activeTrial, opticalSources]);
   const pathResult = useMemo(() => selectedLink ? budget.resolveNamedLink(selectedLink, { opticalSources }) : undefined,
     [selectedLink, budget, opticalSources]);
+  const digitalLink = pathResult?.trace?.edges.some(isDigitalEdge) || (pathResult?.status !== 'resolved'
+    && !!selectedLink && linkOptions.graph.edges.some(edge => isDigitalEdge(edge) && (
+      (selectedLink.from && signalPortKey(selectedLink.from) === signalPortKey(edge.from.ref) && edge.from.definition.type === 'CONTROL')
+      || (selectedLink.to && signalPortKey(selectedLink.to) === signalPortKey(edge.to.ref) && edge.to.definition.type === 'CONTROL')
+    )));
+  const opticalLink = pureOptical || digitalLink;
   const canvasPath = category === 'links' ? pathResult : undefined;
   const point = useMemo(() => pathResult && !opticalLink ? budget.calculatePath(pathResult, conditions) : undefined,
     [budget, pathResult, opticalLink, conditions]);
@@ -138,13 +144,14 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const linkedOpticalResult = useMemo(() => {
     const { from, to } = selectedLink ?? {};
     if (!opticalLink || pathResult?.status !== 'resolved' || !from || !to || pathResult.trace.conversions.length) return undefined;
+    if (digitalLink) return opticalBudget.calculateDigitalPath(pathResult.trace, selectedLink?.channelId, opticalSources);
     const channels = pathResult.trace.steps[0]?.channelIds;
     const channelId = channels?.length === 1 ? channels[0] : selectedLink?.channelId;
     if (!channelId) return undefined;
     if (linkOptions.graph.ports.get(signalPortKey(to))?.definition.type !== 'OPTICAL') return undefined;
     const source = opticalSources?.find(item => signalPortKey(item.endpoint) === signalPortKey(from) && item.channelId === channelId);
     return opticalBudget.calculateSourcePath(pathResult.trace, source ?? { endpoint: from, channelId });
-  }, [selectedLink, pathResult, opticalSources, linkOptions, opticalBudget, opticalLink]);
+  }, [selectedLink, pathResult, opticalSources, linkOptions, opticalBudget, opticalLink, digitalLink]);
   const annotations = useMemo(() => showMetrics && canvasPath
     ? linkAnnotations(linkOptions.graph, canvasPath, point, linkedOpticalResult) : undefined,
     [showMetrics, canvasPath, linkOptions, point, linkedOpticalResult]);

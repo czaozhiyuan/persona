@@ -15,7 +15,7 @@ const pairs = (device: ComponentDefinition) => conversionCandidates(device)
 test('offers only unused cross-domain pairs in definition order', () => {
   assert.deepEqual(pairs({ ...definition, transfers: [
     { kind: 'dml', fromPortId: 'a', toPortId: 'd' }, { kind: 'eo', fromPortId: 'c', toPortId: 'e' },
-  ] }), [['a', ['e']], ['b', ['f']], ['c', ['d']]]);
+  ] }), [['a', ['e']], ['b', ['f', 'flag']], ['c', ['d']]]);
 });
 
 test('omits exhausted inputs and components without a suitable output', () => {

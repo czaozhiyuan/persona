@@ -7,7 +7,7 @@ export type RfValue = FixedValue | RfCurve;
 export type OpticalValue = FixedValue | ChannelTable;
 export type EmpiricalValue = RfValue | ChannelTable;
 export type ParameterValue = EmpiricalValue | string;
-export type NumericUnit = 'dB' | 'dBm' | 'V' | 'A' | 'W' | 'GHz' | 'nm' | 'A/W' | 'V/W' | 'W/V' | 'ohm' | 'ratio';
+export type NumericUnit = 'dB' | 'dBm' | 'V' | 'A' | 'W' | 'GHz' | 'nm' | 'A/W' | 'V/W' | 'W/V' | 'ohm' | 'ratio' | '%';
 export type NumericRange = { min?: number; max?: number };
 
 type ParameterIdentity = {

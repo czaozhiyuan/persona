@@ -1,6 +1,8 @@
 .v1-library-items { display: grid; gap: .35rem; list-style: none; margin: .55rem 0; padding: 0; }
 .v1-library-items button { display: flex; align-items: center; gap: .4rem; width: 100%; text-align: left; }
 .v1-library-items button[draggable="true"]:hover { cursor: grab; }
+.v1-library-create { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .25rem; margin-block: .35rem; }
+.v1-library-create button { display: flex; flex-direction: column; align-items: center; gap: .15rem; padding: .25rem; font-size: .8rem; }
 .v1-library-diff li { margin: .7rem 0; overflow-wrap: anywhere; }
 .v1-library-diff-values { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: .5rem; }
 .v1-library-diff-values pre { margin: .2rem 0; padding: .35rem; background: #f2f6f5; white-space: pre-wrap; overflow-wrap: anywhere; }

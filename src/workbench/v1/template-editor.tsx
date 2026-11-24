@@ -10,6 +10,7 @@ import { curveProblem } from './properties/curve-graph';
 import { readPower, TemplatePower } from './template-power';
 import { TemplateSwitch, readSwitchStates } from './template-switch';
 import { TemplateModule } from './template-module';
+import { conversionCandidates } from './properties/add-conversion';
 import { TemplateParameter } from './template-parameter';
 
 export function TemplateEditor({ initial, definitions, hidden, save, cancel, report }: {
@@ -18,9 +19,19 @@ export function TemplateEditor({ initial, definitions, hidden, save, cancel, rep
 }) {
   const [draft, edit] = useState(initial);
   const [rows, setRows] = useState(() => (initial.kind === 'component' ? initial.transfers ?? [] : [])
-    .map(t => ({ key: crypto.randomUUID(), transfer: t })));
+    .map(t => ({ key: crypto.randomUUID(), transfer: t, pair: { fromPortId: t.fromPortId, toPortId: t.toPortId } })));
   const [kind, setKind] = useState<Transfer['kind']>('rf');
   const body = useRef<HTMLDivElement>(null);
+  const digitalPairs = draft.kind === 'component' ? conversionCandidates({ ...draft, transfers: rows.map(row => ({ ...row.transfer, ...row.pair })) })
+    .flatMap(({ input, outputs }) => outputs.filter(out => input.type === 'CONTROL' || out.type === 'CONTROL')
+      .map(out => ({ kind: input.type === 'CONTROL' ? 'digitalTx' : 'digitalRx', fromPortId: input.id, toPortId: out.id }))) : [];
+  const splitOutputs = draft.ports.filter(p => p.direction === 'out' && p.type === 'OPTICAL');
+  const splitInput = draft.ports.find(p => p.direction === 'in' && p.type === 'OPTICAL');
+  const availableKinds = Object.entries(transferLabels).filter(([k]) => {
+    if (k === 'splitter') return splitInput && splitOutputs.length >= 2;
+    return (k !== 'digitalTx' && k !== 'digitalRx') || digitalPairs.some(pair => pair.kind === k);
+  });
+  const activeKind = availableKinds.some(([k]) => k === kind) ? kind : 'rf';
   const parameters = draft.parameters ?? [];
   const occurrence = { definition: draft, instancePath: [], parameters: new Map() };
   function updatePort(port: PortDefinition) {
@@ -83,18 +94,28 @@ export function TemplateEditor({ initial, definitions, hidden, save, cancel, rep
     </details>)}<button onClick={() => edit({ ...draft, parameters: [...parameters, { id: crypto.randomUUID(), name: '新参数',
       kind: 'numeric', unit: 'dB', valueKind: 'fixed', overridable: true }] })}>添加参数</button></section>
     {draft.kind === 'module' ? <TemplateModule module={draft} definitions={definitions} hidden={hidden} change={edit} /> : <section><h3>传输关系</h3>
-      {rows.map(({ key, transfer }) => <details key={key} className="template-transfer"><summary>{transferLabels[transfer.kind]}</summary>
+      {rows.map(({ key, transfer }) => <details key={key} className="template-transfer" onChange={event => {
+        const select = event.target;
+        if (!(select instanceof HTMLSelectElement) || (select.name !== 'from' && select.name !== 'to')) return;
+        const field = select.name === 'from' ? 'fromPortId' : 'toPortId';
+        setRows(current => current.map(row => row.key === key ? { ...row, pair: { ...row.pair, [field]: select.value } } : row));
+      }}><summary>{transferLabels[transfer.kind]}</summary>
         <TransferFields draft definition={draft} transfer={transfer} save={() => {}} />
         <button onClick={() => setRows(rows.filter(row => row.key !== key))}>删除传输</button>
       </details>)}
-      <label>传输类型<select value={kind} onChange={e => setKind(e.target.value as Transfer['kind'])}>
-        {Object.entries(transferLabels).map(([k, label]) => <option key={k} value={k}>{label}</option>)}</select></label>
+      <label>传输类型<select value={activeKind} onChange={e => setKind(e.target.value as Transfer['kind'])}>
+        {availableKinds.map(([k, label]) => <option key={k} value={k}>{label}</option>)}</select></label>
       <button onClick={() => {
-        const ports = { fromPortId: draft.ports.find(p => p.direction === 'in')?.id ?? '',
-          toPortId: draft.ports.find(p => p.direction === 'out')?.id ?? '' };
+        const kind = activeKind;
+        const pair = digitalPairs.find(pair => pair.kind === kind);
+        const ports = pair ? { fromPortId: pair.fromPortId, toPortId: pair.toPortId } : {
+          fromPortId: (kind === 'splitter' ? splitInput : draft.ports.find(p => p.direction === 'in'))?.id ?? '',
+          toPortId: (kind === 'splitter' ? splitOutputs[0] : draft.ports.find(p => p.direction === 'out'))?.id ?? '',
+        };
         const transfer: Transfer = kind === 'wavelengthConversion' ? { kind, ...ports, fromChannelId: 'CWDM_1511', toChannelId: 'CWDM_1531' }
+          : kind === 'splitter' ? { kind, ...ports, secondPortId: splitOutputs[1].id }
           : { kind, ...ports };
-        setRows([...rows, { key: crypto.randomUUID(), transfer }]);
+        setRows([...rows, { key: crypto.randomUUID(), transfer, pair: ports }]);
       }}>添加传输</button></section>}
     {draft.kind === 'component' && <><TemplatePower definition={draft} /><TemplateSwitch definition={draft} /></>}
     <div className="actions"><button onClick={finish}>保存到器件库</button><button onClick={cancel}>取消草稿</button></div>

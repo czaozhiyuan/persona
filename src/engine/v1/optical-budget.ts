@@ -6,7 +6,7 @@ import { resolveOpticalChannel } from '../../model/v1/channels';
 import type { OpticalChannelId } from '../../model/v1/channels';
 import type { ConversionBoundary, OpticalSource } from '../../model/v1/topology';
 import type { EndpointRef, Project } from '../../model/v1/types';
-import { addGain, budgetValue, checkInputRating, unavailable } from './budget-metric';
+import { addGain, budgetValue, checkInputRating, logZero, unavailable } from './budget-metric';
 import type { BudgetMetric, InputRatingCheck } from './budget-metric';
 import { resolveEmpiricalValue } from './empirical-value';
 import { searchSignalPath } from './path-search';
@@ -50,6 +50,8 @@ export type OpticalBudget = {
   gainDb: BudgetMetric<'dB'>;
   pathIssue?: PathIssue;
   averageCurrent?: BudgetMetric<'A'>;
+  digitalReceiver?: { sensitivity: BudgetMetric<'dBm'>; margin: BudgetMetric<'dB'>; overload: BudgetMetric<'dBm'>;
+    aboveLimit?: boolean };
 };
 
 /** Calculates optical power over the validated V1 graph. The input snapshot is never edited. */
@@ -80,7 +82,7 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
     return { endpoint, channelId, powerDbm, incoming, rating: checkInputRating(endpoint, port.definition.inputRating, powerDbm) };
   }
 
-  function finish(stages: OpticalStage[], gainDb: BudgetMetric<'dB'>, pathIssue?: PathIssue): OpticalBudget {
+  function finish(stages: OpticalStage[], gainDb: BudgetMetric<'dB'>, pathIssue?: PathIssue, receiverEdge?: SignalEdge): OpticalBudget {
     const powerDbm = pathIssue ? unavailable('dBm', pathIssue.reason) : stages.at(-1)!.powerDbm;
     const status = powerDbm.availability === 'available' && gainDb.availability === 'available' ? 'valid'
       : gainDb.availability === 'available' || stages.some(item => item.powerDbm.availability === 'available'
@@ -89,8 +91,24 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
         || item.incoming?.opticalLoss?.quadratureLossDb.availability === 'available') ? 'partial' : 'error';
     const last = stages.at(-1);
     let averageCurrent: BudgetMetric<'A'> | undefined;
+    let digitalReceiver: OpticalBudget['digitalReceiver'];
     if (last && !pathIssue) {
       const target = portAt(last.endpoint)!;
+      const receivers = (receiverEdge ? [receiverEdge] : outgoing.get(target) ?? []).flatMap(({ source }) =>
+        source.kind === 'transfer' && source.transfer.kind === 'digitalRx'
+        && (!source.transfer.channelIds || source.transfer.channelIds.includes(last.channelId)) ? [source.transfer] : []);
+      if (receivers.length === 1) {
+        const rx = receivers[0];
+        const instance = instanceAt(last.endpoint);
+        const query = { channelId: last.channelId };
+        const sensitivity = resolveEmpiricalValue('dBm', rx.sensitivityDbm, query, instance);
+        const overload = resolveEmpiricalValue('dBm', rx.overloadDbm, query, instance);
+        const margin = sensitivity.availability === 'unavailable' ? unavailable('dB', '接收灵敏度：' + sensitivity.reason)
+          : powerDbm.availability === 'unavailable' ? unavailable('dB', powerDbm.reason)
+          : powerDbm.value === -Infinity ? logZero('dB') : budgetValue('dB', powerDbm.value - sensitivity.value);
+        digitalReceiver = { sensitivity, overload, margin,
+          aboveLimit: powerDbm.availability === 'available' && overload.availability === 'available' ? powerDbm.value > overload.value : undefined };
+      }
       const detectors = outgoing.get(target)?.flatMap(({ source }) => source.kind === 'transfer' && source.transfer.kind === 'oe'
         && (!source.transfer.channelIds || source.transfer.channelIds.includes(last.channelId)) ? [source.transfer] : []);
       if (detectors?.length === 1) {
@@ -98,7 +116,8 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
         averageCurrent = photocurrent(powerDbm, rho);
       }
     }
-    return { status, stages, powerDbm, gainDb, pathIssue, averageCurrent };
+    return { status: digitalReceiver?.margin.availability === 'unavailable' && status === 'valid' ? 'partial' : status,
+      stages, powerDbm, gainDb, pathIssue, averageCurrent, digitalReceiver };
   }
 
   function fail(status: PathIssue['status'], endpoint: EndpointRef, reason: string, stages: OpticalStage[] = []) {
@@ -131,6 +150,24 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
         ? unavailable('dB', `${showPath(edge.from.ref.instancePath)} 最大透过插损：${intrinsic.reason}`)
         : budgetValue('dB', -intrinsic.value - quadrature);
       stages.push(stage(edge.to, previous.channelId, addGain(previous.powerDbm, gain), { edge, gainDb: gain, opticalLoss }));
+      return addGain(gainDb, gain);
+    }
+    if (source.kind === 'transfer' && source.transfer.kind === 'splitter') {
+      const split = source.transfer;
+      const percent = resolveEmpiricalValue('%', split.firstPercent, {}, instance);
+      const loss = split.excessLossDb ? resolveEmpiricalValue('dB', split.excessLossDb, {}, instance) : budgetValue('dB', 0);
+      let gain: BudgetMetric<'dB'>;
+      if (percent.availability === 'unavailable') gain = unavailable('dB', percent.reason);
+      else {
+        const outputPercent = edge.to.ref.portId === split.toPortId ? percent.value : 100 - percent.value;
+        if (outputPercent === 0) {
+          const zeroGain = logZero('dB');
+          stages.push(stage(edge.to, previous.channelId, logZero('dBm'), { edge, gainDb: zeroGain }));
+          return zeroGain;
+        }
+        gain = loss.availability === 'unavailable' ? loss : budgetValue('dB', 10 * (Math.log10(outputPercent) - 2) - loss.value);
+      }
+      stages.push(stage(edge.to, previous.channelId, addGain(previous.powerDbm, gain), { edge, gainDb: gain }));
       return addGain(gainDb, gain);
     }
     const declared = source.kind === 'switchRoute' ? source.route.gainDb
@@ -166,14 +203,14 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
       : unavailable('dBm', `${showPath(port.ref.instancePath)} · ${portDisplayName(port.definition)} 光源功率：${power.reason}`))];
   }
 
-  function calculateOpticalPath(path: SignalPath, source: OpticalSource) {
+  function calculateOpticalPath(path: SignalPath, source: OpticalSource, receiverEdge?: SignalEdge) {
     const stages = start(path.steps[0].port, source);
-    return finish(stages, propagate(stages, path.edges, budgetValue('dB', 0)));
+    return finish(stages, propagate(stages, path.edges, budgetValue('dB', 0)), undefined, receiverEdge);
   }
 
-  function calculateSourcePath(path: SignalPath, source: OpticalSource) {
+  function calculateSourcePath(path: SignalPath, source: OpticalSource, receiverEdge?: SignalEdge) {
     const problem = sourceIssue(source, path.steps[0].port);
-    return problem ? fail('invalid_reference', source.endpoint, problem) : calculateOpticalPath(path, source);
+    return problem ? fail('invalid_reference', source.endpoint, problem) : calculateOpticalPath(path, source, receiverEdge);
   }
 
   function calculateEoSupply(supply: SignalPath, source: OpticalSource, eo: SignalEdge) {
@@ -241,5 +278,20 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
     return calculateEoPath(supplied.path, supplied.source, edge, path.path.edges);
   }
 
-  return { calculateLocal, calculateEoPath, calculateOpticalPath, calculateSourcePath };
+  function calculateDigitalPath(path: SignalPath, channel?: OpticalChannelId, sources: readonly OpticalSource[] = []) {
+    const first = path.steps.findIndex(step => step.port.definition.type === 'OPTICAL');
+    if (first < 0) return;
+    let last = first;
+    while (last + 1 < path.steps.length && path.steps[last + 1].port.definition.type === 'OPTICAL') last++;
+    if (path.steps.slice(last + 1).some(step => step.port.definition.type !== 'CONTROL')
+      || path.steps.slice(0, first).some(step => step.port.definition.type !== 'CONTROL')) return;
+    const start = path.steps[first];
+    const channelId = start.channelIds?.length === 1 ? start.channelIds[0] : channel;
+    if (!channelId) return;
+    const source = sources.find(item => signalPortKey(item.endpoint) === signalPortKey(start.port.ref) && item.channelId === channelId);
+    return calculateSourcePath({ steps: path.steps.slice(first, last + 1), edges: path.edges.slice(first, last) },
+      source ?? { endpoint: start.port.ref, channelId }, path.edges[last]);
+  }
+
+  return { calculateLocal, calculateEoPath, calculateOpticalPath, calculateSourcePath, calculateDigitalPath };
 }

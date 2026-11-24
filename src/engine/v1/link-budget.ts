@@ -1,5 +1,6 @@
 import type { NamedLink } from '../../model/v1/topology';
 import type { EndpointRef, Project } from '../../model/v1/types';
+import { isDigitalEdge } from './signal-graph';
 import { unavailable } from './budget-metric';
 import type { BudgetMetric } from './budget-metric';
 import { createConversionPathBudget } from './conversion-budget';
@@ -56,6 +57,9 @@ export function createLinkBudget(project: Project) {
     if (path.status !== 'resolved' && !path.trace) {
       return frequencyGHz => unresolved(frequencyGHz, { status: path.status, reason: path.reason, endpoint: path.endpoint });
     }
+    const digital = path.trace?.edges.find(isDigitalEdge);
+    if (digital) return frequencyGHz => unresolved(frequencyGHz, { status: 'not_rf', endpoint: digital.from.ref,
+      reason: '数字光转换仅传递信号方向，请查看光功率与接收余量。' });
     if (path.trace?.conversions.length) {
       return frequencyGHz => ({ kind: 'conversion', ...evaluateConversion(path, { ...conditions, frequencyGHz }) });
     }

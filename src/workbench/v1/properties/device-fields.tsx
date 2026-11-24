@@ -105,6 +105,11 @@ function readReceiver(value: string) {
 export function readTransfer(data: FormData, transfer: Transfer): Transfer {
   const ports = { fromPortId: choice(data, 'from'), toPortId: choice(data, 'to') };
   switch (transfer.kind) {
+    case 'digitalTx': return { ...transfer, ...ports, channelIds: channelList(data, 'channels') };
+    case 'digitalRx': return { ...transfer, ...ports, channelIds: channelList(data, 'channels'),
+      sensitivityDbm: readQuantity(data, 'sensitivity', opticalKinds), overloadDbm: readQuantity(data, 'overload', opticalKinds) };
+    case 'splitter': return { ...transfer, ...ports, secondPortId: choice(data, 'secondPort'),
+      firstPercent: readQuantity(data, 'percent', ['fixed']), excessLossDb: readQuantity(data, 'excess', ['fixed']) };
     case 'rf': return { ...transfer, ...ports, gainDb: readQuantity(data, 'gain', rfKinds), nfDb: readQuantity(data, 'nf', rfKinds) };
     case 'optical': return { ...transfer, ...ports, channelIds: channelList(data, 'channels'), gainDb: readQuantity(data, 'gain', opticalKinds) };
     case 'eo': return { ...transfer, ...ports, channelIds: channelList(data, 'channels'), supplyPortId: choice(data, 'supply') || undefined,
@@ -149,8 +154,10 @@ function TransferForm({ transfer, definition, occurrences = [], save, draft, sav
     : new Set([reference]);
   const [mode] = modes;
   const mixed = modes.size > 1 || (!!draft && typeof reference === 'object');
-  const inputPorts = definition.ports.filter(port => port.direction === 'in');
-  const outputPorts = definition.ports.filter(port => port.direction === 'out');
+  const inputType = transfer.kind === 'digitalTx' ? 'CONTROL' : transfer.kind === 'digitalRx' || transfer.kind === 'splitter' ? 'OPTICAL' : undefined;
+  const outputType = transfer.kind === 'digitalRx' ? 'CONTROL' : transfer.kind === 'digitalTx' || transfer.kind === 'splitter' ? 'OPTICAL' : undefined;
+  const inputPorts = definition.ports.filter(port => port.direction === 'in' && (!inputType || port.type === inputType));
+  const outputPorts = definition.ports.filter(port => port.direction === 'out' && (!outputType || port.type === outputType));
   const parameters = definition.parameters ?? [];
   return <form onSubmit={event => {
     event.preventDefault();
@@ -163,8 +170,20 @@ function TransferForm({ transfer, definition, occurrences = [], save, draft, sav
     <label>输出端口<select name="to" defaultValue={transfer.toPortId} required>
       {outputPorts.map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true, definition.ports)} · {portTypeLabels[port.type]}</option>)}
     </select></label>
-    {(transfer.kind === 'optical' || transfer.kind === 'eo' || transfer.kind === 'dml' || transfer.kind === 'oe') &&
+    {(transfer.kind === 'optical' || transfer.kind === 'eo' || transfer.kind === 'dml' || transfer.kind === 'oe'
+      || transfer.kind === 'digitalTx' || transfer.kind === 'digitalRx') &&
       <ChannelField name="channels" label="适用通道（未选择表示不限）" value={transfer.channelIds} multiple />}
+    {transfer.kind === 'splitter' && <>
+      <label>第二输出端口<select name="secondPort" defaultValue={transfer.secondPortId} required>
+        {outputPorts.filter(port => port.type === 'OPTICAL').map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true, definition.ports)}</option>)}
+      </select></label>
+      <QuantityField name="percent" label="第一输出分光比" unit="%" kinds={['fixed']} minimum={0} value={transfer.firstPercent} parameters={parameters} />
+      <QuantityField name="excess" label="额外插损" kinds={['fixed']} minimum={0} value={transfer.excessLossDb} parameters={parameters} />
+    </>}
+    {transfer.kind === 'digitalRx' && <>
+      <QuantityField name="sensitivity" label="接收灵敏度" unit="dBm" kinds={opticalKinds} value={transfer.sensitivityDbm} parameters={parameters} />
+      <QuantityField name="overload" label="接收过载上限（可选）" unit="dBm" kinds={opticalKinds} value={transfer.overloadDbm} parameters={parameters} />
+    </>}
     {transfer.kind === 'eo' && <label>供光输入<select name="supply" defaultValue={transfer.supplyPortId ?? ''}>
       <option value="">未设置</option>
       {inputPorts.filter(port => port.type === 'OPTICAL').map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true, definition.ports)}</option>)}

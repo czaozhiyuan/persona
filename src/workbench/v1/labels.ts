@@ -21,7 +21,7 @@ export const componentIconLabels = {
   opticalSwitch: '光开关',
   dcSupply: '直流电源',
   dcConverter: 'DC/DC 变换器',
-  pcb: '电路板（PCB）',
+  controlCircuit: '控制电路', splitter: '光分路器', sfp: '数字光模块（SFP）',
 } satisfies Record<ComponentIconKey, string>;
 
 export const transferLabels = {
@@ -31,5 +31,5 @@ export const transferLabels = {
   eo: '电光转换',
   dml: '直调激光器电光转换',
   oe: '光电转换',
-  dc: '直流变换',
+  dc: '直流变换', splitter: '互补分光（1×2）', digitalTx: '数字光发射', digitalRx: '数字光接收',
 } satisfies Record<Transfer['kind'], string>;

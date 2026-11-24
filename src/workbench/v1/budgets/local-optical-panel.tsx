@@ -94,6 +94,13 @@ export function OpticalResult({ result, target, showEndpoint, locate }: {
       <h3>{showEndpoint(target)} · {statusLabels[result.status]}</h3>
       <dl className="v1-budget-metrics">
         <div><dt>目标光功率</dt><dd data-metric="optical-power"><Metric metric={result.powerDbm} /></dd></div>
+        {result.digitalReceiver && <>
+          <div><dt>接收灵敏度</dt><dd><Metric metric={result.digitalReceiver.sensitivity} /></dd></div>
+          <div><dt>接收余量</dt><dd><Metric metric={result.digitalReceiver.margin} />{result.digitalReceiver.margin.availability === 'available'
+            && (result.digitalReceiver.margin.value < 0 ? ' · 低于灵敏度' : ' · 达到灵敏度')}</dd></div>
+          <div><dt>接收过载上限</dt><dd><Metric metric={result.digitalReceiver.overload} />{result.digitalReceiver.aboveLimit !== undefined
+            && (result.digitalReceiver.aboveLimit ? ' · 超过上限' : ' · 未超过上限')}</dd></div>
+        </>}
         {result.averageCurrent && <div><dt>平均光电流</dt><dd><Metric metric={result.averageCurrent} /></dd></div>}
         <div><dt>累计光增益</dt><dd data-metric="optical-gain"><Metric metric={result.gainDb} /></dd></div>
       </dl>
