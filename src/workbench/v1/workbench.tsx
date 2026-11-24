@@ -837,7 +837,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
           <button type="button" onClick={() => setMoveUp(undefined)}>取消</button>
         </div>
       </dialog>}
-      {targetPortOwner && <AddPortDialog name={targetPortOwner.instance?.name ?? targetPortOwner.definition.name}
+      {targetPortOwner && <AddPortDialog owner={targetPortOwner} name={targetPortOwner.instance?.name ?? targetPortOwner.definition.name}
         locations={structureScope(linkOptions.graph.instances, targetPortOwner.definition.id)}
         add={addPort} close={() => setPortTarget(undefined)} />}
     </div>

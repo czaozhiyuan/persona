@@ -30,7 +30,7 @@ export type PortResolution =
   | { status: 'resolved' | 'unmapped'; chain: readonly EndpointRef[] }
   | { status: 'invalid_reference'; chain: readonly EndpointRef[]; endpoint: EndpointRef };
 
-function readParameters(definition: Definition, instance?: Instance): Map<string, EffectiveParameter> {
+export function readParameters(definition: Definition, instance?: Instance): Map<string, EffectiveParameter> {
   const parameters = new Map<string, EffectiveParameter>();
   const overrides = instance?.parameterOverrides;
   for (const parameter of definition.parameters ?? []) {
@@ -43,7 +43,7 @@ function readParameters(definition: Definition, instance?: Instance): Map<string
   return parameters;
 }
 
-function readChildParameters(
+export function readChildParameters(
   definition: Definition, instance: Instance, parent: ModuleDefinition,
   parentParameters: ReadonlyMap<string, EffectiveParameter>, parentPath: () => InstancePath,
 ): Map<string, EffectiveParameter> {

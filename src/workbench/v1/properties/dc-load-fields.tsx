@@ -3,7 +3,8 @@ import type { ComponentDefinition } from '../../../model/v1/types';
 import { portDisplayName } from '../labels';
 import { QuantityField, readQuantity } from './value-fields';
 
-export function DcLoadFields({ definition, save }: {
+export function DcLoadFields({ definition, parameters, save }: {
+  parameters: import('../../../model/v1/display-names').PortParameters;
   definition: ComponentDefinition; save: (read: () => ComponentDefinition['dcLoad']) => void;
 }) {
   const ports = definition.ports.filter(port => port.type === 'DC_POWER' && port.direction === 'in');
@@ -16,7 +17,7 @@ export function DcLoadFields({ definition, save }: {
   }}>
     <label>负载输入<select value={portId} onChange={event => setPortId(event.target.value)}>
       <option value="">未设置</option>
-      {ports.map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true, definition.ports)}</option>)}
+      {ports.map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true, definition.ports, parameters)}</option>)}
     </select></label>
     {portId && <QuantityField name="loadPower" label="负载功耗" unit="W" kinds={['fixed']} minimum={0}
       parameters={definition.parameters ?? []} value={definition.dcLoad?.powerW} />}

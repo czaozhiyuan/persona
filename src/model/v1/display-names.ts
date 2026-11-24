@@ -1,9 +1,12 @@
+import type { ParameterValue } from './parameters';
+import { isPowerPort } from './types';
 import type { ComponentDefinition, ModuleDefinition, PortDefinition, PortType, Project } from './types';
 
 export const portTypeLabels = {
   RF: '射频',
   OPTICAL: '光信号',
   DC_POWER: '直流供电',
+  AC_POWER: '交流供电',
   CONTROL: '控制',
 } satisfies Record<PortType, string>;
 
@@ -36,7 +39,7 @@ export function numberedName<T>(items: readonly T[], item: T, label: (item: T) =
   return numberedNames(items.map(label))[items.indexOf(item)] ?? label(item);
 }
 
-type DisplayPort = Pick<PortDefinition, 'id' | 'name'> & Partial<Pick<PortDefinition, 'type' | 'direction'>>;
+type DisplayPort = Pick<PortDefinition, 'id' | 'name'> & Partial<Pick<PortDefinition, 'type' | 'direction' | 'inputVoltageV' | 'outputVoltageV'>>;
 
 const uuid = /[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}(?:_\d+)?/gi;
 
@@ -48,8 +51,18 @@ export function editablePortName(port: DisplayPort): string {
   return port.name?.replace(uuid, portFallback(port)) ?? '';
 }
 
-export function portDisplayName(port: DisplayPort, includeCode = false, peers?: readonly DisplayPort[]): string {
+export type PortParameters = ReadonlyMap<string, { value: ParameterValue }>;
+
+export function portDisplayName(port: DisplayPort, includeCode = false, peers?: readonly DisplayPort[], parameters?: PortParameters): string {
   function label(p: DisplayPort) {
+    if (isPowerPort(p.type) && p.direction) {
+      const voltage = p.direction === 'in' ? p.inputVoltageV : p.outputVoltageV;
+      const effective = voltage?.kind === 'parameter' ? parameters?.get(voltage.parameterId)?.value : voltage;
+      const ac = p.type === 'AC_POWER';
+      const direction = p.direction.toUpperCase();
+      if (typeof effective !== 'object' || effective.kind !== 'fixed') return `${ac ? 'AC' : 'DC'} ?V ${direction}`;
+      return ac ? `${effective.value}V~ ${direction}` : `+${effective.value}V ${direction}`;
+    }
     const { id } = p;
     const name = editablePortName(p);
     const code = /^[A-Z][A-Z0-9_]{0,31}$/.test(id) ? id : undefined;

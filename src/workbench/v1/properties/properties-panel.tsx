@@ -237,7 +237,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
         {sharedLocations.length > 0 && <p className="v1-property-effective">共享定义 · 影响 {sharedLocations.join('、')}</p>}
         {!definition.ports.length && <p className="empty">暂无端口。</p>}
         {definition.ports.map(port => <details key={port.id} data-port-id={port.id}>
-          <summary>{portDisplayName(port, false, definition.ports)}<span className="v1-parameter-value">
+          <summary>{portDisplayName(port, false, definition.ports, parameters)}<span className="v1-parameter-value">
             {portTypeLabels[port.type]} · {port.direction === 'in' ? '输入' : '输出'}
           </span></summary>
           <p className="v1-property-effective">端口属于共享结构。{sharedLocations.length > 0 && ` 影响 ${sharedLocations.join('、')}。`}</p>
@@ -290,14 +290,14 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
             </div>}
           </AutosaveForm>
         </details>)}
-        {definition.kind === 'component' && <DcLoadFields key={JSON.stringify([definition.dcLoad,
+        {definition.kind === 'component' && <DcLoadFields parameters={parameters} key={JSON.stringify([definition.dcLoad,
           definition.ports.filter(p => p.type === 'DC_POWER' && p.direction === 'in').map(p => p.id)])}
           definition={definition} save={read => changeDefinition(() => ({ ...definition, dcLoad: read() }))} />}
         {definition.kind === 'component' && <AddConversion definition={definition} add={transfer =>
           changeDefinition(() => ({ ...definition, transfers: [...(definition.transfers ?? []), transfer] }))} />}
         {definition.kind === 'component' && definition.transfers?.map((transfer, index) => <details key={index}>
-          <summary>传输 · {transferLabels[transfer.kind]} · {portDisplayName(definition.ports.find(port => port.id === transfer.fromPortId)!, true)} → {portDisplayName(definition.ports.find(port => port.id === transfer.toPortId)!, true)}</summary>
-          <TransferFields transfer={transfer} definition={definition} occurrences={occurrences}
+          <summary>传输 · {transferLabels[transfer.kind]} · {portDisplayName(definition.ports.find(port => port.id === transfer.fromPortId)!, true, definition.ports, parameters)} → {portDisplayName(definition.ports.find(port => port.id === transfer.toPortId)!, true, definition.ports, parameters)}</summary>
+          <TransferFields effective={parameters} transfer={transfer} definition={definition} occurrences={occurrences}
             save={read => changeDefinition(() => ({ ...definition,
               transfers: definition.transfers?.map((item, i) => i === index ? read() : item),
             }))} />

@@ -2,6 +2,7 @@ import { parameterValueKinds } from './parameters';
 import { receiverModes } from './device';
 import type { DcCapacity, DcValue, Transfer } from './device';
 import type { EmpiricalValue, NumericUnit, ParameterDefinition } from './parameters';
+import { isPowerPort } from './types';
 import type { ComponentDefinition, PortDefinition, PortType } from './types';
 import { validateChannelIds, validateEmpirical, validateRange } from './validate-parameters';
 import { indexById, requireValid } from './validation';
@@ -15,10 +16,10 @@ function validateDcValue(value: DcValue | undefined, unit: 'V' | 'A' | 'W' | 'ra
     requireValid(parameter?.kind === 'numeric' && parameter.unit === unit && parameter.valueKind === 'fixed',
       `${context}: 应引用单位为 ${unit} 的固定值参数`);
     requireValid(allowsRange(parameter.range?.min ?? -Infinity, parameter.range?.max ?? Infinity),
-      `${context}: 参数范围必须限制在有效的直流取值内`);
+      `${context}: 参数范围必须限制在有效的供电取值内`);
   } else {
     validateEmpirical(value, ['fixed'], context);
-    requireValid(allowsRange(value.value, value.value), `${context}: 无效的直流参数值`);
+    requireValid(allowsRange(value.value, value.value), `${context}: 无效的供电参数值`);
   }
 }
 
@@ -50,13 +51,17 @@ export function validatePortConstraints(port: PortDefinition, parameters: Readon
   }
   if (port.inputRating) {
     const { unit } = port.inputRating;
-    const compatible = port.type === 'DC_POWER' ? ['V', 'A', 'W'].includes(unit)
+    const compatible = isPowerPort(port.type) ? ['V', 'A', 'W'].includes(unit)
       : (port.type === 'OPTICAL' || port.type === 'RF') && unit === 'dBm';
     requireValid(port.direction === 'in' && compatible, `${context}: 额定值单位或端口方向不匹配`);
     validateRange(port.inputRating, context);
   }
+  if (port.inputVoltageV !== undefined) {
+    requireValid(isPowerPort(port.type) && port.direction === 'in', `${context}: 仅供电输入端口可设置标称输入电压`);
+    validateDcValue(port.inputVoltageV, 'V', parameters, `${context}的标称输入电压`);
+  }
   if (port.outputVoltageV !== undefined) {
-    requireValid(port.type === 'DC_POWER' && port.direction === 'out', `${context}: 仅直流输出端口可设置输出电压`);
+    requireValid(isPowerPort(port.type) && port.direction === 'out', `${context}: 仅供电输出端口可设置输出电压`);
     validateDcValue(port.outputVoltageV, 'V', parameters, `${context}的输出电压`);
   }
 }
@@ -65,7 +70,7 @@ export function channelSetsOverlap(a: PortDefinition, b: PortDefinition): boolea
   return !a.channelIds || !b.channelIds || a.channelIds.some(id => b.channelIds?.includes(id));
 }
 
-const transferTypes: Record<Transfer['kind'], readonly [PortType, PortType]> = {
+export const transferTypes: Record<Transfer['kind'], readonly [PortType, PortType]> = {
   rf: ['RF', 'RF'], optical: ['OPTICAL', 'OPTICAL'], wavelengthConversion: ['OPTICAL', 'OPTICAL'],
   splitter: ['OPTICAL', 'OPTICAL'], digitalTx: ['CONTROL', 'OPTICAL'], digitalRx: ['OPTICAL', 'CONTROL'],
   eo: ['RF', 'OPTICAL'], dml: ['RF', 'OPTICAL'], oe: ['OPTICAL', 'RF'], dc: ['DC_POWER', 'DC_POWER'],

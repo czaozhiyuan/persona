@@ -58,7 +58,8 @@ export function TopologyEditor({ centerPlacement, linkControls, library, store, 
 }) {
   const { project, selection } = state;
   const scope = selection.modulePath;
-  const moduleName = store.resolveInstance(scope)?.instance?.name ?? module.name;
+  const scopeOccurrence = store.resolveInstance(scope);
+  const moduleName = scopeOccurrence?.instance?.name ?? module.name;
   const [message, setMessage] = useState('');
   const selectedPaths = selection.instancePaths ?? (selection.instancePath ? [selection.instancePath] : []);
   const [groupDialog, setGroupDialog] = useState(false);
@@ -75,10 +76,12 @@ export function TopologyEditor({ centerPlacement, linkControls, library, store, 
   const depth = { value: visibleDepth, max: maxDepth, set: expandTo };
   const { showName } = createPathNames(graph.instances);
   const ports: LocalPort[] = module.instances.flatMap(instance => {
-    const name = showName([...scope, instance.id]);
+    const path = [...scope, instance.id];
+    const name = showName(path);
+    const parameters = store.resolveInstance(path)?.parameters;
     const ports = definitions.get(instance.definitionId)!.ports;
     return ports.map(port => ({
-      ref: { instanceId: instance.id, portId: port.id }, port, label: `${name} / ${portDisplayName(port, true, ports)} · ${portTypeLabels[port.type]}`,
+      ref: { instanceId: instance.id, portId: port.id }, port, label: `${name} / ${portDisplayName(port, true, ports, parameters)} · ${portTypeLabels[port.type]}`,
     }));
   });
 
@@ -178,7 +181,7 @@ export function TopologyEditor({ centerPlacement, linkControls, library, store, 
       setPreview({ definitionId, portId: String(new FormData(event.currentTarget).get('port')) });
     }}>
       <label>{heading}
-        <select name="port" required>{available.map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true, available)}</option>)}</select>
+        <select name="port" required>{available.map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true, available, scopeOccurrence?.parameters)}</option>)}</select>
       </label>
       <button type="submit" aria-label={`预览删除 · ${heading}`}>预览删除</button>
     </form>;
@@ -198,7 +201,7 @@ export function TopologyEditor({ centerPlacement, linkControls, library, store, 
         if (commit(draft => exposeModulePort(draft, parentPath, { instanceId: instance.id, portId }, name))) setPortAction(undefined);
       },
     } : undefined;
-    return <PortActionsDialog port={port} name={instance?.name ?? definition.name} exposure={exposure}
+    return <PortActionsDialog port={port} label={portDisplayName(port, false, definition.ports, item.parameters)} name={instance?.name ?? definition.name} exposure={exposure}
       locations={structureScope(graph.instances, definition.id)} error={message}
       budget={action => { setPortAction(undefined); onPortBudget(action, { instancePath: path, portId }); }}
       rename={name => {
@@ -269,7 +272,7 @@ export function TopologyEditor({ centerPlacement, linkControls, library, store, 
           {portRemoval(module.id, '删除对外端口')}
         </TopologyTool>
         <ConnectionForm module={module} ports={ports} update={updateWiring} />
-        <MappingForm module={module} ports={ports} connect={(portId, target) => requestBinding(scope, portId, target)} />
+        <MappingForm parameters={scopeOccurrence?.parameters} module={module} ports={ports} connect={(portId, target) => requestBinding(scope, portId, target)} />
         <CableForm module={module} ports={ports} update={updateWiring} />
       </details>
     </div>, toolsHost)}

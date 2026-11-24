@@ -1,3 +1,4 @@
+import { readParameters, readChildParameters } from '../../engine/v1/hierarchy';
 import { numberedNamesById } from '../../model/v1/display-names';
 import { useState } from 'react';
 import type { LibraryDefinition } from '../../library/v1/project-snapshots';
@@ -13,9 +14,13 @@ export function TemplateModule({ module, definitions, hidden, change }: {
   const [choice, select] = useState('');
   const childDefinition = available.find(d => d.id === choice) ?? available[0];
   const children = module.instances.map(i => ({ i, d: definitions.find(d => d.id === i.definitionId) }));
-  const ports = children.flatMap(({ i, d }) => (d?.ports ?? []).map(p => ({
-    p, target: { instanceId: i.id, portId: p.id }, label: i.name + ' · ' + portDisplayName(p, false, d?.ports),
-  })));
+  const parameters = readParameters(module);
+  const ports = children.flatMap(({ i, d }) => {
+    if (!d) return [];
+    const effective = readChildParameters(d, i, module, parameters, () => []);
+    return d.ports.map(p => ({ p, target: { instanceId: i.id, portId: p.id },
+      label: i.name + ' · ' + portDisplayName(p, false, d.ports, effective) }));
+  });
   const params = children.flatMap(({ i, d }) => (d?.parameters ?? []).map(p => ({
     p, target: { instanceId: i.id, parameterId: p.id }, label: i.name + ' · ' + p.name,
   })));
@@ -43,7 +48,7 @@ export function TemplateModule({ module, definitions, hidden, change }: {
     </fieldset>
     <fieldset><legend>端口映射</legend>{module.ports.map(p => {
       const target = module.portMappings?.find(m => m.portId === p.id)?.target;
-      return <label key={p.id}>{portDisplayName(p, false, module.ports)}<select value={target ? JSON.stringify(target) : ''} onChange={e => {
+      return <label key={p.id}>{portDisplayName(p, false, module.ports, parameters)}<select value={target ? JSON.stringify(target) : ''} onChange={e => {
         const keep = (module.portMappings ?? []).filter(m => m.portId !== p.id);
         change({ ...module, portMappings: e.target.value ? [...keep, { portId: p.id, target: JSON.parse(e.target.value) }] : keep });
       }}><option value="">未映射</option>{ports.filter(o => o.p.type === p.type && o.p.direction === p.direction).map(o =>

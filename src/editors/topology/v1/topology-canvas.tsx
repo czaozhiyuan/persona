@@ -45,6 +45,7 @@ type NodeData = {
   name: string;
   iconKey: DeviceIconKey;
   ports: readonly PortDefinition[];
+  parameters: ResolvedInstance['parameters'];
   pathPorts: ReadonlySet<string>;
   portValue?: (id: string) => string | undefined;
   notes?: Annotation[];
@@ -104,13 +105,13 @@ function Device({ id, data, selected }: NodeProps<DeviceNode>) {
     <div className="v1-block-title"><DeviceIcon iconKey={data.iconKey} /><strong>{data.name}</strong><AddPortButton data={data} /><ExpandButton data={data} expanded={false} /></div>
     {data.foldedPath && <span className="v1-topology-path-label">路径经过内部</span>}
     <NodeCaption notes={data.notes} />
-    <BlockPorts portValue={data.portValue} ports={data.ports} highlighted={data.pathPorts} newPortId={data.newPortId} handleId={handleId} editable wireState={data.wireState} openPort={data.openPort} />
+    <BlockPorts parameters={data.parameters} portValue={data.portValue} ports={data.ports} highlighted={data.pathPorts} newPortId={data.newPortId} handleId={handleId} editable wireState={data.wireState} openPort={data.openPort} />
   </div>;
 }
 
 function Frame({ id, data, selected, width, height }: NodeProps<FrameNode>) {
   return <>
-    <ModuleFrame iconKey={data.iconKey} metricTitle={data.notes?.map(n => n.detail).join('\n')} portValue={data.portValue} id={id} width={width} height={height} name={data.name} ports={data.ports} highlighted={data.pathPorts} newPortId={data.newPortId} handleId={handleId}
+    <ModuleFrame parameters={data.parameters} iconKey={data.iconKey} metricTitle={data.notes?.map(n => n.detail).join('\n')} portValue={data.portValue} id={id} width={width} height={height} name={data.name} ports={data.ports} highlighted={data.pathPorts} newPortId={data.newPortId} handleId={handleId}
       editable outerHandles={data.outerHandles} selected={selected} wireState={data.wireState} openPort={data.openPort}
       controls={<>
         {data.locations.length > 0 && <span className="v1-inline-shared" title={data.locations.join('、')}
@@ -300,7 +301,7 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     const { definition } = item;
     const name = showName(path);
     const id = nodeId(key);
-    const data: NodeData = { key, path, name, ports: definition.ports,
+    const data: NodeData = { key, path, name, parameters: item.parameters, ports: definition.ports,
       iconKey: definitionIcon(definition),
       portValue: budgetHighlight?.annotations && (portId => budgetHighlight.annotations!.ports.get(signalPortKey({ instancePath: path, portId }))),
       notes: budgetHighlight?.annotations?.nodes.get(key),

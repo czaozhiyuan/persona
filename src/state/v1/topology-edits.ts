@@ -76,7 +76,9 @@ export function planPortDeletion(project: Project, definitionId: string, portId:
   function report(kind: ImpactKind, name: string, scope: string, path?: InstancePath) {
     impacts.push({ kind, name, definitionId: scope, paths: path === undefined ? pathsByDefinition.get(scope) ?? [] : [path] });
   }
-  report('端口', portDisplayName(removedPort), definitionId);
+  const removedLabel = (path?: InstancePath) => portDisplayName(removedPort, false, definitions.get(definitionId)?.ports,
+    path && hierarchy.resolveInstance(path)?.parameters);
+  reportEndpoints('端口', definitionId, removedLabel);
 
   function reportEndpoints(kind: ImpactKind, scope: string, describe: (path?: InstancePath) => string) {
     const paths = pathsByDefinition.get(scope) ?? [];
@@ -93,19 +95,20 @@ export function planPortDeletion(project: Project, definitionId: string, portId:
 
   function endpointLabel(module: ModuleDefinition, ref: LocalEndpointRef, path?: InstancePath) {
     const instance = module.instances.find(instance => instance.id === ref.instanceId)!;
-    const name = path && hierarchy.resolveInstance([...path, instance.id])?.instance?.name;
+    const child = path && hierarchy.resolveInstance([...path, instance.id]);
     const ports = definitions.get(instance.definitionId)?.ports;
     const port = ports?.find(port => port.id === ref.portId);
-    return `${name || instance.name} · ${port ? portDisplayName(port, false, ports) : '未找到的端口'}`;
+    return `${child?.instance?.name || instance.name} · ${port ? portDisplayName(port, false, ports, child?.parameters) : '未找到的端口'}`;
   }
 
   const componentDefinitions = project.componentDefinitions.map(component => {
     if (component.id !== definitionId) return component;
-    const portName = (id: string) => portDisplayName(component.ports.find(p => p.id === id)!, false, component.ports);
+    const portName = (id: string, path?: InstancePath) => portDisplayName(component.ports.find(p => p.id === id)!, false, component.ports,
+      path && hierarchy.resolveInstance(path)?.parameters);
     const clearSupply = component.dcSupply?.portId === portId;
     const clearLoad = component.dcLoad?.portId === portId;
-    if (clearSupply) report('直流电源', portDisplayName(removedPort), component.id);
-    if (clearLoad) report('直流负载', portDisplayName(removedPort), component.id);
+    if (clearSupply) reportEndpoints('直流电源', component.id, removedLabel);
+    if (clearLoad) reportEndpoints('直流负载', component.id, removedLabel);
     return {
       ...component,
       ports: component.ports.filter(port => port.id !== portId),
@@ -114,7 +117,7 @@ export function planPortDeletion(project: Project, definitionId: string, portId:
       transfers: component.transfers?.filter(transfer => {
         const removed = transfer.fromPortId === portId || transfer.toPortId === portId
           || (transfer.kind === 'eo' && transfer.supplyPortId === portId) || (transfer.kind === 'splitter' && transfer.secondPortId === portId);
-        if (removed) report('器件传输', `${portName(transfer.fromPortId)} → ${portName(transfer.toPortId)}`, component.id);
+        if (removed) reportEndpoints('器件传输', component.id, path => `${portName(transfer.fromPortId, path)} → ${portName(transfer.toPortId, path)}`);
         return !removed;
       }),
       switchStates: component.switchStates?.map(state => ({
@@ -148,7 +151,7 @@ export function planPortDeletion(project: Project, definitionId: string, portId:
         if (removed) {
           const port = module.ports.find(port => port.id === mapping.portId)!;
           reportEndpoints('端口映射', module.id, path =>
-            `${portDisplayName(port, false, module.ports)} ↔ ${endpointLabel(module, mapping.target, path)}`);
+            `${portDisplayName(port, false, module.ports, path && hierarchy.resolveInstance(path)?.parameters)} ↔ ${endpointLabel(module, mapping.target, path)}`);
         }
         return !removed;
       }),

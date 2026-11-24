@@ -68,6 +68,10 @@ export function projectWiring(projection: ReturnType<typeof projectTopology>,
     const children = new Map(members.map(member => [member.item.instance!.id, member]));
     const child = (id: string) => nodeId(children.get(id)!.key);
     const childPort = ({ instanceId, portId }: LocalEndpointRef) => children.get(instanceId)!.item.definition.ports.find(port => port.id === portId)!;
+    const childLabel = (ref: LocalEndpointRef) => {
+      const { definition, parameters } = children.get(ref.instanceId)!.item;
+      return portDisplayName(childPort(ref), false, definition.ports, parameters);
+    };
     for (const [id, member] of children) {
       for (const port of member.item.definition.ports) {
         ports.set(portKey(nodeId(member.key), handleId(port.id)), {
@@ -93,7 +97,7 @@ export function projectWiring(projection: ReturnType<typeof projectTopology>,
       edge(canvasEdgeKey('connection', item.id), { kind: 'connection', id: item.id }, childPort(item.from).type, {
         source: child(item.from.instanceId), target: child(item.to.instanceId),
         sourceHandle: handleId(item.from.portId), targetHandle: handleId(item.to.portId),
-        ariaLabel: `连线：${portDisplayName(childPort(item.from))} → ${portDisplayName(childPort(item.to))}`,
+        ariaLabel: `连线：${childLabel(item.from)} → ${childLabel(item.to)}`,
       });
     }
     for (const mapping of module.portMappings ?? []) {
@@ -104,7 +108,7 @@ export function projectWiring(projection: ReturnType<typeof projectTopology>,
       const [from, to] = outward ? [inner, outer] : [outer, inner];
       edge(canvasEdgeKey('mapping', mapping.portId), { kind: 'mapping', id: mapping.portId }, port.type, {
         source: from.id, target: to.id, sourceHandle: from.handle, targetHandle: to.handle,
-        ariaLabel: `连接到内部端口：${portDisplayName(port)} · ${portDisplayName(childPort(mapping.target))}`,
+        ariaLabel: `连接到内部端口：${portDisplayName(port, false, module.ports, projection.nodeByKey.get(key)?.item.parameters)} · ${childLabel(mapping.target)}`,
       });
     }
     for (const [index, bundle] of (module.cableBundles ?? []).entries()) {

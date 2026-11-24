@@ -20,7 +20,19 @@ export const factory = new Map<string, LibraryDefinition>(builtInDefinitions.map
 
 export function libraryDefinitions(config: LibraryConfig): LibraryDefinition[] {
   const overrides = new Map(config.overrides.map(d => [d.id, d]));
-  return [...builtInDefinitions.map(d => overrides.get(d.id) ?? d), ...config.custom];
+  const definitions = builtInDefinitions.map(d => {
+    const override = overrides.get(d.id);
+    if (override) return override;
+    if (d.id === 'library-rf-stage') {
+      const gain = overrides.get('library-rf-gain');
+      if (gain && !gain.ports.some(p => p.id === 'DC_IN' && p.type === 'DC_POWER' && p.direction === 'in')) {
+        // A saved gain template can predate the factory module's optional power input.
+        return { ...d, ports: d.ports.filter(p => p.id !== 'DC_IN'), portMappings: d.portMappings.filter(m => m.portId !== 'DC_IN') };
+      }
+    }
+    return d;
+  });
+  return [...definitions, ...config.custom];
 }
 
 export function validateLibrary(value: unknown): asserts value is LibraryConfig {

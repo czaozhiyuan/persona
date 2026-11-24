@@ -145,7 +145,7 @@ export function HierarchyTree({ project, focusMoved, move, instances, modulePath
             style={{ paddingInlineStart: 4 + (instancePath.length + 1) * 14 }}>
             <button type="button" onClick={() => navigatePort(instancePath, port.id)}
               title={`对外端口 · ${portTypeLabels[port.type]} · ${port.direction === 'in' ? '输入' : '输出'}`}>
-              <span aria-hidden="true">{port.direction === 'in' ? '↦' : '↤'}</span> {portDisplayName(port, false, definition.ports)}
+              <span aria-hidden="true">{port.direction === 'in' ? '↦' : '↤'}</span> {portDisplayName(port, false, definition.ports, item.parameters)}
             </button>
           </li>)}
         </Fragment>;

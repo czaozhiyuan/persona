@@ -6,7 +6,7 @@ import { validateModuleTopology, validateNamedLinks } from './validate-topology'
 import { indexById, requireValid } from './validation';
 
 type Definition = Project['componentDefinitions'][number] | ModuleDefinition;
-const portTypes = new Set(['RF', 'OPTICAL', 'DC_POWER', 'CONTROL']);
+const portTypes = new Set(['RF', 'OPTICAL', 'DC_POWER', 'AC_POWER', 'CONTROL']);
 
 function validateAcyclic(modules: readonly ModuleDefinition[], definitions: ReadonlyMap<string, Definition>): void {
   const complete = new Set<string>();

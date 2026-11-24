@@ -1,4 +1,5 @@
 import { portDisplayName } from '../../model/v1/display-names';
+import { boundaryPort } from './module-ports';
 import { moduleName } from './module-name';
 import { resolveHierarchy } from '../../engine/v1/hierarchy';
 import type { ParameterDefinition, ParameterMapping } from '../../model/v1/parameters';
@@ -32,7 +33,7 @@ export function groupModule(project: Project, paths: readonly InstancePath[], na
   const portIds = new Set<string>();
   const groupName = moduleName(project, name);
 
-  function throughBoundary(ref: LocalEndpointRef): LocalEndpointRef {
+  const throughBoundary = (ref: LocalEndpointRef): LocalEndpointRef => {
     const child = childById.get(ref.instanceId);
     if (!child) return ref;
     const key = JSON.stringify([ref.instanceId, ref.portId]);
@@ -43,12 +44,12 @@ export function groupModule(project: Project, paths: readonly InstancePath[], na
       for (let suffix = 2; portIds.has(id); suffix++) id = `${port.id}_${suffix}`;
       portIds.add(id);
       exposed.set(key, id);
-      ports.push({ id, name: `${hierarchy.resolveInstance([...scope, child.id])?.instance?.name ?? child.name} · ${portDisplayName(port)}`, type: port.type, direction: port.direction,
-        ...(port.channelIds && { channelIds: port.channelIds }) });
+      const name = `${hierarchy.resolveInstance([...scope, child.id])?.instance?.name ?? child.name} · ${portDisplayName(port)}`;
+      ports.push(boundaryPort(port, id, name, parent, child.id));
       portMappings.push({ portId: id, target: ref });
     }
     return { instanceId, portId: id };
-  }
+  };
 
   for (const wire of parent.connections ?? []) {
     if (selected.has(wire.from.instanceId) && selected.has(wire.to.instanceId)) internalConnections.push(wire);
