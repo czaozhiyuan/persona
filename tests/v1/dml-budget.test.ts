@@ -4,7 +4,7 @@ import { createConversionBudget, loadedVoltages } from '../../src/engine/v1/conv
 import type { BudgetMetric } from '../../src/engine/v1/budget-metric';
 import { createOpticalBudget } from '../../src/engine/v1/optical-budget';
 import { createLinkBudget } from '../../src/engine/v1/link-budget';
-import { linkAnnotations } from '../../src/editors/topology/v1/link-annotations';
+import { captionNotes, linkAnnotations } from '../../src/editors/topology/v1/link-annotations';
 import { buildSignalGraph, signalPortKey } from '../../src/engine/v1/signal-graph';
 import { builtInDefinitions } from '../../src/library/v1/built-in';
 import type { ParameterValue } from '../../src/model/v1/parameters';
@@ -137,6 +137,23 @@ function partialResult(project: Project, trial: NamedLink) {
   const annotations = linkAnnotations(buildSignalGraph(snapshot), path, point);
   return { point, reason: path.reason, annotations };
 }
+
+test('DML shows RF input, average optical output and K; another channel or different unrounded power stays distinct', () => {
+  const project = fixture(values), graph = buildSignalGraph(project), budget = createLinkBudget(project);
+  const path = budget.resolveNamedLink(link);
+  const point = budget.calculatePath(path, excitation);
+  assert.equal(point.kind, 'conversion');
+  const { optical } = point.segments[0];
+  assert.ok(optical);
+  const stage = optical.stages[0];
+  const first = linkAnnotations(graph, path, point).nodes.get('["tx","source"]')!;
+  assert.deepEqual(captionNotes(first).map(n => n.text), ['RF 入 0.0 dBm', '光出 P0 10.0 dBm', 'K 0.005 W/V']);
+  assert.equal(first.filter(n => n.role === 'out').length, 1);
+  const other = { ...optical, stages: [{ ...stage, channelId: 'DWDM_CH30' as const },
+    { ...stage, powerDbm: { unit: 'dBm' as const, availability: 'available' as const, value: 10.02 } }] };
+  const outputs = linkAnnotations(graph, path, point, other).nodes.get('["tx","source"]')!.filter(n => n.role === 'out');
+  assert.deepEqual(outputs.map(n => [n.channel, n.value]).sort(), [['DWDM_CH28',10],['DWDM_CH28',10.02],['DWDM_CH30',10]]);
+});
 
 test('a rejected DML output channel preserves the RF stages and their diagram annotations', () => {
   const project = fixture(values);

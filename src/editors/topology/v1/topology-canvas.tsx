@@ -25,6 +25,8 @@ import { CanvasControls, canvasFitOptions, flowAriaLabels } from './canvas-contr
 import type { CanvasView, ExpansionDepth } from './canvas-controls';
 import { hierarchyKey, sharedParent } from './hierarchy-view';
 import { projectPathHighlight } from './path-highlight';
+import { captionNotes } from './link-annotations';
+import type { Annotation } from './link-annotations';
 import type { BudgetHighlight } from './path-highlight';
 import { estimatedBlockSize, projectTopology } from './topology-projection';
 import type { FrameResizePreview, TopologyItem } from './topology-projection';
@@ -44,7 +46,7 @@ type NodeData = {
   ports: readonly PortDefinition[];
   pathPorts: ReadonlySet<string>;
   portValue?: (id: string) => string | undefined;
-  notes?: { text: string; detail: string }[];
+  notes?: Annotation[];
   foldedPath?: boolean;
   toggle?: () => void;
   openPort: (id: string) => void;
@@ -91,7 +93,7 @@ function AddPortButton({ data }: { data: NodeData }) {
 }
 
 function NodeCaption({ notes }: Pick<NodeData, 'notes'>) {
-  return notes?.length ? <div className="v1-node-caption" aria-hidden="true">{notes.slice(0, 3).map(n => n.text).join(' · ')}</div> : null;
+  return notes?.length ? <div className="v1-node-caption" aria-hidden="true">{captionNotes(notes).map(n => n.text).join(' · ')}</div> : null;
 }
 
 function Device({ id, data, selected }: NodeProps<DeviceNode>) {
