@@ -4,6 +4,8 @@ import { createConversionBudget, loadedVoltages } from '../../src/engine/v1/conv
 import type { BudgetMetric } from '../../src/engine/v1/budget-metric';
 import { createOpticalBudget } from '../../src/engine/v1/optical-budget';
 import { createLinkBudget } from '../../src/engine/v1/link-budget';
+import { linkAnnotations } from '../../src/editors/topology/v1/link-annotations';
+import { buildSignalGraph, signalPortKey } from '../../src/engine/v1/signal-graph';
 import { builtInDefinitions } from '../../src/library/v1/built-in';
 import type { ParameterValue } from '../../src/model/v1/parameters';
 import type { ComponentDefinition, EndpointRef, Project } from '../../src/model/v1/types';
@@ -122,6 +124,51 @@ test('DML missing inputs, K interpolation, CW, blocked switch and zero drive pre
   assert.deepEqual(zero.powerDbm, { unit: 'dBm', availability: 'available', value: -Infinity });
   near(loadedVoltages(zero.powerDbm).vrms, 0);
   assert.throws(() => serializeProjectJson(fixture({ ...values, slope: fixed(-1) })));
+});
+
+function partialResult(project: Project, trial: NamedLink) {
+  const snapshot = parseProjectJson(serializeProjectJson({ ...project, namedLinks: [trial] }));
+  const budget = createLinkBudget(snapshot);
+  const path = budget.resolveNamedLink(trial);
+  const point = budget.calculatePath(path, excitation);
+  assert.equal(path.status, 'unreachable');
+  assert.equal(point.gainDb.availability, 'unavailable');
+  assert.equal(point.powerDbm.availability, 'unavailable');
+  const annotations = linkAnnotations(buildSignalGraph(snapshot), path, point);
+  return { point, reason: path.reason, annotations };
+}
+
+test('a rejected DML output channel preserves the RF stages and their diagram annotations', () => {
+  const project = fixture(values);
+  const restricted: Project = { ...project, componentDefinitions: project.componentDefinitions.map(d => d.id === 'custom-source'
+    ? { ...d, ports: d.ports.map(p => p.id === 'OPT_OUT' ? { ...p, channelIds: ['DWDM_CH28'] } : p) } : d) };
+  const trial: NamedLink = { ...link, from: endpoint('pre','RF_IN'), channelId: 'DWDM_CH30' };
+  const { point, reason, annotations } = partialResult(restricted, trial);
+  assert.match(reason, /不支持光通道.*DWDM_CH30/);
+  assert.equal(point.kind, 'rf');
+  const dmlInput = { instancePath: ['tx','source'], portId: 'RF_IN' };
+  assert.deepEqual(point.stages.at(-1)!.endpoint, dmlInput);
+  near(point.stages[0].powerDbm, 0);
+  near(point.stages.at(-1)!.powerDbm, 6);
+  assert.equal(annotations.ports.get(signalPortKey(dmlInput)), 'RF 6.0 dBm');
+  assert.equal(annotations.ports.get(signalPortKey(endpoint('pre','RF_IN'))), 'RF 0.0 dBm');
+  assert.match(annotations.nodes.get('["pre"]')!.map(n => n.text).join(' / '), /增益 6\.0 dB/);
+  assert.ok(!annotations.ports.has(signalPortKey(endpoint('pd','RF_OUT'))));
+});
+
+test('a break after the PD preserves its RF output but leaves the requested endpoint unavailable', () => {
+  const project = fixture(values), root = project.moduleDefinitions[1];
+  const broken = { ...project, moduleDefinitions: [project.moduleDefinitions[0],
+    { ...root, connections: root.connections!.filter(c => c.id !== 'd') }] };
+  const trial = { ...link, from: endpoint('pre','RF_IN'), to: endpoint('post','RF_OUT') };
+  const { point, reason, annotations } = partialResult(broken, trial);
+  assert.equal(point.kind, 'conversion');
+  assert.equal(point.segments.length, 1);
+  near(point.segments[0].pdPowerDbm, 10 + halfPower);
+  near(point.segments[0].rfOutputDbm, -14);
+  assert.match(reason, /射频.*未接通/);
+  assert.equal(annotations.ports.get(signalPortKey(endpoint('pd','RF_OUT'))), 'RF -14.0 dBm');
+  assert.ok(!annotations.ports.has(signalPortKey(trial.to)));
 });
 
 test('an externally modulated DML supply does not silently yield a single-modulator budget', () => {

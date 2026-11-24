@@ -180,23 +180,27 @@ export function createPathResolver(project: Project) {
         const reachedDml = dmlEdges.filter(edge => result.reached.has(edge.from));
         if (reachedDml.length === 1 && from.definition.type === 'RF') {
           const dml = reachedDml[0];
-          // Retain only an unambiguous, reachable optical prefix when the far endpoint is blocked.
-          let last = dml.to;
+          // A rejected emission stops at RF_IN. A completed detection can continue into downstream RF.
+          const emitted = result.reached.has(dml.to);
+          let last = emitted ? dml.to : dml.from;
           const visited = new Set([last]);
-          while (result.reached.has(last)) {
-            const next = outgoing.get(last)?.filter(edge => edge.to.definition.type === 'OPTICAL' && result.reached.has(edge.to));
-            if (next?.length !== 1 || visited.has(next[0].to)) break;
-            last = next[0].to;
-            visited.add(last);
+          if (emitted) {
+            for (;;) {
+              const next = outgoing.get(last)?.filter(edge => result.reached.has(edge.to));
+              if (next?.length !== 1 || visited.has(next[0].to)) break;
+              last = next[0].to;
+              visited.add(last);
+            }
           }
           const prefix = searchSignalPath({ starts: [from], target: last, adjacent: outgoing, carrier });
           const trace = prefix.status === 'resolved' ? traceSupplies(prefix.path, sources).trace : undefined;
           const cascaded = graph.edges.some(edge => edge.supply && visited.has(edge.supply));
-          const rejected = !result.reached.has(dml.to) ? dml : outgoing.get(last)?.find(edge => !result.reached.has(edge.to));
+          const rejected = !emitted ? dml : outgoing.get(last)?.find(edge => !result.reached.has(edge.to));
           const channel = trace?.steps.at(-1)?.channelIds?.join(' / ') ?? request.channelId;
           const switched = graph.instances.find(item => JSON.stringify(item.instancePath) === JSON.stringify(last.ref.instancePath))?.switchState;
           const reason = cascaded ? cascadedModulation
             : rejected ? `直调路径的端口或传输不支持光通道${channel ? ' ' + channel : ''}。`
+            : last.definition.type === 'RF' ? '射频路径未接通到所选目标，或未经过指定连接。'
             : switched ? `光开关在「${switched.name}」状态下未接通到目标的光路。`
             : '直调光路未接通到所选目标，或未经过指定连接。';
           return { status: 'unreachable', endpoint: rejected?.to.ref ?? last.ref, trace, reason };

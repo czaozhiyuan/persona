@@ -83,8 +83,11 @@ export function createRfPathBudget(graph: SignalGraph) {
     if (!isRfFrequency(frequencyGHz)) {
       return failed(frequencyGHz, { status: 'invalid_frequency', reason: '射频频率须在 0 至 67 GHz 范围内。' });
     }
-    if (path.status !== 'resolved') return failed(frequencyGHz, { status: path.status, reason: path.reason, endpoint: path.endpoint });
-    const nonRf = path.trace.steps.find(step => step.port.definition.type !== 'RF');
+    if (path.status !== 'resolved' && (!path.trace || path.trace.conversions.length)) {
+      return failed(frequencyGHz, { status: path.status, reason: path.reason, endpoint: path.endpoint });
+    }
+    const trace = path.trace!;
+    const nonRf = trace.steps.find(step => step.port.definition.type !== 'RF');
     if (nonRf) {
       return failed(frequencyGHz, { status: 'not_pure_rf', endpoint: nonRf.port.ref, reason: '纯射频预算要求整条路径均为射频。' });
     }
@@ -99,8 +102,8 @@ export function createRfPathBudget(graph: SignalGraph) {
         rating: checkInputRating(port.ref, port.definition.inputRating, powerDbm),
       });
     }
-    appendStage(path.trace.steps[0].port);
-    for (const edge of path.trace.edges) {
+    appendStage(trace.steps[0].port);
+    for (const edge of trace.edges) {
       const source = edge.source;
       let device: RfStageValues | undefined;
       if (source.kind === 'transfer' && source.transfer.kind === 'rf') {
@@ -118,6 +121,10 @@ export function createRfPathBudget(graph: SignalGraph) {
     const available = [gainDb, nfDb, powerDbm].filter(metric => metric.availability === 'available').length;
     const hasStageData = stages.some(item => item.powerDbm.availability === 'available'
       || item.incoming?.device?.gainDb.availability === 'available' || item.incoming?.device?.nfDb.availability === 'available');
+    if (path.status !== 'resolved') {
+      return { ...failed(frequencyGHz, { status: path.status, reason: path.reason, endpoint: path.endpoint }),
+        status: hasStageData ? 'partial' : 'error', stages };
+    }
     const status = available === 3 ? 'valid' : available > 0 || hasStageData ? 'partial' : 'error';
     return { status, frequencyGHz, stages, gainDb, nfDb, powerDbm };
   };

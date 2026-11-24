@@ -82,7 +82,7 @@ export function linkAnnotations(graph: SignalGraph, path?: PathResult, point?: L
       metric(segment.pdInput, '响应度', segment.responsivity);
       metric(segment.pdInput, '平均光电流', segment.averageCurrent);
     }
-    if (point.segments.some(s => s.transmitter.kind === 'dml')) {
+    if (path.status === 'resolved' && point.segments.some(s => s.transmitter.kind === 'dml')) {
       metric(path.trace.steps.at(-1)!.port.ref, '链路增益', point.gainDb);
     }
     if (point.partialDml) {
