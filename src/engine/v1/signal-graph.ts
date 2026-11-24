@@ -39,6 +39,10 @@ export type SignalGraph = Readonly<{
   edges: readonly SignalEdge[];
 }>;
 
+export function isDigitalEdge(edge: SignalEdge) {
+  return edge.source.kind === 'transfer' && (edge.source.transfer.kind === 'digitalTx' || edge.source.transfer.kind === 'digitalRx');
+}
+
 export function signalPortKey({ instancePath, portId }: EndpointRef): string {
   return JSON.stringify([instancePath, portId]);
 }
@@ -78,9 +82,9 @@ export function buildSignalGraph(project: Project): SignalGraph {
     let channels: SignalChannels = { kind: 'none' };
     if (transfer?.kind === 'wavelengthConversion') {
       channels = { kind: 'convert', fromChannelId: transfer.fromChannelId, toChannelId: transfer.toChannelId };
-    } else if (transfer?.kind === 'eo' || transfer?.kind === 'dml') {
+    } else if (transfer?.kind === 'eo' || transfer?.kind === 'dml' || transfer?.kind === 'digitalTx') {
       channels = { kind: 'enter', channelIds };
-    } else if (transfer?.kind === 'oe') {
+    } else if (transfer?.kind === 'oe' || transfer?.kind === 'digitalRx') {
       channels = { kind: 'exit', channelIds };
     } else if (from.definition.type === 'OPTICAL') {
       channels = { kind: 'preserve', channelIds };
@@ -119,6 +123,9 @@ export function buildSignalGraph(project: Project): SignalGraph {
           ? portAt(instancePath, transfer.supplyPortId) : undefined;
         addEdge(portAt(instancePath, transfer.fromPortId), portAt(instancePath, transfer.toPortId),
           { kind: 'transfer', index, transfer }, supply);
+        if (transfer.kind === 'splitter') {
+          addEdge(portAt(instancePath, transfer.fromPortId), portAt(instancePath, transfer.secondPortId), { kind: 'transfer', index, transfer });
+        }
       });
       switchState?.routes.forEach((route, index) => {
         addEdge(portAt(instancePath, route.fromPortId), portAt(instancePath, route.toPortId),

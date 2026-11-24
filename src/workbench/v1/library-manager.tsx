@@ -1,3 +1,4 @@
+import { creationLabels, libraryGroups } from '../../library/v1/categories';
 import { useMemo, useRef, useState } from 'react';
 import { resolveHierarchy } from '../../engine/v1/hierarchy';
 import { captureInstance, factory, factoryLibrary, libraryDefinitions, parseLibrary, removeDefinition, restoreDefinition, saveDefinition } from '../../library/v1/user-library';
@@ -46,7 +47,9 @@ export function LibraryManager({ library, project, selected, close }: {
         start([kind === 'module' ? { ...base, kind, instances: [] } : { ...base, kind }]);
       }}>{kind === 'component' ? '新建器件模板' : '新建模块模板'}</button>)}</div>
       <label>库模板<select value={item?.id ?? ''} onChange={e => { select(e.target.value); report(''); }}>
-        {definitions.map(d => <option key={d.id} value={d.id}>{labels.get(d.id)} · {status(d.id)}</option>)}
+        {[...libraryGroups(definitions), { name: '快捷创建', items: definitions.filter(d => creationLabels.has(d.id)) }].map(group =>
+          <optgroup key={group.name} label={group.name}>{group.items.map(d =>
+            <option key={d.id} value={d.id}>{labels.get(d.id)} · {status(d.id)}</option>)}</optgroup>)}
       </select></label>
       {item && <div className="actions">
         <button onClick={() => start([structuredClone(item)])}>编辑模板</button>

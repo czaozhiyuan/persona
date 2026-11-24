@@ -67,6 +67,7 @@ export function channelSetsOverlap(a: PortDefinition, b: PortDefinition): boolea
 
 const transferTypes: Record<Transfer['kind'], readonly [PortType, PortType]> = {
   rf: ['RF', 'RF'], optical: ['OPTICAL', 'OPTICAL'], wavelengthConversion: ['OPTICAL', 'OPTICAL'],
+  splitter: ['OPTICAL', 'OPTICAL'], digitalTx: ['CONTROL', 'OPTICAL'], digitalRx: ['OPTICAL', 'CONTROL'],
   eo: ['RF', 'OPTICAL'], dml: ['RF', 'OPTICAL'], oe: ['OPTICAL', 'RF'], dc: ['DC_POWER', 'DC_POWER'],
 };
 
@@ -95,6 +96,31 @@ export function validateDevice(
       requireValid(channelSetsOverlap(from, to), `${context}: 传输两端没有共同的光通道`);
     }
 
+    if (route.kind === 'splitter') {
+      const other = ports.get(route.secondPortId);
+      requireValid(other?.type === 'OPTICAL' && other.direction === 'out' && other.id !== to.id
+        && channelSetsOverlap(from, other), `${context}: 分路器需要两个不同且支持输入通道的光输出`);
+      if (route.firstPercent) {
+        validateQuantity(parameters, '%', route.firstPercent, ['fixed'], context, 0);
+        const value = route.firstPercent;
+        const parameter = value.kind === 'parameter' ? parameters.get(value.parameterId) : undefined;
+        requireValid(value.kind === 'fixed' ? value.value <= 100 : parameter?.kind === 'numeric' && (parameter.range?.max ?? Infinity) <= 100,
+          `${context}: 分光比上限为 100%`);
+      }
+      if (route.excessLossDb) validateQuantity(parameters, 'dB', route.excessLossDb, ['fixed'], context, 0);
+      requireValid(!definition.transfers?.some(other => other !== route && other.fromPortId === from.id
+        && [to.id, route.secondPortId].some(id => other.toPortId === id || (other.kind === 'splitter' && other.secondPortId === id))),
+        `${context}: 分光输出不能重复配置传输`);
+    }
+    if (route.kind === 'digitalTx' || route.kind === 'digitalRx') {
+      requireValid(!definition.transfers?.some(other => other !== route && other.fromPortId === from.id && other.toPortId === to.id),
+        `${context}: 数字光端口对已有传输关系`);
+    }
+    if (route.kind === 'digitalRx') {
+      for (const limit of [route.sensitivityDbm, route.overloadDbm]) {
+        if (limit) validateQuantity(parameters, 'dBm', limit, ['fixed', 'channelTable'], context);
+      }
+    }
     if (route.kind === 'eo' && route.supplyPortId !== undefined) {
       const supply = ports.get(route.supplyPortId);
       requireValid(supply?.type === 'OPTICAL' && supply.direction === 'in', `${context}: 供光端口必须是光输入端口`);
@@ -151,7 +177,7 @@ export function validateDevice(
 
   for (const route of definition.transfers ?? []) {
     const context = `定义「${definition.id}」的传输「${route.fromPortId} → ${route.toPortId}」`;
-    requireValid(!definition.switchStates || !['optical', 'wavelengthConversion'].includes(route.kind),
+    requireValid(!definition.switchStates || !['optical', 'wavelengthConversion', 'splitter'].includes(route.kind),
       `${context}: 光开关的光路由必须由开关状态决定`);
     validateRoute(route, context);
   }

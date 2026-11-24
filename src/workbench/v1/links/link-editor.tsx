@@ -80,13 +80,14 @@ export function LinkEditor({ store, options, selected, result, budget, point, co
   const conversions = result?.trace?.conversions ?? [];
   const hasEo = conversions.some(step => step.kind === 'eo');
   const crossesOptical = useMemo(() => {
-    if (domain(fromKey) !== 'RF' || domain(toKey) !== 'RF') return false;
+    const control = domain(fromKey) === 'CONTROL' || domain(toKey) === 'CONTROL';
+    if (!control && (domain(fromKey) !== 'RF' || domain(toKey) !== 'RF')) return false;
     if (fromKey === (selected?.from && signalPortKey(selected.from)) && toKey === (selected?.to && signalPortKey(selected.to))) {
-      return conversions.length > 0 || (result?.status === 'ambiguous' && options.eo.length > 0);
+      return !!result?.trace?.edges.some(edge => edge.channels.kind === 'enter' || edge.channels.kind === 'exit') || conversions.length > 0 || (result?.status === 'ambiguous' && options.eo.length > 0);
     }
     const path = budget.resolveNamedLink({ id: 'preview', name: '预览', from: options.graph.ports.get(fromKey)?.ref,
       to: options.graph.ports.get(toKey)?.ref });
-    return !!path.trace?.conversions.length || (path.status === 'ambiguous' && options.eo.length > 0);
+    return !!path.trace?.edges.some(edge => edge.channels.kind === 'enter' || edge.channels.kind === 'exit') || (path.status === 'ambiguous' && options.eo.length > 0);
   }, [budget, options, selected, fromKey, toKey, result]);
   const showOptical = selected?.channelId || crossesOptical || domain(fromKey) === 'OPTICAL' || domain(toKey) === 'OPTICAL' || conversions.length > 0;
 
@@ -171,8 +172,8 @@ export function LinkEditor({ store, options, selected, result, budget, point, co
         onChange={opticalSources => setConditions({ ...conditions, opticalSources })} />}
 
       {opticalLink ? <>{trialControls}{opticalResult && selected.to
-        ? <OpticalResult result={opticalResult} target={selected.to} showEndpoint={options.showEndpoint} locate={locate} />
-        : <p role="status">请选择有效光路和光通道。可在「供光选择与临时覆盖」中设置试算功率。</p>}{diagnostics}</>
+        ? <OpticalResult result={opticalResult} target={opticalResult.stages.at(-1)?.endpoint ?? selected.to} showEndpoint={options.showEndpoint} locate={locate} />
+        : <p role="status">请选择有效的光路和光通道。</p>}{diagnostics}</>
         : point && <LinkBudgetPanel trialControls={trialControls} diagnostics={diagnostics} single={point} link={selected} budget={budget} conditions={conditions} labels={options} locate={locate}
           frequency={conditions.frequencyGHz} setFrequency={frequencyGHz => setConditions({ ...conditions, frequencyGHz })}
           setInputPower={inputPowerDbm => setConditions({ ...conditions, inputPowerDbm })} />}

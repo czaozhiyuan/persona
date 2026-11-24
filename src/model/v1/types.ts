@@ -43,7 +43,7 @@ export type PhysicalFootprint = { widthMm: number; depthMm: number };
 
 export const componentIconKeys = [
   'laser', 'dml', 'multiWavelengthSource', 'mzm', 'photodiode', 'opticalSwitch', 'opticalAttenuator',
-  'amplifier', 'rfAttenuator', 'dcSupply', 'dcConverter', 'pcb',
+  'amplifier', 'rfAttenuator', 'dcSupply', 'dcConverter', 'controlCircuit', 'splitter', 'sfp',
 ] as const;
 export type ComponentIconKey = typeof componentIconKeys[number];
 

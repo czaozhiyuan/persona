@@ -6,6 +6,7 @@ import { definitionIcon, DeviceIcon } from '../../editors/topology/v1/device-ico
 import { insertCanvasItem } from '../../editors/topology/v1/topology-layout-edits';
 import { PortDeletionDialog } from '../../editors/topology/v1/port-deletion-dialog';
 import { resolveHierarchy } from '../../engine/v1/hierarchy';
+import { creationLabels, libraryGroups, templateMatches } from '../../library/v1/categories';
 import { isBlankTemplate } from '../../library/v1/built-in';
 import { libraryDragType } from '../../library/v1/insert-library-item';
 import type { LibraryItem } from '../../library/v1/insert-library-item';
@@ -128,13 +129,14 @@ export function LibraryPanel({ centerPlacement, library, store, state, module }:
     }
   }
   const search = query.trim().toLowerCase();
-  const matches = templates.filter(d => !library.config.hidden.includes(d.id) && labels.get(d.id)!.toLowerCase().includes(search));
+  const matchingTemplates = templates.filter(d => !library.config.hidden.includes(d.id) && templateMatches(d.id, labels.get(d.id)!, search));
+  const matches = matchingTemplates.filter(d => !isBlankTemplate(d.id));
   const reusable = [...definitions.values()].filter(candidate => !unavailable.has(candidate.id)
     && candidate.id !== project.rootModuleDefinitionId && candidate.name.toLowerCase().includes(search));
   const projectLabels = numberedNamesById(reusable);
   const namedOptions = [
     ...reusable.map(item => ({ key: 'project:' + item.id, item, source: 'project' as const })),
-    ...matches.filter(item => isBlankTemplate(item.id) || !definitions.has(item.id))
+    ...matchingTemplates.filter(item => isBlankTemplate(item.id) || !definitions.has(item.id))
       .map(item => ({ key: 'template:' + item.id, item, source: 'template' as const })),
   ];
   const namedOption = namedOptions.find(option => option.key === definitionKey) ?? namedOptions[0];
@@ -158,24 +160,29 @@ export function LibraryPanel({ centerPlacement, library, store, state, module }:
     event.dataTransfer.effectAllowed = 'copy';
     event.dataTransfer.setData(libraryDragType, JSON.stringify(item));
   }
+  function renderItem(template: (typeof templates)[number]) {
+    const definition = isBlankTemplate(template.id) ? undefined : definitions.get(template.id);
+    const conflict = !!definition && definition.kind !== template.kind;
+    const item: LibraryItem = { source: 'template', id: template.id, name: template.name, automaticName: true };
+    return <button key={template.id} type="button" draggable={!conflict} disabled={conflict}
+      title={conflict ? '该模板与工程内已有的类型冲突'
+        : definition ? `点击或拖入框图，沿用工程定义「${definition.name}」` : '点击添加到当前模块，或拖入框图'}
+      onClick={() => add(item)} onDragStart={event => drag(event, item)}>
+      <DeviceIcon iconKey={definitionIcon(conflict ? template : definition ?? template)} size={16} />{creationLabels.get(template.id) ?? labels.get(template.id)}
+    </button>;
+  }
   return <section className="panel v1-properties" aria-label="离线器件与模块库">
     <button type="button" onClick={() => setManage(true)}>管理器件库</button>
     {manage && <LibraryManager library={library} project={project} selected={selection.instancePath} close={() => setManage(false)} />}
     <label>搜索器件库<input type="search" value={query} onChange={event => setQuery(event.target.value)} /></label>
+    <div className="v1-library-create">{templates.filter(item => isBlankTemplate(item.id) && !library.config.hidden.includes(item.id)).map(renderItem)}</div>
     <p className="v1-property-effective">添加到 · {store.resolveInstance(selection.modulePath)?.instance?.name ?? module.name}</p>
-    {matches.length > 0 && <ul className="v1-library-items" aria-label="可拖入框图的器件与模块">
-      {matches.map(template => {
-        const definition = isBlankTemplate(template.id) ? undefined : definitions.get(template.id);
-        const conflict = !!definition && definition.kind !== template.kind;
-        const item: LibraryItem = { source: 'template', id: template.id, name: template.name, automaticName: true };
-        return <li key={template.id}><button type="button" draggable={!conflict} disabled={conflict}
-          title={conflict ? '该模板与工程内已有的类型冲突'
-            : definition ? `点击或拖入框图，沿用工程定义「${definition.name}」` : '点击添加到当前模块，或拖入框图'}
-          onClick={() => add(item)} onDragStart={event => drag(event, item)}>
-          <DeviceIcon iconKey={definitionIcon(conflict ? template : definition ?? template)} size={16} />{labels.get(template.id)}
-        </button></li>;
-      })}
-    </ul>}
+    {libraryGroups(matches).map(({ name, items }) => (!search || items.length > 0) && <details
+      key={name + Boolean(search)} open={Boolean(search) || name !== '示例模板'}>
+      <summary>{name}</summary>
+      {items.length ? <ul className="v1-library-items">{items.map(item => <li key={item.id}>{renderItem(item)}</li>)}</ul>
+        : <p className="empty">暂无模板。</p>}
+    </details>)}
     {!matches.length && !reusable.length && <p className="empty" role="status">没有匹配的器件或模块。</p>}
     {!!installed.length && <details><summary>高级库设置</summary>
       <p>工程内已有独立快照，可预检并主动更新。</p>

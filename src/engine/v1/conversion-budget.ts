@@ -228,7 +228,7 @@ export function createConversionPathBudget(graph: SignalGraph) {
           gain = vPi.availability === 'unavailable' ? unavailable('dB', `${showPath(eoInput.instancePath)} RF Vπ：${vPi.reason}`)
             : conversion.availability === 'unavailable' ? unavailable('dB', `${showPath(pdInput.instancePath)} 光电转换：${conversion.reason}`)
             : pdPowerDbm.availability === 'unavailable' ? unavailable('dB', pdPowerDbm.reason)
-            : conversion.value === 0 ? logZero('dB')
+            : conversion.value === 0 || pdPowerDbm.value === -Infinity ? logZero('dB')
             : budgetValue('dB', 2 * (pdPowerDbm.value - 30) + 20 * Math.log10(Math.PI * Math.abs(conversion.value) / vPi.value));
           if (vPi.availability === 'unavailable') missingAt = eoInput;
         }

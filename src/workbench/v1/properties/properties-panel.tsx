@@ -13,6 +13,8 @@ import { structureScope } from '../structure-scope';
 import { editModule } from '../../../state/v1/topology-edits';
 import { ReceiverPreview, receiverParameterVisible } from './receiver-properties';
 import type { ReceiverQuery } from './receiver-properties';
+import { resolveEmpiricalValue } from '../../../engine/v1/empirical-value';
+import { DcLoadFields } from './dc-load-fields';
 import { AddConversion } from './add-conversion';
 import { AutosaveForm } from './autosave-form';
 import { PortFields, TransferFields } from './device-fields';
@@ -189,6 +191,15 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
             </AutosaveForm>}
           </details>;
         })}
+        {definition.kind === 'component' && definition.transfers?.map(transfer => {
+          if (transfer.kind !== 'splitter') return null;
+          const first = resolveEmpiricalValue('%', transfer.firstPercent, {}, occurrence);
+          const label = (id: string) => portDisplayName(definition.ports.find(port => port.id === id)!, true, definition.ports);
+          return <p className="v1-property-effective" key={JSON.stringify([transfer.fromPortId, transfer.toPortId])}>
+            {label(transfer.toPortId)} / {label(transfer.secondPortId)} · {first.availability === 'available'
+              ? `${first.value}% / ${Number((100 - first.value).toPrecision(12))}%` : '分光比未设置'}
+          </p>;
+        })}
         {detectors.map(pd => <ReceiverPreview key={JSON.stringify([pd.fromPortId, pd.toPortId])} pd={pd}
           instance={occurrence} query={receiverQuery(pd.fromPortId)} showPorts={detectors.length > 1} />)}
       </div>}
@@ -279,6 +290,9 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
             </div>}
           </AutosaveForm>
         </details>)}
+        {definition.kind === 'component' && <DcLoadFields key={JSON.stringify([definition.dcLoad,
+          definition.ports.filter(p => p.type === 'DC_POWER' && p.direction === 'in').map(p => p.id)])}
+          definition={definition} save={read => changeDefinition(() => ({ ...definition, dcLoad: read() }))} />}
         {definition.kind === 'component' && <AddConversion definition={definition} add={transfer =>
           changeDefinition(() => ({ ...definition, transfers: [...(definition.transfers ?? []), transfer] }))} />}
         {definition.kind === 'component' && definition.transfers?.map((transfer, index) => <details key={index}>

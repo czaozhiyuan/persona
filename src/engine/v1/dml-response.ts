@@ -22,7 +22,7 @@ export function dmlReception(emission: ReturnType<typeof dmlEmission>, pathGain:
   const gain = slope.availability === 'unavailable' ? unavailable('dB', `直调系数 K：${slope.reason}`)
     : pathGain.availability === 'unavailable' ? pathGain
     : response.availability === 'unavailable' ? unavailable('dB', `光电转换：${response.reason}`)
-    : slope.value === 0 || response.value === 0 ? logZero('dB')
+    : slope.value === 0 || response.value === 0 || pathGain.value === -Infinity ? logZero('dB')
     : budgetValue('dB', 20 * Math.log10(slope.value) + 2 * pathGain.value + 20 * Math.log10(Math.abs(response.value)));
   return { receivedPeak, gain };
 }

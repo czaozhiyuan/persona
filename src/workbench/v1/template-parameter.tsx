@@ -1,7 +1,7 @@
 import type { NumericParameter, NumericUnit, ParameterDefinition } from '../../model/v1/parameters';
 import { ParameterField } from './properties/value-fields';
 
-const units: NumericUnit[] = ['dB', 'dBm', 'V', 'A', 'W', 'GHz', 'nm', 'A/W', 'V/W', 'W/V', 'ohm', 'ratio'];
+const units: NumericUnit[] = ['dB', 'dBm', 'V', 'A', 'W', 'GHz', 'nm', 'A/W', 'V/W', 'W/V', 'ohm', 'ratio', '%'];
 const kinds = { fixed: '固定值', rfCurve: '射频曲线', channelTable: '通道表', rfValue: '固定值或射频曲线', opticalValue: '固定值或通道表' };
 
 export function TemplateParameter({ parameter: p, change, remove }: {

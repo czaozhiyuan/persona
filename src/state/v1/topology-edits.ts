@@ -113,7 +113,7 @@ export function planPortDeletion(project: Project, definitionId: string, portId:
       ...(clearLoad && { dcLoad: undefined }),
       transfers: component.transfers?.filter(transfer => {
         const removed = transfer.fromPortId === portId || transfer.toPortId === portId
-          || (transfer.kind === 'eo' && transfer.supplyPortId === portId);
+          || (transfer.kind === 'eo' && transfer.supplyPortId === portId) || (transfer.kind === 'splitter' && transfer.secondPortId === portId);
         if (removed) report('器件传输', `${portName(transfer.fromPortId)} → ${portName(transfer.toPortId)}`, component.id);
         return !removed;
       }),

@@ -23,12 +23,13 @@ test('factory templates use the confirmed component, module and enclosure symbol
     'library-laser': 'laser', 'library-dml': 'dml', 'library-mzm': 'mzm', 'library-pd': 'photodiode',
     'library-optical-switch': 'opticalSwitch', 'library-optical-attenuator': 'opticalAttenuator',
     'library-rf-amplifier': 'amplifier', 'library-rf-attenuator': 'rfAttenuator',
-    'library-dc-supply': 'dcSupply', 'library-dc-converter': 'dcConverter', 'library-pcb': 'pcb',
+    'library-dc-supply': 'dcSupply', 'library-dc-converter': 'dcConverter', 'library-pcb': 'controlCircuit',
+    'library-splitter': 'splitter', 'library-sfp': 'sfp',
   });
 });
 
 test('copied and reused modules retain component icon choices through project JSON', () => {
-  const template = { ...gain, name: 'Renamed template', iconKey: 'pcb' } as const;
+  const template = { ...gain, name: 'Renamed template', iconKey: 'controlCircuit' } as const;
   const installed = addTemplateInstance(empty, [template, stage], stage.id, 'system', 'stage', 'Stage');
   const reused = instantiateModule(installed.project, ['stage'], 'reuse', 'shared', () => assert.fail());
   let sequence = 0;
@@ -37,7 +38,7 @@ test('copied and reused modules retain component icon choices through project JS
   const tree = resolveHierarchy(parseProjectJson(json));
   for (const id of ['stage', 'shared', 'independent']) {
     const child = tree.resolveInstance([id, 'amplifier'])?.definition;
-    assert.equal(child?.kind === 'component' && child.iconKey, 'pcb');
+    assert.equal(child?.kind === 'component' && child.iconKey, 'controlCircuit');
   }
   const invalid = JSON.parse(json);
   invalid.project.componentDefinitions[0].iconKey = 'https://example.invalid/icon.svg';
