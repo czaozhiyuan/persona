@@ -84,6 +84,8 @@ export function readEmpirical(data: FormData, name: string, kind: ValueKind): Em
 export function readNumericParameter(data: FormData, name: string, parameter: NumericParameter) {
   const allowed = parameterValueKinds(parameter);
   const kind = allowed.find(kind => kind === data.get(name + 'Kind')) ?? allowed[0];
+  // Previewing fixed mode leaves the saved curve in place until the number is edited.
+  if (kind === 'fixed' && data.has(name + 'SavedCurve')) return readEmpirical(data, name + 'SavedCurve', 'rfCurve');
   return readEmpirical(data, name, kind);
 }
 
@@ -94,10 +96,11 @@ export function readParameter(data: FormData, name: string, parameter: Parameter
 type CurveFieldProps = {
   title: string; scope: string; unit: NumericUnit; range?: NumericRange; inherited?: EmpiricalValue;
   kindInput?: string;
+  onRfValueChange?: (value?: EmpiricalValue) => void;
   onCurveApply?: (value: RfCurve) => void;
 };
 
-function CurveField({ name, label, value, required, autosave, title, scope, unit, range, inherited, onCurveApply, kindInput }: CurveFieldProps & {
+function CurveField({ name, label, value, required, autosave, title, scope, unit, range, inherited, onCurveApply, kindInput, onRfValueChange }: CurveFieldProps & {
   name: string; label: string; value?: EmpiricalValue; required?: boolean; autosave?: boolean;
 }) {
   const [applied, setApplied] = useState(value);
@@ -108,7 +111,7 @@ function CurveField({ name, label, value, required, autosave, title, scope, unit
   function update(next?: RfCurve) {
     if (onCurveApply && JSON.stringify(value) === JSON.stringify(next)) { setOpen(false); return; }
     const form = input.current?.form;
-    flushSync(() => { setApplied(next); setOpen(false); });
+    flushSync(() => { setApplied(next); onRfValueChange?.(next); setOpen(false); });
     if (!form) return;
     if (autosave) form.requestSubmit();
     else if (onCurveApply && next) onCurveApply(readEmpirical(new FormData(form), name, 'rfCurve')!);
@@ -134,7 +137,8 @@ function EmpiricalField({ kind, name, label, value, required, autosave, ...curve
   if (kind === 'rfCurve') return <CurveField {...curveProps} name={name} label={label} value={value} required={required} autosave={autosave} />;
   const initial = value?.kind === 'fixed' ? formatValue(value) : '';
   return <label>{label}
-    <input name={name} type="number" step="any" defaultValue={initial} required={required} />
+    <input name={name} type="number" step="any" defaultValue={initial} required={required}
+      onChange={event => curveProps.onRfValueChange?.(event.target.value === '' ? undefined : { kind: 'fixed', value: event.target.valueAsNumber })} />
   </label>;
 }
 
@@ -185,14 +189,17 @@ function NumericField({ parameter, value, inherited, label, autosave }: {
 }) {
   const kinds = parameterValueKinds(parameter);
   const [kind, setKind] = useState(value?.kind ?? kinds[0]);
+  const [rfValue, setRfValue] = useState(value);
+  const supportsCurve = kinds.includes('rfCurve');
   return <>
     {kinds.length > 1 && <label>取值方式<select value={kind} onChange={event => setKind(event.target.value as ValueKind)}>
       {kinds.map(item => <option key={item} value={item}>{modeNames[item]}</option>)}
     </select></label>}
     {kind !== 'rfCurve' && <input type="hidden" name="valueKind" value={kind} />}
+    {kind === 'fixed' && rfValue?.kind === 'rfCurve' && <input type="hidden" name="valueSavedCurve" value={formatValue(rfValue)} />}
     <EmpiricalField key={kind} name="value" kind={kind} label={`${label} (${parameter.unit})`}
       title={parameter.name} unit={parameter.unit} range={parameter.range} scope={label} kindInput="valueKind"
-      value={value} inherited={inherited} autosave={autosave} />
+      value={supportsCurve ? rfValue : value} onRfValueChange={supportsCurve ? setRfValue : undefined} inherited={inherited} autosave={autosave} />
   </>;
 }
 
