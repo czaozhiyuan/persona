@@ -117,6 +117,8 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
   }
 
   const detectors = definition.kind === 'component' ? definition.transfers?.filter(t => t.kind === 'oe') ?? [] : [];
+  const parameterLabel = (id: string, label: string) => detectors.some(pd =>
+    pd.loadedGain?.kind === 'parameter' && pd.loadedGain.parameterId === id) ? `${label} · 外接 50 Ω` : label;
   const visibleParameters = definition.parameters?.filter(parameter =>
     !detectors.length || receiverParameterVisible(occurrence, parameter.id));
   const name = instance?.name ?? definition.name;
@@ -136,7 +138,6 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
       {onDcBudget && <button type="button" onClick={() => onDcBudget(instancePath)}>查看供电/功耗 · {name}</button>}
     </div>}
     {error && <p className="error" role="alert">{error}</p>}
-    <p className="v1-property-effective">名称、端口和参数自动保存。文本和数值按 Enter 或离开输入框时应用，多行文本离开输入框时应用。</p>
     {!instance && nameField}
     <div className="v1-inspector-fields">
       {instance && <div className="v1-common-properties">
@@ -184,7 +185,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
                 setError((error as Error).message);
               }
             }}>
-              <ParameterField parameter={parameter} value={current} inherited={effective?.value} label="当前实例值（留空恢复默认）" autosave />
+              <ParameterField parameter={parameter} value={current} inherited={effective?.value} label={parameterLabel(parameter.id, '当前实例值（留空恢复默认）')} autosave />
               {current !== undefined && <button type="button" data-skip-autosave onClick={() => changeInstance(item => {
                 const overrides = { ...item.parameterOverrides };
                 delete overrides[parameter.id];
@@ -209,8 +210,9 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
         <h3>模块操作</h3>
         {onDissolve && <button type="button" onClick={() => onDissolve(instancePath)}>解散模块（保留内部对象）</button>}
         {parentLocations.length > 0 && <p className="v1-property-effective">在上级模块添加后，以下位置都会新增此对象：{parentLocations.join('、')}。</p>}
-        <button type="button" title="共用此模块定义，结构修改会应用到所有复用位置" onClick={reuseModule}>再次使用此模块</button>
-        <button type="button" onClick={() => onCopyModule(instancePath)}>复制为独立模块</button>
+        <button type="button" onClick={() => onCopyModule(instancePath)}>复制模块</button>
+        <button type="button" aria-describedby="v1-module-reuse-hint" onClick={reuseModule}>复用模块</button>
+        <p className="v1-property-effective" id="v1-module-reuse-hint">修改结构会同步到其他复用位置</p>
       </section>}
       {definition.kind === 'module' && enclosure && <section>
         <h3>机箱尺寸</h3>
@@ -236,7 +238,6 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
           <button type="button" className="primary" aria-haspopup="dialog" onClick={() => onAddPort(instancePath)}>{wdm ? '配置波长端口' : '端口管理'}</button>
         </div>
         <p className="v1-property-effective">编辑目标 · {instance?.name ?? definition.name}{definition.kind === 'module' && '（模块对外端口）'}</p>
-        {sharedLocations.length > 0 && <p className="v1-property-effective">共享定义 · 影响 {sharedLocations.join('、')}</p>}
         {!definition.ports.length && <p className="empty">暂无端口。</p>}
         {wdm ? definition.ports.map(port => <p key={port.id} data-port-id={port.id}>{portDisplayName(port, false, definition.ports, occurrence)}
           {' · ' + portDirectionLabels[port.direction]}{port.channelIds && port.name !== port.channelIds[0] && ' · ' + port.channelIds[0]}</p>)
@@ -244,6 +245,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
           <summary>{portDisplayName(port, false, definition.ports, occurrence)}<span className="v1-parameter-value">
             {portTypeLabels[port.type]} · {portDirectionLabels[port.direction]}
           </span></summary>
+          {sharedLocations.length > 0 && <p className="v1-property-effective">端口变更会应用到 {sharedLocations.join('、')}。</p>}
           <PortFields port={port} occurrence={occurrence} remove={() => { setError(''); setDeletion(port.id); }}
             save={next => changeDefinition(() => ({ ...definition,
               ports: definition.ports.map(item => item.id === port.id ? next : item),
@@ -286,7 +288,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
             }
           }}>
             <label>参数名称<input name="name" defaultValue={parameter.name} required /></label>
-            <ParameterField parameter={parameter} value={parameter.defaultValue} label="定义默认值" autosave />
+            <ParameterField parameter={parameter} value={parameter.defaultValue} label={parameterLabel(parameter.id, '定义默认值')} autosave />
             {parameter.kind === 'numeric' && <div className="v1-property-pair">
               <label>允许下限<input type="number" step="any" name="min" defaultValue={parameter.range?.min} /></label>
               <label>允许上限<input type="number" step="any" name="max" defaultValue={parameter.range?.max} /></label>

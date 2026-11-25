@@ -45,7 +45,7 @@ function Choice<T>({ name, title, options, value, required }: {
 }
 
 const statusLabels = {
-  resolved: '路径已解析', incomplete: '尚未连接', invalid_reference: '引用无效', unreachable: '尚未连接',
+  resolved: '已找到路径', incomplete: '尚未连接', invalid_reference: '引用无效', unreachable: '尚未连接',
   ambiguous: '多条路径', feedback_loop: '存在反馈环', search_limit: '达到搜索上限',
 };
 const supplyLabels = { resolved: '供光路径已解析', missing: '缺少供光条件', ambiguous: '多条供光路径', feedback_loop: '供光反馈环', search_limit: '供光搜索达到上限' };
@@ -62,7 +62,7 @@ function Diagnostics({ result, showEndpoint, locate }: {
       {result.endpoint && ` · ${showEndpoint(result.endpoint)}`}
     </p>}
     {result.trace && <details>
-      <summary>{parallelDark ? '各支路共有的端口' : `主路径 · ${result.trace.edges.length} 条边`}</summary>
+      <summary>{parallelDark ? '各支路共有的端口' : '查看路径'}</summary>
       <ol>{result.trace.steps.map((step, index) => <li key={index}>
         <EndpointLocation endpoint={step.port.ref} label={showEndpoint(step.port.ref)} locate={locate} />{step.channelIds?.length ? ` · ${step.channelIds.join(' / ')}` : ''}
       </li>)}</ol>
@@ -106,7 +106,7 @@ export function LinkEditor({ store, options, selected, result, budget, point, co
   }
 
   const trialControls = <div className="v1-trial-controls">
-    <span role="status">{trialSaved ? '已保存到工程的试算条件' : '临时试算条件，仅在本次会话使用'}</span>
+    <span role="status">{trialSaved ? '已存入工程' : '仅本次试算'}</span>
     <button type="button" onClick={saveTrial} disabled={draft || trialSaved
       || !Number.isFinite(conditions.frequencyGHz) || conditions.frequencyGHz < 0 || conditions.frequencyGHz > 67}>保存试算条件</button>
     {draft && <span>先保存链路，再保存试算条件。</span>}
