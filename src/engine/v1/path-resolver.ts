@@ -83,10 +83,10 @@ export function createPathResolver(project: Project) {
     return matches.length === 1 ? [...result.path.edges, matches[0]] : result.path.edges;
   }
 
-  function followBoundary(start: SignalPort, required: SignalEdge[]): SignalPort {
+  function followBoundary(start: SignalPort, required?: SignalEdge[]): SignalPort {
     let port = start;
     for (let edge = mappings.get(signalPortKey(port.ref)); edge; edge = mappings.get(signalPortKey(port.ref))) {
-      required.push(edge);
+      required?.push(edge);
       port = edge.from === port ? edge.to : edge.from;
     }
     return port;
@@ -334,5 +334,5 @@ export function createPathResolver(project: Project) {
     return resolve(request, options);
   }
 
-  return { graph, resolveNamedLink, resolveLocalPath, reachableFrom };
+  return { graph, resolveNamedLink, resolveLocalPath, reachableFrom, followBoundary };
 }
