@@ -7,6 +7,7 @@ import { projectTopology } from '../../src/editors/topology/v1/topology-projecti
 import { resolveHierarchy } from '../../src/engine/v1/hierarchy';
 import type { InstancePath, Project } from '../../src/model/v1/types';
 import { moveTopologyNodes, resizeTopologyFrame } from '../../src/state/v1/topology-edits';
+import { createProjectStore } from '../../src/state/v1/project-store';
 import { parseProjectJson, serializeProjectJson } from '../../src/storage/v1/project-json';
 
 const receiver = ['receiver'], board = [...receiver, 'board'];
@@ -180,4 +181,40 @@ test('batch expansion resolves stacked siblings inside both enclosures and propa
   const reversed = { ...project, moduleDefinitions: project.moduleDefinitions.map(d => ({ ...d, instances: [...d.instances].reverse() })) };
   const reordered = view(apply(reversed, planInlineExpansion(view(reversed, [], expanded), opened)), [], expanded);
   for (const path of expanded) assert.deepEqual(displayedBounds(reordered, path), displayedBounds(after, path));
+});
+
+test('a measured port edit retains both the enlarged frame and sibling placements in the edit history and JSON', () => {
+  for (const savedFrame of [true, false]) {
+    const source = fixture(940, 540);
+    const boardDefinition = source.moduleDefinitions.find(d => d.id === 'board')!;
+    boardDefinition.ports = [{ id: 'COM', name: 'COM', type: 'OPTICAL', direction: 'bidirectional' }];
+    if (!savedFrame) source.layout!.topologyFrames = source.layout!.topologyFrames!.filter(f => f.modulePath.length !== 2);
+    const store = createProjectStore(source);
+    const initial = store.getSnapshot().project;
+    const expanded = [receiver, board];
+    const original = view(initial, [], expanded);
+    const rename = (draft: Project, name: string) => ({ ...draft, moduleDefinitions: draft.moduleDefinitions.map(d =>
+      d.id === 'board' ? { ...d, ports: d.ports.map(p => ({ ...p, name })) } : d) });
+    store.commit(draft => rename(draft, 'Tall label'));
+    const edited = store.getSnapshot().project;
+    const tall = new Map([[hierarchyKey(board), { side: 0, top: 334 }]]);
+    const measured = view(edited, [], expanded, tall);
+    const edit = planInlineExpansion(measured, key, original);
+    const grown = edit.frames.find(frame => hierarchyKey(frame.modulePath) === hierarchyKey(board))!;
+    assert.equal(grown.height, object(measured, board).frame!.display.height);
+    assert.ok(grown.height > object(original, board).frame!.display.height);
+    assert.ok(edit.moves.length);
+    assert.equal(store.extendCommit(edited, draft => apply(draft, edit))?.ok, true);
+    const saved = parseProjectJson(serializeProjectJson(store.getSnapshot().project));
+    assertSiblingsClear(view(saved, [], expanded, tall));
+    store.undo();
+    assert.equal(store.getSnapshot().project, initial);
+    assert.equal(store.getSnapshot().canUndo, false);
+    store.redo();
+    assert.deepEqual(store.getSnapshot().project, saved);
+    store.commit(draft => rename(draft, 'COM'));
+    const shortened = store.getSnapshot().project;
+    assert.deepEqual(shortened.layout, saved.layout);
+    assert.equal(object(view(shortened, [], expanded), board).frame!.display.height, grown.height);
+  }
 });

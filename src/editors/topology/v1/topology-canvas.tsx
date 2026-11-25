@@ -41,7 +41,7 @@ import type { WiringEdge } from './topology-wiring';
 import type { CenterPlacement, Projection } from './topology-layout-edits';
 import { preserveDeletionLayout } from './topology-layout-edits';
 import { applyExpansionLayout, type ExpansionLayout } from './inline-expansion-layout';
-import { useInlineExpansion } from './use-inline-expansion';
+import { useInlineExpansion, type ExpansionAction } from './use-inline-expansion';
 import { SignalWire, signalColor } from './signal-wire';
 import '@xyflow/react/dist/style.css';
 
@@ -152,6 +152,7 @@ type Props = {
   pathResult?: PathResult;
   budgetHighlight?: BudgetHighlight;
   persistExpansion: boolean;
+  manualFrames: ReadonlySet<string>;
   expansionPreview?: ExpansionLayout;
   expanded: ReadonlySet<string>;
   toggleModule: (path: InstancePath) => void;
@@ -167,7 +168,7 @@ type Props = {
   restoreView?: CanvasView;
   move: (placements: readonly TopologyPlacement[], frame?: TopologyFrame) => void;
   resize: (frame: TopologyFrame, placementAdjustments: readonly TopologyPlacement[]) => void;
-  finishExpansion: (base: Project, layout: ExpansionLayout, persist: boolean) => void;
+  finishExpansion: (base: Project, layout: ExpansionLayout, action: ExpansionAction) => void;
   connect: (scope: InstancePath, connection: Omit<Connection, 'id'>) => void;
   mapPort: (scope: InstancePath, mapping: PortMapping) => void;
   placingModule: boolean;
@@ -189,7 +190,7 @@ export function TopologyCanvas(props: Props) {
   return <ReactFlowProvider><EditableTopologyCanvas {...props} /></ReactFlowProvider>;
 }
 
-function EditableTopologyCanvas({ multiplex, project, instances, modulePath, selectedInstance, selectedPaths, pathResult, budgetHighlight, expanded, persistExpansion, expansionPreview,
+function EditableTopologyCanvas({ multiplex, project, instances, modulePath, selectedInstance, selectedPaths, pathResult, budgetHighlight, expanded, persistExpansion, manualFrames, expansionPreview,
   toggleModule, selectObject, selectObjects, enterModule, reparent, focusMoved, move, resize, connect, mapPort, add, placingModule, cancelPlacement,
   deleteInstances, deleteWiring, route, rename, copyObjects, pasteObjects, centerPlacement, report, undo, redo, openPort, onAddPort, newPort,
   depth, fullPage, toggleFullPage, restoreView, viewHost, topologyActive, finishExpansion }: Props) {
@@ -230,7 +231,7 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
   }), [displayed, expansionPreview, instances, modulePath, expanded, measured, resizePreview, portHeights]);
   const { nodes: items, rootKey, nodeByKey, scopes } = projection;
   const cancelExpansion = useInlineExpansion(canvas, project, displayed, projection, instances, modulePath, expanded,
-    measured, portHeights, topologyActive && !dragSession.current && !resizePreview, persistExpansion, finishExpansion);
+    measured, portHeights, topologyActive && !dragSession.current && !resizePreview, persistExpansion, manualFrames, finishExpansion);
   // An empty scope has nothing to fit. A queued fit would zoom to its first insertion.
   const [fitInitialNodes] = useState(() => !initialViewport && items.length > 0);
   useEffect(() => {

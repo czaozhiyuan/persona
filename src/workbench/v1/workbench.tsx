@@ -58,6 +58,7 @@ type Presentation = {
   leftTab?: SideTab;
   propertiesOpen: boolean;
   expandedCanvas: ReadonlySet<string>;
+  manualFrames: ReadonlySet<string>;
   expandedHierarchy: ReadonlySet<string>;
 };
 const budgetTitles = { links: '链路预算', optical: '局部光功率', dc: '直流供电预算' };
@@ -99,6 +100,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const [propertiesOpen, setPropertiesOpen] = useState(() => !window.matchMedia('(max-width: 48rem)').matches);
   const [expandedHierarchy, setExpandedHierarchy] = useState<ReadonlySet<string>>(new Set(['[]']));
   const [expandedCanvas, setExpandedCanvas] = useState<ReadonlySet<string>>(new Set());
+  const [manualFrames, setManualFrames] = useState<ReadonlySet<string>>(new Set());
   const [presentation, setPresentation] = useState<Presentation>();
   const [restoredView, setRestoredView] = useState<{ scope: string; view: CanvasView }>();
   const currentScope = hierarchyKey(selection.modulePath);
@@ -221,7 +223,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     if (!presentation) {
       setRestoredView(undefined);
       setPresentation({
-        view, scope: selection.modulePath, selected: selectedPaths, leftTab, propertiesOpen, expandedCanvas, expandedHierarchy,
+        view, scope: selection.modulePath, selected: selectedPaths, leftTab, propertiesOpen, expandedCanvas, expandedHierarchy, manualFrames,
       });
       return;
     }
@@ -229,6 +231,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     setLeftTab(presentation.leftTab);
     setPropertiesOpen(presentation.propertiesOpen);
     setExpandedCanvas(new Set(presentation.expandedCanvas));
+    setManualFrames(presentation.manualFrames);
     setExpandedHierarchy(presentation.expandedHierarchy);
     store.selectModule(presentation.scope);
     store.selectInstances(presentation.selected);
@@ -284,17 +287,18 @@ export function Workbench({ store, loadExample, newProject }: Props) {
 
   function revealStructureChange(instancePaths: readonly InstancePath[], remap: (path: InstancePath) => InstancePath | undefined, centerCanvas = true) {
     const instancePath = instancePaths[0];
-    function remapExpansion(previous: ReadonlySet<string>) {
+    function remapExpansion(previous: ReadonlySet<string>, reveal = true) {
       const next = new Set<string>();
       for (const key of previous) {
         const path = JSON.parse(key) as InstancePath;
         const mapped = remap(path);
         if (mapped) next.add(hierarchyKey(mapped));
       }
-      for (let depth = 0; depth < instancePath.length; depth++) next.add(hierarchyKey(instancePath.slice(0, depth)));
+      if (reveal) for (let depth = 0; depth < instancePath.length; depth++) next.add(hierarchyKey(instancePath.slice(0, depth)));
       return next;
     }
     setExpandedCanvas(remapExpansion);
+    setManualFrames(current => remapExpansion(current, false));
     setExpandedHierarchy(remapExpansion);
     if (!inHierarchy(store.getSnapshot().selection.modulePath, instancePath)) store.selectModule(instancePath.slice(0, -1));
     selectObjects(instancePaths);
@@ -435,6 +439,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
       setLocalOptical({ sources: [] });
       setExpandedHierarchy(new Set(['[]']));
       setExpandedCanvas(new Set());
+      setManualFrames(new Set());
       setPage('canvas');
     }
   }
@@ -699,7 +704,10 @@ export function Workbench({ store, loadExample, newProject }: Props) {
                     {issue && <small role="status" title={issue}>{issue}</small>}</>}
                 </div>}
                 store={store} state={state} module={active} pathResult={canvasPath} graph={linkOptions.graph} rename={renameSelection}
-                expanded={expandedCanvas} setExpanded={setExpandedCanvas} budgetHighlight={budgetHighlight}
+                expanded={expandedCanvas} manualFrames={manualFrames} setExpanded={next => {
+                  setManualFrames(new Set([...next].filter(key => manualFrames.has(key) || !expandedCanvas.has(key))));
+                  setExpandedCanvas(next);
+                }} budgetHighlight={budgetHighlight}
                 canEditLink={category === 'links' && !!savedLink} onPortBudget={selectBudgetPort} onDcBudget={showDc}
                 openPorts={(path, initialMode) => setPortTarget({ path, initialMode })} newPort={newPort}
                 onSelectObject={selectObject} onSelectObjects={selectObjects}

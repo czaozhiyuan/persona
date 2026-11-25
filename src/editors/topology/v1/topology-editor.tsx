@@ -34,12 +34,13 @@ import './topology.css';
 
 import type { LibraryConfig } from '../../../library/v1/user-library';
 
-export function TopologyEditor({ multiplex, centerPlacement, linkControls, library, store, state, module, pathResult, graph, rename, expanded, setExpanded, budgetHighlight, canEditLink, onPortBudget, onDcBudget, openPorts, newPort, onSelectObject, onSelectObjects, moveAcrossLevels, focusMoved, copyObjects, pasteObjects, copyNotice, fullPage, toggleFullPage, restoreView, placingModule, setPlacingModule, toolsHost, viewHost, topologyActive }: {
+export function TopologyEditor({ multiplex, centerPlacement, linkControls, library, store, state, module, pathResult, graph, rename, expanded, manualFrames, setExpanded, budgetHighlight, canEditLink, onPortBudget, onDcBudget, openPorts, newPort, onSelectObject, onSelectObjects, moveAcrossLevels, focusMoved, copyObjects, pasteObjects, copyNotice, fullPage, toggleFullPage, restoreView, placingModule, setPlacingModule, toolsHost, viewHost, topologyActive }: {
   multiplex: MultiplexPower;
   linkControls: import('react').ReactNode;
   library: LibraryConfig;
   store: ProjectStore; state: ProjectStoreSnapshot; module: ModuleDefinition; pathResult?: PathResult; graph: SignalGraph; rename: () => void;
   expanded: ReadonlySet<string>; setExpanded: (value: ReadonlySet<string>) => void;
+  manualFrames: ReadonlySet<string>;
   budgetHighlight?: BudgetHighlight;
   canEditLink: boolean;
   onPortBudget: (action: 'optical' | 'from' | 'to', ref: EndpointRef, editCurrent?: boolean) => void;
@@ -231,7 +232,7 @@ export function TopologyEditor({ multiplex, centerPlacement, linkControls, libra
     <div className="v1-hierarchy-workspace">
       <TopologyCanvas multiplex={multiplex} centerPlacement={centerPlacement} project={project} instances={graph.instances} modulePath={scope} selectedInstance={selection.instancePath}
         pathResult={pathResult} budgetHighlight={budgetHighlight} expanded={expanded} expansionPreview={expansionPreview}
-        persistExpansion={expanded === explicitExpansion.current} toggleModule={toggleModule}
+        persistExpansion={expanded === explicitExpansion.current} manualFrames={manualFrames} toggleModule={toggleModule}
         selectedPaths={selectedPaths} selectObject={onSelectObject} selectObjects={onSelectObjects}
         enterModule={store.selectModule} focusMoved={focusMoved}
         fullPage={fullPage} toggleFullPage={toggleFullPage} restoreView={restoreView}
@@ -248,10 +249,14 @@ export function TopologyEditor({ multiplex, centerPlacement, linkControls, libra
         })}
         resize={(frame, adjustments) => commit(draft =>
           resizeTopologyFrame(moveTopologyNodes(applyExpansionLayout(draft, expansionPreview), adjustments), frame))}
-        finishExpansion={(base, layout, persist) => {
+        finishExpansion={(base, layout, action) => {
           if (store.getSnapshot().project !== base) return;
-          if (persist) commit(draft => applyExpansionLayout(draft, layout));
-          else setPreviewLayout({ base, layout });
+          if (action === 'preview') setPreviewLayout({ base, layout });
+          else if (action === 'commit') commit(draft => applyExpansionLayout(draft, layout));
+          else {
+            const result = store.extendCommit(base, draft => applyExpansionLayout(draft, layout));
+            if (result && !result.ok) setMessage(result.message);
+          }
         }}
         connect={(path, connection) => editScope(path, current => ({
           ...current, connections: [...(current.connections ?? []), { ...connection, id: crypto.randomUUID() }],

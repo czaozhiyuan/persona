@@ -53,6 +53,7 @@ export function createProjectStore(initialProject: Project) {
     project: prepareProject(initialProject), selection: initialSelection, canUndo: false, canRedo: false,
   });
   let hierarchy = resolveHierarchy(snapshot.project);
+  let latestCommit: Project | undefined;
 
   function publish(project: Project, selection: Selection) {
     snapshot = Object.freeze({
@@ -81,17 +82,27 @@ export function createProjectStore(initialProject: Project) {
     publish(project, resetSelection ? initialSelection : reconcile(project));
   }
 
-  function commit(edit: (draft: Project) => Project): EditResult {
+  function applyEdit(edit: (draft: Project) => Project, extend: boolean): EditResult {
     let project: Project;
     try {
       project = prepareProject(edit(structuredClone(snapshot.project)));
     } catch (error) {
       return { ok: false, message: projectErrorMessage(error, snapshot.project) };
     }
-    undoStack.push(snapshot.project);
+    if (!extend) undoStack.push(snapshot.project);
     redoStack.length = 0;
+    latestCommit = project;
     changeProject(project);
     return { ok: true };
+  }
+
+  function commit(edit: (draft: Project) => Project) {
+    return applyEdit(edit, false);
+  }
+
+  function extendCommit(expected: Project, edit: (draft: Project) => Project) {
+    // A deferred measurement belongs only to the edit that produced its DOM.
+    if (latestCommit === expected) return applyEdit(edit, true);
   }
 
   function replaceProject(candidate: Project): EditResult {
@@ -103,6 +114,7 @@ export function createProjectStore(initialProject: Project) {
     }
     undoStack.length = 0;
     redoStack.length = 0;
+    latestCommit = undefined;
     changeProject(project, true);
     return { ok: true };
   }
@@ -110,6 +122,7 @@ export function createProjectStore(initialProject: Project) {
   function undo() {
     const previous = undoStack.pop();
     if (!previous) return;
+    latestCommit = undefined;
     redoStack.push(snapshot.project);
     changeProject(previous);
   }
@@ -117,6 +130,7 @@ export function createProjectStore(initialProject: Project) {
   function redo() {
     const next = redoStack.pop();
     if (!next) return;
+    latestCommit = undefined;
     undoStack.push(snapshot.project);
     changeProject(next);
   }
@@ -152,7 +166,7 @@ export function createProjectStore(initialProject: Project) {
       listeners.add(listener);
       return () => { listeners.delete(listener); };
     },
-    commit, replaceProject, undo, redo, setView, selectModule, selectInstance, selectInstances, selectLink,
+    commit, extendCommit, replaceProject, undo, redo, setView, selectModule, selectInstance, selectInstances, selectLink,
     resolveInstance: (path: InstancePath) => hierarchy.resolveInstance(path),
   };
 }

@@ -56,7 +56,8 @@ function nearestSlot(card: Rect, obstacles: readonly Rect[], extent: CoordinateE
   return best!;
 }
 
-export function planInlineExpansion(projection: ReturnType<typeof projectTopology>, opened: ReadonlySet<string>) {
+export function planInlineExpansion(projection: ReturnType<typeof projectTopology>, opened: ReadonlySet<string>,
+  beforeEdit?: ReturnType<typeof projectTopology>) {
   const moves: TopologyPlacement[] = [];
   const frames: TopologyFrame[] = [];
   const growing = new Set(opened);
@@ -91,7 +92,9 @@ export function planInlineExpansion(projection: ReturnType<typeof projectTopolog
     const { x, y } = owner.display;
     const width = Math.max(owner.display.width, ...occupied.map(r => (r.x - x) + r.width + insets.right));
     const height = Math.max(owner.display.height, ...occupied.map(r => (r.y - y) + r.height + framePadding));
-    const grew = width > owner.base.width + 1e-6 || height > owner.base.height + 1e-6;
+    // The compact minimum itself may have grown with a measured port row or child card.
+    const previous = owner.saved ?? beforeEdit?.nodeByKey.get(key)?.frame?.display ?? owner.base;
+    const grew = width > previous.width + 1e-6 || height > previous.height + 1e-6;
     if (!grew && (owner.saved || !moving.size)) continue;
 
     // Saving an automatic frame also keeps its origin fixed if a moved card defined its old left/top edge.

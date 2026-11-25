@@ -17,7 +17,7 @@ export const estimatedBlockSize = (ports: readonly PortDefinition[]): Size => {
 };
 
 export type FrameResizePreview = { key: string; frame: Rect };
-type Frame = { base: Rect; display: Rect; saved: boolean; insets: ReturnType<typeof frameInsets> };
+type Frame = { base: Rect; display: Rect; saved?: Rect; insets: ReturnType<typeof frameInsets> };
 export type TopologyItem = {
   item: ResolvedInstance;
   key: string;
@@ -72,7 +72,7 @@ export function projectTopology(project: Project, instances: readonly ResolvedIn
         : fitModuleFrame(compact, insets);
       const preview = resizePreview?.key === key ? resizePreview.frame : undefined;
       const display = { ...(preview ?? base) };
-      const frame = { base, display, saved: !!saved, insets };
+      const frame = { base, display, saved, insets };
       if (current) {
         current.frame = frame;
         if (preview) {
