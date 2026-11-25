@@ -28,7 +28,10 @@ function portPreview(form: HTMLFormElement, seed: PortDefinition, owner: Resolve
   return { name, type, direction };
 }
 
+export type PortManagerMode = 'create' | 'manage';
+
 type PortManagerProps = {
+  initialMode: PortManagerMode;
   owner: ResolvedInstance; name: string; locations: readonly string[]; store: ProjectStore;
   added: (id: string) => void; close: () => void;
 };
@@ -39,9 +42,9 @@ export function PortManagerDialog(props: PortManagerProps) {
     ? <WdmPortDialog {...props} definition={definition} /> : <StandardPortDialog {...props} />;
 }
 
-function StandardPortDialog({ name, owner, locations, store, added, close }: PortManagerProps) {
+function StandardPortDialog({ initialMode, name, owner, locations, store, added, close }: PortManagerProps) {
   const { ports, id: definitionId } = owner.definition;
-  const [selected, setSelected] = useState<string | undefined>(ports[0]?.id);
+  const [selected, setSelected] = useState<string | undefined>(initialMode === 'create' ? undefined : ports[0]?.id);
   const [revision, setRevision] = useState(0);
   const [preview, setPreview] = useState<PortPreview>({ name: '新建端口', type: 'RF', direction: 'in' });
   const [deletion, setDeletion] = useState<string>();

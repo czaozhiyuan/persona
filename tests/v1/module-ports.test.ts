@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { createServer } from 'vite';
 import { buildSignalGraph, signalPortKey } from '../../src/engine/v1/signal-graph';
 import { addDefinitionPort, connectBoundaryPort, exposeModulePort, renamePort, updateDefinitionPort } from '../../src/state/v1/module-ports';
 import { createProjectStore } from '../../src/state/v1/project-store';
@@ -17,6 +20,27 @@ const incoming = { id: 'external-wire', from: { instanceId: 'external-rf', portI
 const addSource = (project: ReturnType<typeof sample>) => editModule(project, project.rootModuleDefinitionId, module => ({
   ...module, instances: [...module.instances, { id: 'external-rf', name: '外部射频源', definitionId: 'rf-source' }],
 }));
+
+test('port manager opens a new draft or the first existing port according to the entry point', async t => {
+  const vite = await createServer({ server: { middlewareMode: true, ws: false, watch: null },
+    optimizeDeps: { noDiscovery: true, include: [] }, appType: 'custom' });
+  t.after(() => vite.close());
+  const { PortManagerDialog } = await vite.ssrLoadModule('/src/workbench/v1/properties/add-port-dialog.tsx') as
+    typeof import('../../src/workbench/v1/properties/add-port-dialog');
+  const store = createProjectStore(sample());
+  const owner = store.resolveInstance(['TX_A'])!;
+  const dialog = (initialMode: 'create' | 'manage') => renderToStaticMarkup(createElement(PortManagerDialog, {
+    initialMode, owner, name: '发射机箱 A', locations: [], store, close() {}, added() {},
+  }));
+  const create = dialog('create');
+  assert.match(create, /<h4>新建端口<\/h4>/);
+  assert.match(create, /未保存/);
+  assert.doesNotMatch(create, /删除端口/);
+  const manage = dialog('manage');
+  assert.match(manage, /aria-pressed="true"><strong>光输出<\/strong>/);
+  assert.match(manage, /删除端口/);
+  assert.doesNotMatch(manage, /未保存/);
+});
 
 test('exposure changes the shared definition once and rejects a target outside the immediate layer', () => {
   const project = sample();
