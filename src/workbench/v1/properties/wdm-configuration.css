@@ -1,0 +1,7 @@
+.v1-wdm-dialog { width: min(48rem, 94vw); max-height: 88vh; overflow: auto; }
+.v1-wdm-config { display: grid; gap: .65rem; }
+.v1-wdm-config h4, .v1-wdm-config p { margin: 0; }
+.v1-wdm-config fieldset { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto auto; align-items: end; gap: .5rem; }
+.v1-wdm-config label { display: grid; gap: .25rem; min-width: 0; }
+.v1-wdm-config input { min-width: 0; }
+@media (max-width: 640px) { .v1-wdm-config fieldset { grid-template-columns: 1fr 1fr; } }

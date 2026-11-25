@@ -6,6 +6,7 @@ import { isPowerPort, isSupplyOutput, supportsDirection } from './types';
 import type { ComponentDefinition, PortDefinition, PortType } from './types';
 import { validateChannelIds, validateEmpirical, validateRange } from './validate-parameters';
 import { indexById, requireValid } from './validation';
+import { validateWdm } from './wdm';
 
 function validateDcValue(value: DcValue | undefined, unit: 'V' | 'A' | 'W' | 'ratio', parameters: ReadonlyMap<string, ParameterDefinition>, context: string) {
   if (value === undefined) return;
@@ -81,6 +82,7 @@ export function validateDevice(
   definition: ComponentDefinition, ports: ReadonlyMap<string, PortDefinition>,
   parameters: ReadonlyMap<string, ParameterDefinition>,
 ): void {
+  if (definition.wdm) validateWdm(definition);
   function validateRoute(route: Transfer, context: string) {
     const from = ports.get(route.fromPortId);
     const to = ports.get(route.toPortId);
