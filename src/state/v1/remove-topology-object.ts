@@ -1,13 +1,10 @@
 import { resolveHierarchy } from '../../engine/v1/hierarchy';
-import type { InstancePath, Project } from '../../model/v1/types';
+import type { InstancePath, Project, WireRef } from '../../model/v1/types';
 import { editModuleWiring } from './topology-edits';
 
-export type WiringSelection =
-  | { kind: 'connection'; id: string }
-  | { kind: 'mapping'; id: string }
-  | { kind: 'core'; id: string; bundleId: string };
+export type { WireRef as WiringSelection } from '../../model/v1/types';
 
-export function removeWiring(project: Project, moduleId: string, wire: WiringSelection): Project {
+export function removeWiring(project: Project, moduleId: string, wire: WireRef): Project {
   return editModuleWiring(project, moduleId, module => {
     if (wire.kind === 'connection') return { ...module, connections: module.connections?.filter(item => item.id !== wire.id) };
     if (wire.kind === 'mapping') return { ...module, portMappings: module.portMappings?.filter(item => item.portId !== wire.id) };

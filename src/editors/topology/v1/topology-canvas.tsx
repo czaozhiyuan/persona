@@ -1,3 +1,4 @@
+import { wireRouteKey } from '../../../model/v1/wire-route';
 import { createPortal } from 'react-dom';
 import { Background, ConnectionMode, ReactFlow, ReactFlowProvider, useKeyPress, useStoreApi, useUpdateNodeInternals, ViewportPortal } from '@xyflow/react';
 import type { Connection as FlowConnection, CoordinateExtent, Node, NodeProps, OnConnectStartParams, ReactFlowInstance, Rect, Viewport, XYPosition } from '@xyflow/react';
@@ -159,6 +160,7 @@ type Props = {
   cancelPlacement: () => void;
   add: (item: LibraryItem, position: XYPosition) => boolean;
   deleteInstances: (paths: readonly InstancePath[], preserve: (project: Project, parentIds: ReadonlySet<string>) => Project) => void;
+  route: (scope: InstancePath, wire: WiringSelection, point?: XYPosition) => void;
   deleteWiring: (path: InstancePath, wire: WiringSelection) => boolean;
   rename: () => void;
   copyModule: () => boolean;
@@ -175,7 +177,7 @@ export function TopologyCanvas(props: Props) {
 
 function EditableTopologyCanvas({ project, instances, modulePath, selectedInstance, selectedPaths, pathResult, budgetHighlight, expanded,
   toggleModule, selectObject, selectObjects, enterModule, reparent, focusMoved, move, resize, connect, mapPort, add, placingModule, cancelPlacement,
-  deleteInstances, deleteWiring, rename, copyModule, pasteModule, centerPlacement, report, undo, redo, openPort, onAddPort, newPort,
+  deleteInstances, deleteWiring, route, rename, copyModule, pasteModule, centerPlacement, report, undo, redo, openPort, onAddPort, newPort,
   depth, fullPage, toggleFullPage, restoreView, viewHost, topologyActive }: Props) {
   const flowStore = useStoreApi<CanvasNode, WiringEdge>();
   const boxSelection = useRef<readonly InstancePath[] | undefined>(undefined);
@@ -215,6 +217,9 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
   const highlights = useMemo(() => new Map([...scopes].map(([key, { path }]) =>
     [key, projectPathHighlight(pathResult, path, budgetHighlight)])), [scopes, pathResult, budgetHighlight]);
   const { ports, edges } = useMemo(() => projectWiring(projection, highlights), [projection, highlights]);
+
+  const routes = useMemo(() => new Map(project.layout?.topologyWireRoutes?.map(r => [wireRouteKey(r.modulePath, r.wire), r])),
+    [project.layout?.topologyWireRoutes]);
 
   const changeViewport = useCallback((requested: Viewport) => {
     const displayed = flow.current?.getNodes() ?? [];
@@ -640,7 +645,7 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
           deleteInstances(targets, (next, parentIds) => preserveDeletionLayout(next, parentIds, projection, modulePath, expanded, measured));
         } else if (selectedWiring && selectedWiring.data) {
           event.preventDefault();
-          if (deleteWiring(selectedWiring.data.scope, selectedWiring.data)) setSelectedEdgeKey(undefined);
+          if (deleteWiring(selectedWiring.data.scope, selectedWiring.data.wire)) setSelectedEdgeKey(undefined);
         }
       } else if (event.ctrlKey || event.metaKey) {
         const key = event.key.toLowerCase();
@@ -658,6 +663,21 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     }
     window.addEventListener('keydown', keyboard);
     return () => window.removeEventListener('keydown', keyboard);
+  });
+
+  const renderedEdges = edges.map(edge => {
+    const data = edge.data!;
+    const key = hierarchyKey(data.scope);
+    const frame = nodeByKey.get(key)?.frame;
+    const origin = frameOrigins.get(nodeId(key));
+    const dx = origin && frame ? origin.x - frame.display.x : 0;
+    const dy = origin && frame ? origin.y - frame.display.y : 0;
+    const saved = routes.get(edge.id);
+    const selected = selectedWiring === edge;
+    return { ...edge, selected, data: { ...data,
+      routePoint: saved && { x: saved.x + dx, y: saved.y + dy },
+      savePoint: selected ? (p?: XYPosition) => route(data.scope, data.wire, p && { x: p.x - dx, y: p.y - dy }) : undefined,
+    } };
   });
 
   function switchFullPage() {
@@ -680,7 +700,7 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
       const item = readLibraryItem(event.dataTransfer);
       if (item) placeAt(item, { x: event.clientX, y: event.clientY });
     }}>
-    <ReactFlow<CanvasNode, WiringEdge> nodes={nodes} edges={edges.map(edge => ({ ...edge, selected: selectedWiring === edge }))}
+    <ReactFlow<CanvasNode, WiringEdge> nodes={nodes} edges={renderedEdges}
       nodeTypes={nodeTypes} edgeTypes={edgeTypes} ariaLabelConfig={flowAriaLabels} fitView={fitInitialNodes} defaultViewport={initialViewport} fitViewOptions={canvasFitOptions}
       viewport={viewport} onViewportChange={changeViewport} onInit={instance => { flow.current = instance; }}
       minZoom={0.001} maxZoom={2} deleteKeyCode={null} connectionMode={ConnectionMode.Loose}

@@ -1,3 +1,4 @@
+import { retainWireRoutes } from './wire-routes';
 import { resolveHierarchy } from '../../engine/v1/hierarchy';
 import type { InstancePath, Project, TopologyPlacement } from '../../model/v1/types';
 import { validateProjectSnapshot } from '../../storage/v1/project-json';
@@ -96,7 +97,7 @@ function applyMove(project: Project, sources: readonly InstancePath[], destinati
   const layout = project.layout;
   const topology = layout?.topology?.map(atInstance);
   const position = options.position;
-  const candidate: Project = {
+  const candidate = retainWireRoutes(project, {
     ...project,
     moduleDefinitions: project.moduleDefinitions.map(module =>
       module.id === nextFrom.id ? nextFrom : module.id === nextTo.id ? nextTo : module),
@@ -127,7 +128,7 @@ function applyMove(project: Project, sources: readonly InstancePath[], destinati
         ...atInstance(placement), enclosurePath: remap(placement.enclosurePath),
       })),
     },
-  };
+  }, remap);
   validateProjectSnapshot(candidate);
   return { project: candidate, instancePath, instancePaths, affected,
     wiring: { retained: wiring.retained, disconnected: wiring.disconnected } };

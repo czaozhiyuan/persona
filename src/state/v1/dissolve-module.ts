@@ -1,3 +1,4 @@
+import { retainWireRoutes } from './wire-routes';
 import { portDisplayName } from '../../model/v1/display-names';
 import { resolveHierarchy } from '../../engine/v1/hierarchy';
 import type { LocalEndpointRef } from '../../model/v1/topology';
@@ -130,7 +131,7 @@ function dissolve(project: Project, source: InstancePath) {
     topology = [...topologyByPath.values()];
   }
 
-  const candidate: Project = {
+  const candidate = retainWireRoutes(project, {
     ...project,
     moduleDefinitions: stillUsed ? moduleDefinitions : moduleDefinitions.filter(item => item.id !== container.id),
     namedLinks: project.namedLinks?.map(link => remapLinkReferences(link, remap, atPort, ref => {
@@ -149,7 +150,7 @@ function dissolve(project: Project, source: InstancePath) {
       topologyFrames: layout?.topologyFrames?.filter(item => !isContainer(item.modulePath))
         .map(item => ({ ...item, modulePath: remap(item.modulePath) })),
     },
-  };
+  }, remap);
   validateProjectSnapshot(candidate);
   return {
     project: candidate, parentPath, source,

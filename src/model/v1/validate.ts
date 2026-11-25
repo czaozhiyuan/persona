@@ -1,3 +1,4 @@
+import { wireEndpoints, wireRouteKey } from './wire-route';
 import { isSupplyOutput } from './types';
 import type { Instance, InstancePath, ModuleDefinition, PhysicalFootprint, PortDefinition, Project } from './types';
 import type { ParameterDefinition } from './parameters';
@@ -202,6 +203,15 @@ export function validateProject(project: Project): void {
     requireValid(!positions.has(key), `拓扑位置重复: ${key}`);
     requireValid(Number.isFinite(placement.x) && Number.isFinite(placement.y), `拓扑坐标无效: ${key}`);
     positions.add(key);
+  }
+  const routes = new Set<string>();
+  for (const route of project.layout?.topologyWireRoutes ?? []) {
+    const key = wireRouteKey(route.modulePath, route.wire);
+    const owner = definitionAtPath(route.modulePath);
+    requireValid(owner?.kind === 'module' && wireEndpoints(owner, route.wire), '手动轨迹必须引用当前模块中已连接的线。');
+    requireValid(!routes.has(key), '同一连线的手动轨迹重复。');
+    requireValid(Number.isFinite(route.x) && Number.isFinite(route.y), '手动轨迹坐标必须是有限数值。');
+    routes.add(key);
   }
   const frames = new Set<string>();
   for (const frame of project.layout?.topologyFrames ?? []) {

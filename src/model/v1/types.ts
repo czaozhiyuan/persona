@@ -133,7 +133,15 @@ export type TopologyFrame = {
   height: number;
 };
 
+export type WireRef =
+  | { kind: 'connection'; id: string }
+  | { kind: 'mapping'; id: string }
+  | { kind: 'core'; id: string; bundleId: string };
+
+export type TopologyWireRoute = { modulePath: InstancePath; wire: WireRef; x: number; y: number };
+
 export type LayoutState = {
+  topologyWireRoutes?: readonly TopologyWireRoute[];
   physical?: readonly PhysicalPlacement[];
   topology?: readonly TopologyPlacement[];
   topologyFrames?: readonly TopologyFrame[];

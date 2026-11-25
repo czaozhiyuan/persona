@@ -47,14 +47,17 @@ export function pasteModule(project: Project, copiedProject: Project, sourcePath
     .map(item => ({ ...item, instancePath: remap(item.instancePath) }));
   const topologyFrames = copiedLayout?.topologyFrames?.filter(item => contains(item.modulePath))
     .map(item => ({ ...item, modulePath: remap(item.modulePath) }));
+  const routes = copiedLayout?.topologyWireRoutes?.filter(item => contains(item.modulePath))
+    .map(item => ({ ...item, modulePath: remap(item.modulePath) }));
   const physical = copiedLayout?.physical?.filter(item => contains(item.instancePath) && contains(item.enclosurePath))
     .map(item => ({ ...item, instancePath: remap(item.instancePath), enclosurePath: remap(item.enclosurePath) }));
   const candidate: Project = {
     ...copy.project,
     instanceSettings: localSettings.length ? [...settings, ...localSettings] : project.instanceSettings,
-    layout: layout || topology?.length || topologyFrames?.length || physical?.length ? {
+    layout: layout || topology?.length || topologyFrames?.length || routes?.length || physical?.length ? {
       ...layout,
       topology: topology?.length ? [...(layout?.topology ?? []), ...topology] : layout?.topology,
+      topologyWireRoutes: routes?.length ? [...(layout?.topologyWireRoutes ?? []), ...routes] : layout?.topologyWireRoutes,
       topologyFrames: topologyFrames?.length ? [...(layout?.topologyFrames ?? []), ...topologyFrames] : layout?.topologyFrames,
       physical: physical?.length ? [...(layout?.physical ?? []), ...physical] : layout?.physical,
     } : undefined,

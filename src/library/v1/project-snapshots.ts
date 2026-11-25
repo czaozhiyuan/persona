@@ -1,3 +1,4 @@
+import { retainWireRoutes } from '../../state/v1/wire-routes';
 import { copyDefinitionTree } from '../../state/v1/copy-definition-tree';
 import type { ComponentDefinition, Instance, ModuleDefinition, Project } from '../../model/v1/types';
 import { projectErrorMessage, validateProjectSnapshot } from '../../storage/v1/project-json';
@@ -83,8 +84,9 @@ export function previewTemplateUpdate(project: Project, library: readonly Librar
     : [];
   try {
     const candidate = updateSnapshot(project, library, templateId);
-    validateProjectSnapshot(candidate.project);
-    return { ok: true as const, project: candidate.project, changes: candidate.changes,
+    const updated = retainWireRoutes(project, candidate.project);
+    validateProjectSnapshot(updated);
+    return { ok: true as const, project: updated, changes: candidate.changes,
       definitionChanges: describeDefinitionChanges(current, candidate.root) };
   } catch (error) {
     return { ok: false as const, message: projectErrorMessage(error, project), removedPorts };
