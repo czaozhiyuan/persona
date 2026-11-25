@@ -13,7 +13,8 @@ import { endpoint, fixed, local, wdmProject } from './fixtures/wdm-project';
 
 const numeric = (metric: BudgetMetric) => { assert.equal(metric.availability, 'available'); return metric.value; };
 function near(actual: BudgetMetric, expected: number) {
-  assert.ok(Math.abs(numeric(actual) - expected) < 1e-9, `${numeric(actual)} != ${expected}`);
+  const value = numeric(actual);
+  assert.ok(value === expected || Math.abs(value - expected) < 1e-9, `${value} != ${expected}`);
 }
 function trunk(modulated: boolean, percent: number) {
   const p = wdmProject(modulated), root = p.moduleDefinitions[0];
@@ -142,13 +143,17 @@ test('a dark splitter branch has zero power even with unknown launch power; a tr
   }
 });
 
-test('a split and rejoined carrier uses its transmitting leg for named and local budgets, respecting explicit dark routes', () => {
-  for (const ratio of [100, 0, 50]) {
-    const p = combiner(50, 1, false), root = p.moduleDefinitions[0];
+test('split and rejoined power follows the number of transmitting legs and explicit route constraints', () => {
+  const ratios = [0, 50, 100];
+  const pairs = ratios.flatMap(ratio => ratios.map(mergeRatio => [ratio, mergeRatio]));
+  for (const [ratio, mergeRatio] of pairs) for (const legs of [[], [1], [2], [1,2]]) {
+    const share = (leg: number) => leg === 1 ? ratio * mergeRatio / 10000 : (100 - ratio) * (100 - mergeRatio) / 10000;
+    const active = legs.filter(leg => share(leg) > 0);
+    const p = combiner(mergeRatio, 1, false), root = p.moduleDefinitions[0];
     root.instances = [...root.instances, { id: 'divider', name: 'Divider', definitionId: 'library-splitter',
       parameterOverrides: { firstPercent: fixed(ratio) } }];
     root.connections = [root.connections![1], { id: 'launch', from: local('A','COM'), to: local('divider','OPT_IN') },
-      ...[1,2].map(i => ({ id: 'leg' + i, from: local('divider','OPT_OUT_' + i), to: local('split','OPT_OUT_' + i) }))];
+      ...legs.map(i => ({ id: 'leg' + i, from: local('divider','OPT_OUT_' + i), to: local('split','OPT_OUT_' + i) }))];
     const resolver = createPathResolver(p), optical = createOpticalBudget(p), budget = createLinkBudget(p);
     const mux = createMultiplexPower(resolver.graph), trial = { frequencyGHz: 15, inputPowerDbm: -20 };
     for (const [index, receiver] of [[0, 'B'], [2, 'A']] as const) {
@@ -156,8 +161,16 @@ test('a split and rejoined carrier uses its transmitting leg for named and local
       const localPower = index === 0 ? optical.calculateLocal({ eo: { instancePath: ['A','mzm'], fromPortId: 'RF_IN', toPortId: 'OPT_OUT' },
         sources: [], channelId, to }) : optical.calculateLocal({ source: { endpoint: endpoint('B','wave2','OPT_OUT'), channelId }, to });
       const named = resolver.resolveNamedLink(link), rf = budget.calculateNamedLink(link, trial);
-      const wave = mux.readWave(endpoint(receiver,'wdm','COM'), channelId, 'in')!;
-      if (ratio === 50) {
+      const wave = mux.readWave(endpoint(receiver,'wdm','COM'), channelId, 'in');
+      if (!legs.length) {
+        assert.equal(named.status, 'unreachable');
+        assert.equal(localPower.pathIssue?.status, 'unreachable');
+        assert.equal(wave, undefined);
+        assert.equal(rf.powerDbm.availability, 'unavailable');
+        continue;
+      }
+      assert.ok(wave);
+      if (active.length > 1) {
         assert.equal(named.status, 'ambiguous');
         assert.equal(localPower.pathIssue?.status, 'ambiguous');
         assert.equal(wave.power.availability, 'unavailable');
@@ -165,21 +178,26 @@ test('a split and rejoined carrier uses its transmitting leg for named and local
         continue;
       }
       assert.equal(named.status, 'resolved');
-      const lightLeg = ratio === 100 ? 1 : 2;
-      assert.ok(named.trace.edges.some(e => e.source.kind === 'connection' && e.source.ref.connectionId === 'leg' + lightLeg));
-      const splitLoss = 10 * Math.log10(2);
-      const pdDbm = -4 - splitLoss - (index === 0 ? splitLoss : 0);
+      assert.equal(rf.kind, 'conversion');
+      const tracedLegs = named.trace.edges.flatMap(e => e.source.kind === 'connection' && e.source.ref.connectionId.startsWith('leg')
+        ? [e.source.ref.connectionId] : []);
+      assert.deepEqual(tracedLegs, (legs.length === 1 ? legs : active).map(leg => 'leg' + leg));
+      const basePd = -4 - (index === 0 ? 10 * Math.log10(2) : 0);
+      const baseRf = index === 0 ? -66.01580271955808 : -29.938200260161125;
+      const gain = 10 * Math.log10(active.length ? share(active[0]) : 0);
+      const pdDbm = basePd + gain;
       near(wave.power, pdDbm + 1);
       near(localPower.powerDbm, pdDbm);
-      assert.equal(rf.kind, 'conversion');
       near(rf.segments[0].pdPowerDbm, pdDbm);
-      near(rf.powerDbm, (index === 0 ? -66.01580271955808 : -29.938200260161125) - 2 * splitLoss);
-      const forced = { ...link, via: [{ scopePath: [], connectionId: 'leg' + (3 - lightLeg) }] };
-      assert.equal(resolver.resolveNamedLink(forced).status, 'resolved');
-      const dark = budget.calculateNamedLink(forced, trial);
-      assert.equal(dark.kind, 'conversion');
-      assert.equal(numeric(dark.segments[0].pdPowerDbm), -Infinity);
-      assert.equal(numeric(dark.powerDbm), -Infinity);
+      near(rf.powerDbm, baseRf + 2 * gain);
+      for (const leg of legs) {
+        const explicit = { ...link, via: [{ scopePath: [], connectionId: 'leg' + leg }] };
+        assert.equal(resolver.resolveNamedLink(explicit).status, 'resolved');
+        const via = budget.calculateNamedLink(explicit, trial), legGain = 10 * Math.log10(share(leg));
+        assert.equal(via.kind, 'conversion');
+        near(via.segments[0].pdPowerDbm, basePd + legGain);
+        near(via.powerDbm, baseRf + 2 * legGain);
+      }
     }
   }
 });

@@ -22,6 +22,7 @@ export type SignalChannels =
   | { kind: 'convert'; fromChannelId: OpticalChannelId; toChannelId: OpticalChannelId };
 
 export type SignalEdgeSource =
+  | { kind: 'darkParallelPaths'; fromFlow: PortFlow; toFlow: PortFlow }
   | { kind: 'portMapping'; publicPort: EndpointRef }
   | { kind: 'connection'; ref: ConnectionRef; mediaKind?: Connection['mediaKind']; lossDb?: number }
   | { kind: 'cableCore'; ref: CableCoreRef; aPin: number; bPin: number; lossDb?: number }
@@ -51,6 +52,7 @@ export function opticalSourceFlow(port: SignalPort): PortFlow {
 
 /** A wire leaves an output face and arrives at an input face; a mapping preserves that face. */
 export function portFlowAt(edge: SignalEdge, port: SignalPort): PortFlow {
+  if (edge.source.kind === 'darkParallelPaths') return edge.from === port ? edge.source.fromFlow : edge.source.toFlow;
   if (edge.source.kind === 'portMapping') return edge.from.ref === edge.source.publicPort ? 'in' : 'out';
   if (edge.source.kind === 'connection' || edge.source.kind === 'cableCore') return edge.from === port ? 'out' : 'in';
   return edge.from === port ? 'in' : 'out';

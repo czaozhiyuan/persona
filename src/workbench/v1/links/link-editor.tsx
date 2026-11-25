@@ -53,14 +53,16 @@ const supplyLabels = { resolved: '供光路径已解析', missing: '缺少供光
 function Diagnostics({ result, showEndpoint, locate }: {
   result: PathResult; showEndpoint: LinkOptions['showEndpoint']; locate: (endpoint: EndpointRef) => void;
 }) {
+  const parallelDark = result.trace?.edges.some(edge => edge.source.kind === 'darkParallelPaths');
   return <div className="v1-link-diagnostics" role="status" data-path-status={result.status}>
     <strong>{statusLabels[result.status]}</strong>
+    {parallelDark && <p>分路后重汇的光路均无光。</p>}
     {result.status !== 'resolved' && <p>
       {result.status === 'incomplete' ? (result.endpoint ? '对外端口尚未连接到内部' : '缺少起点或终点') : result.reason}
       {result.endpoint && ` · ${showEndpoint(result.endpoint)}`}
     </p>}
     {result.trace && <details>
-      <summary>主路径 · {result.trace.edges.length} 条边</summary>
+      <summary>{parallelDark ? '各支路共有的端口' : `主路径 · ${result.trace.edges.length} 条边`}</summary>
       <ol>{result.trace.steps.map((step, index) => <li key={index}>
         <EndpointLocation endpoint={step.port.ref} label={showEndpoint(step.port.ref)} locate={locate} />{step.channelIds?.length ? ` · ${step.channelIds.join(' / ')}` : ''}
       </li>)}</ol>

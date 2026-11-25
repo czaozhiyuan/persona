@@ -163,6 +163,11 @@ export function createOpticalBudgetForGraph(graph: SignalGraph, sharedOrigins?: 
 
   function advance(stages: OpticalStage[], edge: SignalEdge, gainDb: BudgetMetric<'dB'>, origins?: OriginLookup) {
     const previous = stages.at(-1)!;
+    if (edge.source.kind === 'darkParallelPaths') {
+      const gain = logZero('dB');
+      stages.push(stage(edge.to, previous.channelId, logZero('dBm'), { edge, gainDb: gain }));
+      return gain;
+    }
     const common = commonPorts.size ? commonPorts.get(signalPortKey(edge.to.ref)) : undefined;
     if (previous.channelId && common && origins) {
       const carriers = origins(common, previous.channelId, portFlowAt(edge, edge.to));
