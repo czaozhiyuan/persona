@@ -12,9 +12,8 @@ import { hierarchyKey } from './hierarchy-view';
 import { frameInsets, framePadding } from './module-frame';
 import { groupDragBounds, placeDropGroup } from './reparent-drop';
 import { estimatedBlockSize, projectTopology } from './topology-projection';
-import { applyExpansionLayout, type ExpansionLayout } from './inline-expansion-layout';
 
-export type Projection = ReturnType<typeof projectTopology> & { expansionPreview?: ExpansionLayout };
+export type Projection = ReturnType<typeof projectTopology>;
 
 export function captureTopologyObjects(project: Project, paths: readonly InstancePath[], view: Projection) {
   const roots = outermostPaths(paths.filter(path => path.length && hierarchyKey(path) !== view.rootKey));
@@ -34,7 +33,7 @@ export function captureTopologyObjects(project: Project, paths: readonly Instanc
     const { width, height } = node.frame?.display ?? node.bounds;
     return { path, key, bounds: { x, y, width, height }, parentOrigin: { x: x - node.bounds.x, y: y - node.bounds.y } };
   });
-  return { project: applyExpansionLayout(project, view.expansionPreview), objects, bounds: groupDragBounds(objects) };
+  return { project, objects, bounds: groupDragBounds(objects) };
 }
 
 export type ObjectClipboard = ReturnType<typeof captureTopologyObjects>;
@@ -46,7 +45,7 @@ export function pasteInView(project: Project, clipboard: ObjectClipboard, destin
     path, id: ids[i], position: { x: bounds.x + delta.x, y: bounds.y + delta.y },
     routeOffset: { x: parentOrigin.x + delta.x, y: parentOrigin.y + delta.y },
   }));
-  const copied = pasteTopologyObjects(applyExpansionLayout(project, view.expansionPreview), clipboard.project, roots, destination, nextId);
+  const copied = pasteTopologyObjects(project, clipboard.project, roots, destination, nextId);
   return growFrameToFit(copied, { ...clipboard.bounds, ...position }, view);
 }
 
@@ -90,25 +89,36 @@ export type CenterPlacement = (definition: { ports: readonly PortDefinition[] },
   position: XYPosition; projection: Projection;
 } | undefined;
 
-function growFrameToFit(project: Project, bounds: Rect, view: Projection) {
+function growFrameToFit(project: Project, bounds: Rect, view: Projection, parentKey = view.rootKey) {
   let result = project;
-  const root = view.nodeByKey.get(view.rootKey);
+  const root = view.nodeByKey.get(parentKey);
   if (!root?.frame) return result;
 
-  const frame = root.frame.display;
+  const frame = root.frame.base;
   const insets = root.frame.insets;
   const x = Math.min(frame.x, bounds.x - insets.left);
   const y = Math.min(frame.y, bounds.y - insets.top);
   const width = Math.max(frame.x + frame.width, bounds.x + bounds.width + insets.right) - x;
   const height = Math.max(frame.y + frame.height, bounds.y + bounds.height + framePadding) - y;
-  const base = root.frame.base;
-  if (root.frame.saved && x === base.x && y === base.y && width === base.width && height === base.height) return result;
+  if (root.frame.saved && x === frame.x && y === frame.y && width === frame.width && height === frame.height) return result;
 
   // Growing the frame can release a previously clamped child. Keep its visible location.
-  const pinned = view.scopes.get(view.rootKey)!.members.flatMap(({ preferred, bounds, item }) =>
+  const pinned = view.scopes.get(parentKey)!.members.flatMap(({ preferred, bounds, item }) =>
     preferred.x === bounds.x && preferred.y === bounds.y ? [] : [{ instancePath: item.instancePath, x: bounds.x, y: bounds.y }]);
   result = moveTopologyNodes(result, pinned);
   return resizeTopologyFrame(result, { modulePath: root.item.instancePath, x, y, width, height });
+}
+
+export function moveInView(project: Project, moves: readonly TopologyPlacement[], manual: Projection) {
+  if (!moves.length) return project;
+  const parentKey = hierarchyKey(moves[0].instancePath.slice(0, -1));
+  // Persist space for the dragged cards at the drop, using the parent's compact manual frame.
+  const cards = moves.map(move => {
+    const key = hierarchyKey(move.instancePath);
+    const { width, height } = manual.nodeByKey.get(key)!.bounds;
+    return { key, bounds: { x: move.x, y: move.y, width, height } };
+  });
+  return moveTopologyNodes(growFrameToFit(project, groupDragBounds(cards), manual, parentKey), moves);
 }
 
 export function insertCanvasItem(project: Project, item: LibraryItem, moduleId: string, modulePath: InstancePath,
@@ -125,7 +135,7 @@ export function insertCanvasItem(project: Project, item: LibraryItem, moduleId: 
     ?? updated.moduleDefinitions.find(item => item.id === child.definitionId)!;
   if (typeof placement === 'function') {
     const centered = placement(definition, child.name);
-    if (centered) return growFrameToFit(moveTopologyNode(applyExpansionLayout(updated, centered.projection.expansionPreview), [...modulePath, instanceId], centered.position),
+    if (centered) return growFrameToFit(moveTopologyNode(updated, [...modulePath, instanceId], centered.position),
       { ...centered.position, ...estimatedBlockSize(definition.ports) }, centered.projection);
   }
   if (!frame) return updated;

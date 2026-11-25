@@ -3,7 +3,7 @@ import type { Project, TopologyFrame, TopologyPlacement } from '../../../model/v
 import { moveTopologyNodes, resizeTopologyFrame } from '../../../state/v1/topology-edits';
 import { keepNodeInside, moduleExtent } from './frame-geometry';
 import { framePadding } from './module-frame';
-import type { projectTopology } from './topology-projection';
+import { projectTopology } from './topology-projection';
 
 const right = (r: Rect) => r.x + r.width;
 const bottom = (r: Rect) => r.y + r.height;
@@ -12,15 +12,20 @@ const overlaps = (a: Rect, b: Rect) =>
 
 export type ExpansionLayout = { moves: TopologyPlacement[]; frames: TopologyFrame[] };
 
-export function applyExpansionLayout(project: Project, layout?: ExpansionLayout) {
-  return layout ? layout.frames.reduce(resizeTopologyFrame, moveTopologyNodes(project, layout.moves)) : project;
+export function applyExpansionLayout(project: Project, layout: ExpansionLayout) {
+  return layout.frames.reduce(resizeTopologyFrame, moveTopologyNodes(project, layout.moves));
 }
 
-export function extendExpansionLayout(previous: ExpansionLayout | undefined, next: ExpansionLayout): ExpansionLayout {
-  if (!previous) return next;
-  const moves = new Map([...previous.moves, ...next.moves].map(item => [JSON.stringify(item.instancePath), item]));
-  const frames = new Map([...previous.frames, ...next.frames].map(item => [JSON.stringify(item.modulePath), item]));
-  return { moves: [...moves.values()], frames: [...frames.values()] };
+export function projectInlineExpansion(...args: Parameters<typeof projectTopology>) {
+  const [project, instances, scope, expanded, measured, resizePreview, portHeights] = args;
+  const manual = projectTopology(project, instances, scope, expanded, measured, undefined, portHeights);
+  const opened = new Set(manual.scopes.keys());
+  opened.delete(manual.rootKey);
+  const layout = planInlineExpansion(manual, opened);
+  const displayed = applyExpansionLayout(project, layout);
+  const view = displayed === project && !resizePreview ? manual
+    : projectTopology(displayed, instances, scope, expanded, measured, resizePreview, portHeights);
+  return { manual, view, layout };
 }
 
 function nearestSlot(card: Rect, obstacles: readonly Rect[], extent: CoordinateExtent): Rect {

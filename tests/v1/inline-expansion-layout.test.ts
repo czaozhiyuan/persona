@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { hierarchyKey } from '../../src/editors/topology/v1/hierarchy-view';
 import { frameHeader, framePadding, type FramePortHeights } from '../../src/editors/topology/v1/module-frame';
-import { planInlineExpansion } from '../../src/editors/topology/v1/inline-expansion-layout';
+import { planInlineExpansion, projectInlineExpansion } from '../../src/editors/topology/v1/inline-expansion-layout';
+import { moveInView } from '../../src/editors/topology/v1/topology-layout-edits';
 import { projectTopology } from '../../src/editors/topology/v1/topology-projection';
 import { resolveHierarchy } from '../../src/engine/v1/hierarchy';
 import type { InstancePath, Project } from '../../src/model/v1/types';
@@ -31,10 +32,13 @@ function fixture(width: number, height: number): Project {
     },
   };
 }
-function view(project: Project, scope: InstancePath, expanded: InstancePath[], portHeights?: ReadonlyMap<string, FramePortHeights>) {
+function viewArgs(project: Project, scope: InstancePath, expanded: InstancePath[], portHeights?: ReadonlyMap<string, FramePortHeights>) {
   const instances = [...resolveHierarchy(project).walkInstances()];
   const measured = new Map(instances.map(i => [hierarchyKey(i.instancePath), { width: 84, height: 50 }]));
-  return projectTopology(project, instances, scope, new Set(expanded.map(hierarchyKey)), measured, undefined, portHeights);
+  return [project, instances, scope, new Set(expanded.map(hierarchyKey)), measured, undefined, portHeights] as const;
+}
+function view(...args: Parameters<typeof viewArgs>) {
+  return projectTopology(...viewArgs(...args));
 }
 function object(view: ReturnType<typeof projectTopology>, path: InstancePath) {
   return view.nodeByKey.get(hierarchyKey(path))!;
@@ -60,19 +64,20 @@ test('expanding a child keeps displaced devices below the measured top optical p
   assert.deepEqual(planInlineExpansion(after, key), { moves: [], frames: [] });
 });
 
-test('inline expansion pins the anchor, moves only intersecting siblings, and preserves compacted positions after reload', () => {
+test('inline expansion pins the anchor, moves only obstructing siblings, and restores the manual layout on collapse', () => {
   const project = fixture(540, 300);
   const before = view(project, [], [receiver]);
   const edit = planInlineExpansion(view(project, [], [receiver, board]), key);
   assert.deepEqual(edit.frames.map(f => f.modulePath), [receiver]);
   assert.deepEqual(edit.moves.map(m => m.instancePath.at(-1)).sort(), ['amp', 'fixed', 'pd']);
-  const changed = parseProjectJson(serializeProjectJson(apply(project, edit)));
-  const open = view(changed, [], [receiver, board]);
-  const folded = view(changed, [], [receiver]);
+  const stored = serializeProjectJson(project);
+  const open = projectInlineExpansion(...viewArgs(project, [], [receiver, board])).view;
+  const folded = projectInlineExpansion(...viewArgs(project, [], [receiver])).view;
+  assert.equal(serializeProjectJson(project), stored);
   const old = object(before, receiver).frame!.display, frame = object(open, receiver).frame!.display;
   assert.deepEqual([frame.x, frame.y], [old.x, old.y]);
   assert.ok(frame.width >= old.width && frame.height > old.height);
-  assert.deepEqual(object(folded, receiver).frame!.display, frame);
+  assert.deepEqual(object(folded, receiver).frame!.display, old);
   assert.deepEqual(object(open, board).bounds, object(before, board).bounds);
   assert.deepEqual(object(open, [...receiver, 'fixed']).bounds, object(before, [...receiver, 'fixed']).bounds);
   assert.deepEqual(object(open, ['other']).bounds, object(before, ['other']).bounds);
@@ -85,9 +90,33 @@ test('inline expansion pins the anchor, moves only intersecting siblings, and pr
       r.y + r.height <= other.y || other.y + other.height <= r.y);
   }
   for (const name of ['pd', 'amp', 'fixed']) {
-    assert.deepEqual(object(folded, [...receiver, name]).bounds, object(open, [...receiver, name]).bounds);
+    assert.deepEqual(object(folded, [...receiver, name]).bounds, object(before, [...receiver, name]).bounds);
   }
   assert.deepEqual(planInlineExpansion(open, key), { moves: [], frames: [] });
+});
+
+test('a drag from a temporary slot saves only the manual move and required compact frame growth', () => {
+  const project = fixture(540, 300);
+  const path = [...receiver, 'pd'];
+  const { manual, view: open } = projectInlineExpansion(...viewArgs(project, [], [receiver, board]));
+  assert.notDeepEqual(object(manual, path).position, object(open, path).position);
+  const drop = at(path, 480, 260);
+  const moved = parseProjectJson(serializeProjectJson(moveInView(project, [drop], manual)));
+  const stored = moved.layout!.topology!;
+  assert.deepEqual(stored.find(p => hierarchyKey(p.instancePath) === hierarchyKey(path)), drop);
+  const frame = moved.layout!.topologyFrames!.find(frame => hierarchyKey(frame.modulePath) === hierarchyKey(receiver))!;
+  assert.equal(frame.width, drop.x + 84 + framePadding - frame.x);
+  assert.equal(frame.height, drop.y + 50 + framePadding - frame.y);
+  for (const expanded of [[receiver], [receiver, board]]) {
+    const after = projectInlineExpansion(...viewArgs(moved, [], expanded)).view;
+    assert.equal(object(after, path).bounds.x, drop.x);
+    assert.equal(object(after, path).bounds.y, drop.y);
+    assertSiblingsClear(after);
+  }
+  const folded = projectInlineExpansion(...viewArgs(moved, [], [receiver])).view;
+  for (const name of ['amp', 'fixed']) {
+    assert.deepEqual(object(folded, [...receiver, name]).bounds, object(manual, [...receiver, name]).bounds);
+  }
 });
 
 test('uses free space inside the current editing scope and leaves an already clear layout untouched', () => {
@@ -111,7 +140,9 @@ test('expanding several levels together grows all enclosing frames and releases 
   assert.ok(edit.moves.some(m => hierarchyKey(m.instancePath) === '["outside"]'));
   const saved = apply(project, edit);
   assert.deepEqual(planInlineExpansion(view(saved, [], expanded), opened), { moves: [], frames: [] });
-  assert.deepEqual(object(view(saved, [], []), []).frame!.display, object(view(saved, [], expanded), []).frame!.display);
+  const folded = projectInlineExpansion(...viewArgs(project, [], [])).view;
+  assert.deepEqual(object(folded, []).frame!.display, view(project, [], []).nodeByKey.get('[]')!.frame!.display);
+  assert.ok(object(view(saved, [], expanded), []).frame!.display.height > object(folded, []).frame!.display.height);
 });
 
 function displayedBounds(projection: ReturnType<typeof view>, path: InstancePath) {
