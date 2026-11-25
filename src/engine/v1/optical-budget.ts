@@ -1,6 +1,6 @@
 import { createPathNames } from './path-names';
 import { portDisplayName } from '../../model/v1/display-names';
-import { addSourceCarrier, cascadedModulation, findOpticalSupply, selectOpticalSource } from './optical-supply';
+import { addSourceCarrier, cascadedModulation, findOpticalSupply, incompatibleSource, selectOpticalSource } from './optical-supply';
 import type { Carrier } from './path-search';
 import { resolveOpticalChannel } from '../../model/v1/channels';
 import type { OpticalChannelId } from '../../model/v1/channels';
@@ -278,6 +278,7 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
       if (path.status === 'resolved') candidate = getSupply(path.path.steps[0].channelIds);
     }
     if (candidate.status === 'cascaded_modulation') return fail('unreachable', supply.ref, cascadedModulation);
+    if (candidate.status === 'incompatible_source') return fail('missing_supply', supply.ref, incompatibleSource);
     if (candidate.status !== 'resolved') return pathFailure(candidate, supply, [], true);
     const first = candidate.path.steps[0];
     const source = selectOpticalSource(first, sources);

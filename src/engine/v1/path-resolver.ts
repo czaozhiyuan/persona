@@ -1,4 +1,4 @@
-import { addSourceCarrier, cascadedModulation, findOpticalSupply } from './optical-supply';
+import { addSourceCarrier, cascadedModulation, findOpticalSupply, incompatibleSource } from './optical-supply';
 import { resolveOpticalChannel } from '../../model/v1/channels';
 import type { OpticalChannelId } from '../../model/v1/channels';
 import type { CableCoreRef, NamedLink } from '../../model/v1/topology';
@@ -18,7 +18,7 @@ export type PathOptions = {
 type ConversionStep = { kind: 'eo' | 'dml' | 'oe'; edgeIndex: number };
 type SupplyBranch = { edgeIndex: number; endpoint: EndpointRef } & (
   | { status: 'resolved'; path: SignalPath }
-  | { status: 'missing' | 'ambiguous' | 'feedback_loop' | 'search_limit'; channelPort?: EndpointRef }
+  | { status: 'missing' | 'ambiguous' | 'feedback_loop' | 'search_limit'; channelPort?: EndpointRef; reason?: string }
 );
 
 export type PathTrace = SignalPath & {
@@ -89,6 +89,10 @@ export function createPathResolver(project: Project) {
       const supply = findOpticalSupply(graph, outgoing, edge.supply, steps[edgeIndex + 1].channelIds, sources);
       const endpoint = edge.supply.ref;
       if (supply.status === 'cascaded_modulation') return { status: 'unreachable', endpoint, reason: cascadedModulation };
+      if (supply.status === 'incompatible_source') {
+        supplies.push({ edgeIndex, endpoint, status: 'missing', reason: incompatibleSource });
+        continue;
+      }
       if (supply.status !== 'resolved') {
         supplies.push({ edgeIndex, endpoint, status: supply.status === 'unreachable' ? 'missing' : supply.status,
           channelPort: supply.status === 'ambiguous' ? supply.channelPort?.ref : undefined });
@@ -109,7 +113,7 @@ export function createPathResolver(project: Project) {
         : failure.status === 'ambiguous' ? '有多条供光路径到达调制器的输入端口，请选择供光来源。'
         : failure.status === 'feedback_loop' ? '不支持供光路径中的反馈回路。'
         : '供光路径搜索超出资源上限。';
-      return { status, reason, endpoint: failure.channelPort ?? failure.endpoint, trace };
+      return { status, reason: failure.reason ?? reason, endpoint: failure.channelPort ?? failure.endpoint, trace };
     }
     return { status: 'resolved', trace };
   }

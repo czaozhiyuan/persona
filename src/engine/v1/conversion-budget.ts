@@ -99,8 +99,9 @@ export function createConversionPathBudget(graph: SignalGraph) {
     const terminal = eo.supply?.ref ?? eo.to.ref;
     const supply = trace.supplies.find(item => item.edgeIndex === eoIndex);
     if (supply?.status !== 'resolved') {
+      const reason = supply?.channelPort ? chooseRouteChannel : supply ? supplyFailure[supply.status] : '未设置调制器供光。';
       return { problem: { code: 'optical_supply', endpoint: supply?.channelPort ?? terminal,
-        reason: supply?.channelPort ? chooseRouteChannel : supply ? supplyFailure[supply.status] : '未设置调制器供光。' } } as const;
+        reason: supply?.reason ?? reason } } as const;
     }
     const first = supply.path.steps[0];
     const source = selectOpticalSource(first, sources);

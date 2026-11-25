@@ -6,6 +6,7 @@ import { signalPortKey } from './signal-graph';
 import type { SignalEdge, SignalGraph, SignalPort } from './signal-graph';
 
 export const cascadedModulation = '不支持直调激光器再接外置调制器的串联调制。';
+export const incompatibleSource = '所选光源与此调制器输入端口的通道不兼容，请选择兼容通道或其他光源。';
 
 export function addSourceCarrier(selected: Map<SignalPort, Carrier>, port: SignalPort, channelId?: OpticalChannelId) {
   if (channelId === undefined || (selected.has(port) && selected.get(port) === undefined)) selected.set(port, undefined);
@@ -35,6 +36,14 @@ export function findOpticalSupply(graph: SignalGraph, adjacent: ReadonlyMap<Sign
   if (selected.size) {
     const result = search([...selected.keys()], selected);
     if (result.status !== 'unreachable') return result;
+    // Ignore wavelengths only to establish which supply branch owns the selection.
+    const connected = new Set(selected.keys());
+    for (const port of connected) {
+      if (port === target) return { status: 'incompatible_source' } as const;
+      for (const edge of adjacent.get(port) ?? []) {
+        if (edge.to.definition.type === 'OPTICAL') connected.add(edge.to);
+      }
+    }
   }
   return search([...graph.ports.values()].filter(port => port.definition.opticalEmitter && !selected.has(port)));
 }

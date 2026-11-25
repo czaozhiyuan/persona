@@ -238,6 +238,34 @@ test('flat optical values work without choosing a carrier; channel tables identi
   assert.equal(disconnected.diagnostics[0].code, 'unreachable');
 });
 
+test('an explicitly selected emitter on this supply branch cannot be replaced by a compatible unselected one', () => {
+  const { project, link } = fixture(false, { channelIds: [ch30] });
+  const root = project.moduleDefinitions[0];
+  const laser = project.componentDefinitions.find(def => def.id === 'laser')!;
+  const componentDefinitions: ComponentDefinition[] = [
+    ...project.componentDefinitions.filter(def => def !== laser),
+    { ...laser, ports: [{ ...laser.ports[0], channelIds: [ch28] }] },
+    { ...laser, id: 'ch30-laser', ports: [{ ...optOut, channelIds: [ch30], opticalEmitter: { powerDbm: fixed(2) } }] },
+  ];
+  const calc = createConversionBudget({ ...project, componentDefinitions, moduleDefinitions: [{ ...root,
+    instances: [...root.instances, { id: 'backup', name: 'CH30', definitionId: 'ch30-laser' }],
+    connections: [...root.connections!, { id: 'backup-feed', from: local('backup', 'OUT'), to: local('eo1', 'SUPPLY') }],
+  }] }).calculateNamedLink;
+  const trial = { frequencyGHz: 15, inputPowerDbm: -20 };
+  for (const channelId of [undefined, ch30] as const) {
+    const constrained = { ...link, channelId };
+    const primary = calc(constrained, { ...trial, opticalSources: [{ endpoint: ref('laser1', 'OUT') }] });
+    assert.equal(primary.powerDbm.availability, 'unavailable');
+    assert.equal(primary.segments[0].optical, undefined);
+    assert.match(primary.diagnostics[0].reason, /所选光源.*通道不兼容/);
+    assert.deepEqual(primary.diagnostics[0].endpoint, ref('eo1', 'SUPPLY'));
+    const backup = calc(constrained, { ...trial, opticalSources: [{ endpoint: ref('backup', 'OUT') }] });
+    const automatic = calc(constrained, trial);
+    assert.deepEqual(backup.segments[0].optical?.stages[0].endpoint, ref('backup', 'OUT'));
+    near(numeric(automatic.powerDbm), numeric(backup.powerDbm));
+  }
+});
+
 test('a wavelength-routed device identifies the ambiguous port and accepts an explicit or inferred carrier', () => {
   const { project, link } = fixture();
   const blank = { ...link, channelId: undefined };
