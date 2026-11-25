@@ -5,14 +5,22 @@ import type { ComponentDefinition, PortDefinition } from '../../../model/v1/type
 import { portDisplayName } from '../labels';
 
 type Candidate = { input: PortDefinition; outputs: PortDefinition[] };
-type Conversion = { kind: 'eo' | 'dml' | 'oe' | 'digitalTx' | 'digitalRx'; fromPortId: string; toPortId: string };
+type Conversion = { kind: 'eo' | 'dml' | 'oe' | 'control' | 'digitalTx' | 'digitalRx'; fromPortId: string; toPortId: string };
+
+export function controlTransferKind(input: PortDefinition, output: PortDefinition) {
+  if (input.type === 'CONTROL') {
+    if (output.type === 'CONTROL') return 'control';
+    if (output.type === 'OPTICAL') return 'digitalTx';
+  }
+  if (input.type === 'OPTICAL' && output.type === 'CONTROL') return 'digitalRx';
+}
 
 export function conversionCandidates({ ports, transfers }: ComponentDefinition): Candidate[] {
   const candidates: Candidate[] = [];
   for (const input of ports) {
     if (!supportsDirection(input.direction, 'in') || isPowerPort(input.type)) continue;
-    const outputs = ports.filter(port => supportsDirection(port.direction, 'out') &&
-      (input.type === 'OPTICAL' ? port.type === 'RF' || port.type === 'CONTROL' : port.type === 'OPTICAL') &&
+    const outputs = ports.filter(port => input.id !== port.id && supportsDirection(port.direction, 'out') &&
+      (controlTransferKind(input, port) || input.type === 'OPTICAL' && port.type === 'RF' || input.type === 'RF' && port.type === 'OPTICAL') &&
       !transfers?.some(transfer => transfer.fromPortId === input.id && transfer.toPortId === port.id));
     if (outputs.length) candidates.push({ input, outputs });
   }
@@ -41,8 +49,7 @@ function ConversionForm({ candidates, ports, add }: {
     const data = new FormData(event.currentTarget);
     const output = outputs.find(port => port.id === data.get('output'));
     if (!output) return;
-    const kind = input.type === 'CONTROL' ? 'digitalTx' : output.type === 'CONTROL' ? 'digitalRx'
-      : input.type === 'OPTICAL' ? 'oe' : data.get('eoKind') === 'dml' ? 'dml' : 'eo';
+    const kind = controlTransferKind(input, output) ?? (input.type === 'OPTICAL' ? 'oe' : data.get('eoKind') === 'dml' ? 'dml' : 'eo');
     add({ fromPortId: input.id, toPortId: output.id, kind });
   }}>
     <label>转换输入<select name="input" value={inputId} onChange={event => setInputId(event.currentTarget.value)}>

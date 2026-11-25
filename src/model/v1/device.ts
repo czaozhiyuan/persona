@@ -19,6 +19,7 @@ export const receiverModes = ['external50', 'parallel50', 'active50'] as const;
 export type ReceiverMode = typeof receiverModes[number];
 
 export type Transfer =
+  | (PortPair & { kind: 'control' })
   | (PortPair & { kind: 'rf'; gainDb?: Quantity<RfValue>; nfDb?: Quantity<RfValue> })
   | (OpticalRoute & { kind: 'optical'; insertionLossDb?: Quantity<OpticalValue> })
   | (PortPair & { kind: 'splitter'; secondPortId: string; firstPercent?: Quantity<FixedValue>; excessLossDb?: Quantity<FixedValue> })

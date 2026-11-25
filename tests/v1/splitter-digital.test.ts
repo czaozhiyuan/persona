@@ -46,6 +46,44 @@ function near(actual: number, expected: number) {
   assert.ok(actual === expected || Math.abs(actual - expected) < 1e-9, `${actual} != ${expected}`);
 }
 
+test('explicit control transfers connect mapped control ports through a digital span', () => {
+  const project = digitalControlProject();
+  const [root] = project.moduleDefinitions;
+  const [controller] = project.componentDefinitions;
+  const discrete = { id: 'discrete', type: 'CONTROL', direction: 'in' } as const;
+  const receiver = { ...controller, id: 'receiver', ports: [...controller.ports, { ...discrete, direction: 'out' as const }] };
+  controller.ports = [...controller.ports, discrete];
+  project.componentDefinitions = [...project.componentDefinitions, receiver];
+  root.instances = root.instances.map(i => i.id === 'ctl-b' ? { ...i, definitionId: receiver.id } : i);
+  root.ports = [{ ...discrete, id: 'from' }, { ...discrete, id: 'to', direction: 'out' }];
+  root.portMappings = ['ctl-a', 'ctl-b'].map((instanceId, i) => ({
+    portId: root.ports[i].id, target: { instanceId, portId: discrete.id },
+  }));
+  const link = { id: 'mapped', name: '控制', from: { instancePath: [], portId: 'from' }, to: { instancePath: [], portId: 'to' } };
+  const ttl = project.namedLinks![0];
+  project.namedLinks = [...project.namedLinks!, link];
+  function check(expected: 'resolved' | 'unreachable') {
+    const saved = parseProjectJson(serializeProjectJson(project));
+    const resolver = createPathResolver(saved);
+    const result = resolver.resolveNamedLink(saved.namedLinks!.at(-1)!);
+    assert.equal(result.status, expected);
+    assert.equal(resolver.resolveNamedLink(ttl).status, 'resolved');
+    assert.equal(resolver.resolveLocalPath({ from: link.to, to: link.from }).status, 'unreachable');
+    return result.trace?.edges.flatMap(edge => edge.source.kind === 'transfer' ? [edge.source.transfer.kind] : []);
+  }
+  const tx = { kind: 'control', fromPortId: discrete.id, toPortId: 'out' } as const;
+  check('unreachable');
+  controller.transfers = [tx];
+  check('unreachable');
+  receiver.transfers = [{ kind: 'control', fromPortId: 'in', toPortId: discrete.id }];
+  assert.deepEqual(check('resolved'), ['control', 'digitalTx', 'digitalRx', 'control']);
+  controller.transfers = [];
+  check('unreachable');
+  controller.transfers = [tx];
+  receiver.transfers = [];
+  check('unreachable');
+});
+
 test('broken digital links retain connected mappings and discriminate channel, mapping and route failures', () => {
   const p = digitalControlProject(), [root, box] = p.moduleDefinitions, link = p.namedLinks![0];
   const core = root.cableBundles![0].cores[0];

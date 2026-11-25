@@ -26,6 +26,7 @@ export const componentIconLabels = {
 } satisfies Record<ComponentIconKey, string>;
 
 export const transferLabels = {
+  control: '控制传输',
   rf: '射频传输',
   optical: '光传输',
   wavelengthConversion: '波长转换',
