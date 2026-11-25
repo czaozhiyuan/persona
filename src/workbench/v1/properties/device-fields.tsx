@@ -6,10 +6,10 @@ import { receiverModes } from '../../../model/v1/device';
 import { resolveEmpiricalValue } from '../../../engine/v1/empirical-value';
 import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
 import { transferTypes } from '../../../model/v1/validate-device';
-import { isPowerPort } from '../../../model/v1/types';
+import { isPowerPort, isSupplyOutput } from '../../../model/v1/types';
 import type { ComponentDefinition, PortDefinition, PortDirection, PortType } from '../../../model/v1/types';
 import type { Transfer } from '../../../model/v1/device';
-import { CapacityField, readCapacity } from './dc-fields';
+import { CapacityField, readCapacity, SupplyCapacityField, readSupplyCapacity } from './dc-fields';
 import { AutosaveForm } from './autosave-form';
 import { ChannelField } from './channel-field';
 import { InputRatingField, ratingUnits, readInputRating } from './input-rating-field';
@@ -40,6 +40,7 @@ export function readPort(data: FormData, port: PortDefinition): PortDefinition {
       ? { powerDbm: readQuantity(data, 'sourcePower', opticalKinds) } : undefined,
     inputVoltageV: direction === 'in' ? voltage : undefined,
     outputVoltageV: direction === 'out' ? voltage : undefined,
+    supplyCapacity: type === 'DC_POWER' && direction === 'out' && data.has('supplyCapacity') ? readSupplyCapacity(data) : undefined,
   };
 }
 
@@ -76,7 +77,10 @@ function PortControls({ port, occurrence, remove }: { port: PortDefinition; occu
         value={port.opticalEmitter.powerDbm} parameters={occurrence.definition.parameters ?? []} />}
     </>}
     {ratings.length > 0 && <InputRatingField key={type} units={ratings} rating={port.inputRating} />}
-    {isPowerPort(type) && <PortVoltage key={type + direction} port={port} occurrence={occurrence} />}
+    {isSupplyOutput(occurrence.definition, port) ? <>
+      <PortVoltageField type={type} direction={direction} value={port.outputVoltageV?.kind === 'fixed' ? port.outputVoltageV.value : undefined} />
+      <SupplyCapacityField value={port.supplyCapacity} />
+    </> : isPowerPort(type) && <PortVoltage key={type + direction} port={port} occurrence={occurrence} />}
     <div className="actions">
       <button type="button" onClick={remove}>预览删除端口</button>
     </div>

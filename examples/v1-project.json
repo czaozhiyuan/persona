@@ -675,19 +675,17 @@
             "outputVoltageV": {
               "kind": "fixed",
               "value": 10
+            },
+            "supplyCapacity": {
+              "unit": "W",
+              "value": {
+                "kind": "fixed",
+                "value": 7
+              }
             }
           }
         ],
-        "dcSupply": {
-          "portId": "OUT",
-          "capacity": {
-            "unit": "W",
-            "value": {
-              "kind": "fixed",
-              "value": 7
-            }
-          }
-        }
+        "dcSupply": true
       },
       {
         "kind": "component",

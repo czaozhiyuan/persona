@@ -9,7 +9,7 @@ type ChannelFilter = { channelIds?: readonly OpticalChannelId[] };
 
 export type DcValue = Quantity<FixedValue>;
 export type DcCapacity = { unit: 'W' | 'A'; value: DcValue };
-export type DcSupply = { portId: string; capacity?: DcCapacity };
+export type SupplyCapacity = { unit: 'W' | 'A'; value: FixedValue };
 export type DcLoad = { portId: string; powerW?: DcValue };
 
 export type OpticalRoute = PortPair & ChannelFilter & { gainDb?: Quantity<OpticalValue> };

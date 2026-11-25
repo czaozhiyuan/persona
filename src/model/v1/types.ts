@@ -1,5 +1,5 @@
 import type { OpticalChannelId } from './channels';
-import type { OpticalEmitter, DcLoad, DcSupply, DcValue, InputRating, SwitchState, Transfer } from './device';
+import type { OpticalEmitter, DcLoad, SupplyCapacity, DcValue, InputRating, SwitchState, Transfer } from './device';
 import type { ParameterDefinition, ParameterMapping, ParameterValue } from './parameters';
 import type { CableBundle, Connection, LocalEndpointRef, NamedLink } from './topology';
 
@@ -33,6 +33,7 @@ export type PortDefinition = {
   inputVoltageV?: DcValue;
   /** Declared output voltage, independent of supply and converter roles. */
   outputVoltageV?: DcValue;
+  supplyCapacity?: SupplyCapacity;
 };
 
 type DefinitionIdentity = {
@@ -56,9 +57,14 @@ export type ComponentDefinition = DefinitionIdentity & {
   physicalFootprint?: PhysicalFootprint;
   transfers?: readonly Transfer[];
   switchStates?: readonly SwitchState[];
-  dcSupply?: DcSupply;
+  /** Each DC output of a supply feeds its own rail. */
+  dcSupply?: boolean;
   dcLoad?: DcLoad;
 };
+
+export function isSupplyOutput(definition: ComponentDefinition | ModuleDefinition, port: Pick<PortDefinition, 'type' | 'direction'>) {
+  return definition.kind === 'component' && definition.dcSupply === true && port.type === 'DC_POWER' && port.direction === 'out';
+}
 
 /** Structural child slot. Its name and settings are defaults shared by occurrences of the parent. */
 export type Instance = {

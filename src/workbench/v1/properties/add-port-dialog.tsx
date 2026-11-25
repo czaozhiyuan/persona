@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
-import { isPowerPort } from '../../../model/v1/types';
+import { isPowerPort, isSupplyOutput } from '../../../model/v1/types';
 import type { PortDefinition, PortDirection, PortType } from '../../../model/v1/types';
 import { portTypeLabels } from '../labels';
 import { ChannelField } from './channel-field';
 import { InputRatingField, ratingUnits, readInputRating } from './input-rating-field';
 import { PortVoltageField, readPortVoltage, voltageParameters, voltageTitle } from './port-voltage-field';
+import { readSupplyCapacity, SupplyCapacityField } from './dc-fields';
 import { channelList } from './value-fields';
 
 export function AddPortDialog({ name, owner, locations, add, close }: {
@@ -21,7 +22,8 @@ export function AddPortDialog({ name, owner, locations, add, close }: {
   const optical = type === 'OPTICAL';
   const ratings = ratingUnits(type, direction);
   const [reference, setReference] = useState('');
-  const voltageOptions = voltageParameters(owner.definition.parameters);
+  const supply = isSupplyOutput(owner.definition, { type, direction });
+  const voltageOptions = supply ? [] : voltageParameters(owner.definition.parameters);
   const power = isPowerPort(type);
   return <dialog ref={dialog => { if (dialog && !dialog.open) dialog.showModal(); }}
     className="v1-topology-dialog v1-add-port-dialog" aria-labelledby="add-port-title" onCancel={close}>
@@ -34,6 +36,7 @@ export function AddPortDialog({ name, owner, locations, add, close }: {
         type, direction,
         channelIds: optical ? channelList(data, 'channels') : undefined,
         inputRating: readInputRating(data, ratings),
+        supplyCapacity: supply ? readSupplyCapacity(data) : undefined,
         inputVoltageV: power && direction === 'in' ? readPortVoltage(data, direction) : undefined,
         outputVoltageV: power && direction === 'out' ? readPortVoltage(data, direction) : undefined,
       });
@@ -63,6 +66,7 @@ export function AddPortDialog({ name, owner, locations, add, close }: {
             </select>
           </label>}
           {power && !reference && <PortVoltageField key={type + direction} type={type} direction={direction} />}
+          {supply && <SupplyCapacityField />}
           {!optical && !ratings.length && !power && <p className="v1-property-effective">无需额外参数</p>}
         </fieldset>
       </div>

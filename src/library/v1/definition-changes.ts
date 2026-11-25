@@ -48,6 +48,7 @@ export function describeDefinitionChanges(before: Definition, after: Definition)
   if (before.kind === 'component' && after.kind === 'component') {
     record('框图图标', before.iconKey, after.iconKey);
     record('参考占位宽深', before.physicalFootprint, after.physicalFootprint);
+    record('直流电源角色', before.dcSupply, after.dcSupply);
     record('器件传输', before.transfers ?? [], after.transfers ?? []);
     records('开关状态与路由', before.switchStates, after.switchStates, idOf);
   }

@@ -79,7 +79,7 @@ test('labels resolve voltage at the selected occurrence, keep port IDs and ignor
 
 test('grouped fixed supply output follows internal edits, while an explicit boundary still constrains the route', () => {
   const source: ComponentDefinition = { kind: 'component', id: 'source', name: 'Source',
-    ports: [{ id: 'V', type: 'DC_POWER', direction: 'out', outputVoltageV: fixed(5) }], dcSupply: { portId: 'V' } };
+    ports: [{ id: 'V', type: 'DC_POWER', direction: 'out', outputVoltageV: fixed(5) }], dcSupply: true };
   const load: ComponentDefinition = { kind: 'component', id: 'load', name: 'Load',
     ports: [{ id: 'IN', type: 'DC_POWER', direction: 'in' }], dcLoad: { portId: 'IN', powerW: fixed(1) } };
   const project: Project = { ...base, componentDefinitions: [source, load, { kind: 'component', id: 'aux', name: 'Aux', ports: [] }],
@@ -108,11 +108,13 @@ test('grouped fixed supply output follows internal edits, while an explicit boun
 test('AC wiring stays outside DC calculations and nominal inputs are neither limits nor supplies', () => {
   const ac: PortDefinition = { id: 'AC', type: 'AC_POWER', direction: 'out', outputVoltageV: fixed(220) };
   const outlet: ComponentDefinition = { kind: 'component', id: 'wall', name: 'Wall', ports: [ac] };
-  const supply = factory.get('library-dc-supply') as ComponentDefinition;
+  const template = factory.get('library-dc-supply') as ComponentDefinition;
+  const supply = { ...template, ports: template.ports.map(p => p.id === 'DC_OUT' ? { ...p, outputVoltageV: fixed(12),
+    supplyCapacity: { unit: 'W' as const, value: fixed(8) } } : p) };
   const amp = factory.get('library-rf-amplifier') as ComponentDefinition;
   const acWire = { id: 'mains', from: { instanceId: 'wall', portId: 'AC' }, to: { instanceId: 'source', portId: 'AC_IN' } };
   const dcWire = { id: 'rail', from: { instanceId: 'source', portId: 'DC_OUT' }, to: { instanceId: 'load', portId: 'DC_IN' } };
-  const system = { ...root, instances: [slot('wall'), { ...slot('source', supply.id), parameterOverrides: { voltage: fixed(12), capacity: fixed(8) } }, slot('load', amp.id)] };
+  const system = { ...root, instances: [slot('wall'), slot('source', supply.id), slot('load', amp.id)] };
   const project = { ...base, componentDefinitions: [outlet, supply, amp] };
   const setup = (connections: typeof acWire[]): Project => ({ ...project, moduleDefinitions: [{ ...system, connections }] });
   const budget = calculateDcBudget(setup([acWire, dcWire]));

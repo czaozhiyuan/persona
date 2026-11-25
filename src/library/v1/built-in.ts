@@ -18,7 +18,6 @@ const opticalPorts = [port('OPT_IN', '光输入', 'OPTICAL', 'in'), port('OPT_OU
 const dcPorts = [port('DC_IN', '直流输入', 'DC_POWER', 'in'), port('DC_OUT', '直流输出', 'DC_POWER', 'out')];
 const gain = numeric('gain', '增益', 'dB');
 const attenuation = numeric('gain', '净增益（带符号）', 'dB', { max: 0 });
-const voltage = numeric('voltage', '输出电压', 'V', { min: Number.MIN_VALUE });
 const capacity = numeric('capacity', '额定输出功率', 'W', { min: 0 });
 
 const emitter = { powerDbm: parameter('power') };
@@ -124,15 +123,14 @@ export const builtInDefinitions = [
   },
   {
     kind: 'component', id: 'library-dc-supply', iconKey: 'dcSupply', name: 'AC/DC 电源',
-    ports: [{ ...dcPorts[1], outputVoltageV: parameter('voltage') },
+    ports: [dcPorts[1],
       { id: 'AC_IN', type: 'AC_POWER', direction: 'in', inputVoltageV: { kind: 'fixed', value: 220 } }],
-    parameters: [voltage, capacity],
-    dcSupply: { portId: 'DC_OUT', capacity: { unit: 'W', value: parameter('capacity') } },
+    dcSupply: true,
   },
   {
     kind: 'component', id: 'library-dc-converter', iconKey: 'dcConverter', name: 'DC/DC 变换器',
-    ports: [dcPorts[0], { ...dcPorts[1], outputVoltageV: parameter('voltage') }],
-    parameters: [voltage, numeric('efficiency', '效率', 'ratio', { min: Number.MIN_VALUE, max: 1 }), capacity],
+    ports: dcPorts,
+    parameters: [numeric('efficiency', '效率', 'ratio', { min: Number.MIN_VALUE, max: 1 }), capacity],
     transfers: [{ kind: 'dc', fromPortId: 'DC_IN', toPortId: 'DC_OUT',
       efficiency: parameter('efficiency'), capacity: { unit: 'W', value: parameter('capacity') } }],
   },

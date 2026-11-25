@@ -17,8 +17,8 @@ function fixture(): Project {
   return {
     id: 'dc-budget', name: 'DC budget', rootModuleDefinitionId: 'system',
     componentDefinitions: [
-      { kind: 'component', id: 'source', name: 'Supply', ports: [{ ...dc('OUT', 'out'), outputVoltageV: fixed(10) }],
-        dcSupply: { portId: 'OUT', capacity: { unit: 'A', value: fixed(0.7) } } },
+      { kind: 'component', id: 'source', name: 'Supply', ports: [{ ...dc('OUT', 'out'), outputVoltageV: fixed(10), supplyCapacity: { unit: 'A', value: fixed(0.7) } }],
+        dcSupply: true },
       { kind: 'component', id: 'converter', name: 'DC/DC',
         ports: [{ ...dc('IN', 'in'), inputRating: { unit: 'W', max: 5 } }, { ...dc('OUT', 'out'), outputVoltageV: fixed(5) }],
         transfers: [{ kind: 'dc', fromPortId: 'IN', toPortId: 'OUT', efficiency: fixed(0.8),
@@ -221,9 +221,9 @@ test('output voltage declarations require a positive voltage on a power output',
 
 test('JSON rejects obsolete voltage fields rather than having two sources for one output port', () => {
   const file = JSON.parse(serializeProjectJson(fixture()));
-  file.project.componentDefinitions[0].dcSupply.voltageV = fixed(12);
-  assert.throws(() => parseProjectJson(JSON.stringify(file)), /dcSupply\.voltageV: 未知字段/);
-  delete file.project.componentDefinitions[0].dcSupply.voltageV;
+  file.project.componentDefinitions[0].dcSupply = { portId: 'OUT', voltageV: fixed(12) };
+  assert.throws(() => parseProjectJson(JSON.stringify(file)), /旧单路电源结构/);
+  file.project.componentDefinitions[0].dcSupply = true;
   file.project.componentDefinitions[1].transfers[0].outputVoltageV = fixed(12);
   assert.throws(() => parseProjectJson(JSON.stringify(file)), /transfers\[0\]\.outputVoltageV: 未知字段/);
 });

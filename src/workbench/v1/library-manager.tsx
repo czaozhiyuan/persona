@@ -28,6 +28,12 @@ export function LibraryManager({ library, project, selected, close }: {
   function run(action: () => void) {
     try { action(); } catch (error) { report(projectErrorMessage(error)); }
   }
+  function downloadJson(content: string, filename: string) {
+    const url = URL.createObjectURL(new Blob([content], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url; link.download = filename; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
   function start(items: LibraryDefinition[]) { report(''); edit(items); }
   function status(id: string) {
     if (config.hidden.includes(id)) return '内置 · 已隐藏';
@@ -78,11 +84,10 @@ export function LibraryManager({ library, project, selected, close }: {
       }}>重新载入浏览器中的库</button>}
       <details open><summary>库备份与恢复</summary>
         <div className="actions"><button onClick={() => run(() => {
-          const url = URL.createObjectURL(new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' }));
-          const link = document.createElement('a');
-          link.href = url; link.download = 'persona-library.json'; link.click();
-          setTimeout(() => URL.revokeObjectURL(url), 1000); library.markDownloadRequested();
+          downloadJson(JSON.stringify(config, null, 2), 'persona-library.json');
+          library.markDownloadRequested();
         })}>导出器件库 JSON</button>
+        {library.damaged && library.source && <button onClick={() => downloadJson(library.source!, 'persona-library-original.json')}>导出浏览器原始库 JSON</button>}
         <button onClick={() => file.current?.click()}>导入器件库 JSON</button>
         <input type="file" hidden ref={file} accept=".json,application/json" onChange={async e => {
           const source = e.target.files?.[0]; e.target.value = '';
