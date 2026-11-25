@@ -152,7 +152,7 @@ type Props = {
   budgetHighlight?: BudgetHighlight;
   manualFrames: ReadonlySet<string>;
   expanded: ReadonlySet<string>;
-  toggleModule: (path: InstancePath) => void;
+  toggleModule: (path: InstancePath) => ReadonlySet<string>;
   openPort: (path: InstancePath, portId: string) => void;
   enterModule: (path: InstancePath) => void;
   reparent: (base: Project, plan: ApprovedMove, layout?: ReparentLayout) => void;
@@ -222,9 +222,12 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
   const draggingTree = useRef(false);
   const flow = useRef<ReactFlowInstance<CanvasNode, WiringEdge>>(null);
 
+  // A clicked card and its ancestors can already occupy temporary slots in the current view.
+  const [opening, setOpening] = useState<{ expanded: ReadonlySet<string>; project: Project; positions: Map<string, XYPosition> }>();
+  const anchors = opening?.expanded === expanded && opening.project === project ? opening.positions : undefined;
   const { manual, view: projection, layout } = useMemo(() =>
-    projectInlineExpansion(project, instances, modulePath, expanded, measured, resizePreview, portHeights),
-  [project, instances, modulePath, expanded, measured, resizePreview, portHeights]);
+    projectInlineExpansion(project, instances, modulePath, expanded, measured, resizePreview, portHeights, anchors),
+  [project, instances, modulePath, expanded, measured, resizePreview, portHeights, anchors]);
   const { nodes: items, rootKey, nodeByKey, scopes } = projection;
   const cancelContentEdit = useContentLayoutEdit(canvas, project, projection, layout, instances, modulePath, expanded,
     measured, portHeights, topologyActive && !dragSession.current && !resizePreview, manualFrames, finishContentEdit);
@@ -351,7 +354,17 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
       toggle: !boundary && definition.kind === 'module' ? () => {
         cancelWiring();
         setSelectedEdgeKey(undefined);
-        toggleModule(path);
+        const next = toggleModule(path);
+        if (frame) setOpening(undefined);
+        else {
+          const positions = new Map<string, XYPosition>();
+          for (let depth = modulePath.length + 1; depth <= path.length; depth++) {
+            const key = hierarchyKey(path.slice(0, depth));
+            const { x, y } = nodeByKey.get(key)!.bounds;
+            positions.set(key, { x, y });
+          }
+          setOpening({ expanded: next, project, positions });
+        }
       } : undefined,
     };
     const className = dropPreview?.node?.key === key ? (dropPreview.error ? 'v1-drop-blocked' : 'v1-drop-allowed') : undefined;

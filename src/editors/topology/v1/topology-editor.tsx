@@ -169,6 +169,7 @@ export function TopologyEditor({ multiplex, centerPlacement, linkControls, libra
     if (next.has(key)) next.delete(key);
     else next.add(key);
     applyExpansion(next);
+    return next;
   }
 
   function expandTo(depth: number) {

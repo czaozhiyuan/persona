@@ -186,6 +186,34 @@ test('opening one module displaces folded and expanded siblings as units while r
   assert.deepEqual(object(after, ['far']).bounds, object(before, ['far']).bounds);
 });
 
+test('a growing branch stays anchored beside a cabinet one pixel higher, including a click from a temporary slot', () => {
+  const project = fixture(540, 300);
+  project.layout = {
+    topology: [at(receiver, 100, 80), at(['other'], 710, 79), at(board, 300, 70), at(['other', 'board'], 300, 70)],
+    topologyFrames: [receiver, ['other']].flatMap(path => [
+      { modulePath: path, x: 0, y: 0, width: 590, height: 270 },
+      { modulePath: [...path, 'board'], x: 0, y: 0, width: 490, height: 320 },
+    ]),
+  };
+  const cabinets = [receiver, ['other']];
+  const baseline = projectInlineExpansion(...viewArgs(project, [], cabinets)).view;
+  const anchorAt = (view: ReturnType<typeof projectTopology>, paths: InstancePath[]) =>
+    new Map(paths.map(path => [hierarchyKey(path), object(view, path).bounds]));
+  const open = projectInlineExpansion(...viewArgs(project, [], [...cabinets, board]), anchorAt(baseline, [receiver, board])).view;
+  assert.deepEqual(object(open, receiver).position, object(baseline, receiver).position);
+  assert.deepEqual(object(open, board).position, object(baseline, board).position);
+  assert.notDeepEqual(object(open, ['other']).position, object(baseline, ['other']).position);
+  assertSiblingsClear(open);
+
+  const clicked = [['other'], ['other', 'board']];
+  const anchors = anchorAt(open, clicked);
+  const both = projectInlineExpansion(...viewArgs(project, [], [...cabinets, board, clicked[1]]), anchors).view;
+  for (const path of clicked) assert.deepEqual(object(both, path).position, object(open, path).position);
+  assertSiblingsClear(both);
+  const collapsed = projectInlineExpansion(...viewArgs(project, [], cabinets)).view;
+  for (const path of cabinets) assert.deepEqual(displayedBounds(collapsed, path), displayedBounds(baseline, path));
+});
+
 test('batch expansion resolves stacked siblings inside both enclosures and propagates growth through a frameless root', () => {
   const source = fixture(420, 225);
   const enclosures = ['receiver', 'other'];
