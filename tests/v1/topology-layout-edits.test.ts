@@ -36,13 +36,15 @@ const projectView = (project: Project) =>
   projectTopology(project, [...resolveHierarchy(project).walkInstances()], [], expanded, measured);
 const item = (view: ReturnType<typeof projectView>, path: InstancePath) => view.nodeByKey.get(hierarchyKey(path))!;
 
-test('dragging children and shrinking frame edges reserve compact label columns, wider supply sides and empty padding', () => {
+test('dragging children and shrinking frame edges reserve 86 px per occupied side and 28 px per empty side', () => {
   const input = { id: 'OPT_IN', type: 'OPTICAL', direction: 'in' } as const;
   const output = { id: 'RF_OUT', type: 'RF', direction: 'out' } as const;
   const frame = { x: 10, y: 20, width: 900, height: 300 };
   const child = { x: 250, y: 120, width: 400, height: 80 };
-  for (const [ports, left, right] of [[[], 28, 28], [[input], 64, 28], [[output], 28, 64], [[input, output], 64, 64],
-    [[{ ...input, type: 'DC_POWER' }], 86, 28]] as const) {
+  const ac = { ...input, id: 'AC', type: 'AC_POWER' } as const;
+  const dc = { ...output, id: 'DC', type: 'DC_POWER' } as const;
+  for (const [ports, left, right] of [[[], 28, 28], [[input], 86, 28], [[output], 28, 86], [[input, output], 86, 86],
+    [[ac], 86, 28], [[dc], 28, 86], [[input, ac, output, dc], 86, 86]] as const) {
     const insets = frameInsets(ports);
     const extent = moduleExtent(frame, insets);
     assert.equal(keepNodeInside({ ...child, x: -1000 }, extent).x - frame.x, left);
@@ -51,6 +53,29 @@ test('dragging children and shrinking frame edges reserve compact label columns,
     const east = dragFrame(frame, 'e', { x: -1000, y: 0 }, [child], insets);
     assert.equal(child.x - west.x, left);
     assert.equal(east.x + east.width - child.x - child.width, right);
+  }
+});
+
+test('projection grows a tight saved frame for both columns and preserves a fitting child in nested and internal views', () => {
+  const path = ['other'], child = [...path, 'device'];
+  const bounds = { x: 86, y: 90, width: 400, height: 80 };
+  const input = { id: 'in', direction: 'in', type: 'RF' } as const;
+  const output = { id: 'out', direction: 'out', type: 'RF' } as const;
+  const project = (ports: ModuleDefinition['ports'], width: number): Project => ({
+    ...fixture, moduleDefinitions: fixture.moduleDefinitions.map(d => d.id === 'other' ? { ...d, ports } : d),
+    layout: { topology: [{ instancePath: child, x: bounds.x, y: bounds.y }],
+      topologyFrames: [{ modulePath: path, x: 0, y: 0, width, height: 260 }] },
+  });
+  for (const scope of [[], path]) {
+    for (const [ports, savedWidth, expectedWidth] of [
+      [[input, output], 530, 572], [[input, output], 600, 600], [[input], 600, 600], [[], 600, 600],
+    ] as const) {
+      const p = project(ports, savedWidth);
+      const view = projectTopology(p, [...resolveHierarchy(p).walkInstances()], scope, expanded,
+        new Map([[hierarchyKey(child), bounds]]));
+      assert.equal(item(view, path).frame!.display.width, expectedWidth);
+      assert.deepEqual(item(view, child).bounds, bounds);
+    }
   }
 });
 
@@ -77,7 +102,7 @@ test('top ports reserve their measured band above the title, children and side p
   const frame = { x: 10, y: 20, width: 500, height: 400 };
   assert.equal(moduleExtent(frame, insets)[0][1], frame.y + insets.top);
   assert.equal(dragFrame(frame, 's', { x: 0, y: -500 }, [], insets).height, insets.top + 120 + 28);
-  assert.ok(frameInsets(Array(8).fill(port)).minWidth >= 8 * 64);
+  assert.equal(frameInsets(Array(8).fill(port)).minWidth, 8 * 64 + 2 * 28);
 });
 
 test('deletion preserves affected visible frames per occurrence and surviving default slots in one edit', () => {

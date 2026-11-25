@@ -119,7 +119,7 @@
 .v1-module-pins.top .v1-topology-port { justify-content: center; padding: 9px 3px 2px; }
 .v1-module-pins.top .v1-frame-inner-handle { left: 50%; top: 3px; bottom: auto; }
 .v1-module-pins.top .v1-frame-outer-handle { left: 50%; top: -3px; }
-.v1-module-pins.left { left: 0; }
+.v1-module-pins.left { left: 0; text-align: left; }
 .v1-module-pins.right { right: 0; text-align: right; }
 .v1-module-pins .v1-topology-port { box-sizing: border-box; min-height: 28px; padding-block: 2px; font-size: min(.78rem, 13px); line-height: 17px; }
 .v1-module-pins.left .v1-topology-port { padding-left: 8px; }
