@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { exampleProject } from '../../src/model/v1/example';
 import { topologyExample } from '../../src/model/v1/topology-example';
+import type { Project } from '../../src/model/v1/types';
 import { createProjectStore } from '../../src/state/v1/project-store';
 
 test('valid edits create one history entry and a new edit discards redo', () => {
@@ -47,6 +48,23 @@ test('invalid edits and invalid replacements preserve the current snapshot and h
   assert.equal(before.canRedo, true);
   store.redo();
   assert.equal(store.getSnapshot().project.name, 'Edited');
+});
+
+test('a delayed edit cannot extend an intervening commit, undo, redo or project replacement', () => {
+  const store = createProjectStore(exampleProject);
+  const rename = (project: Project) => ({ ...project, name: project.name + '!' });
+  store.commit(rename);
+  const first = store.getSnapshot().project;
+  store.commit(rename);
+  const second = store.getSnapshot().project;
+  assert.equal(store.extendCommit(first, rename), undefined);
+  store.undo();
+  assert.equal(store.extendCommit(first, rename), undefined);
+  store.redo();
+  assert.equal(store.extendCommit(second, rename), undefined);
+  store.replaceProject(first);
+  assert.equal(store.extendCommit(second, rename), undefined);
+  assert.equal(store.getSnapshot().canUndo, false);
 });
 
 test('navigation and selections never edit the project, and stale references fall back', () => {

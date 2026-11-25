@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { hierarchyKey } from '../../src/editors/topology/v1/hierarchy-view';
-import { frameHeader, type FramePortHeights } from '../../src/editors/topology/v1/module-frame';
+import { frameHeader, framePadding, type FramePortHeights } from '../../src/editors/topology/v1/module-frame';
 import { planInlineExpansion } from '../../src/editors/topology/v1/inline-expansion-layout';
 import { projectTopology } from '../../src/editors/topology/v1/topology-projection';
 import { resolveHierarchy } from '../../src/engine/v1/hierarchy';
 import type { InstancePath, Project } from '../../src/model/v1/types';
 import { moveTopologyNodes, resizeTopologyFrame } from '../../src/state/v1/topology-edits';
+import { createProjectStore } from '../../src/state/v1/project-store';
 import { parseProjectJson, serializeProjectJson } from '../../src/storage/v1/project-json';
 
 const receiver = ['receiver'], board = [...receiver, 'board'];
@@ -111,4 +112,109 @@ test('expanding several levels together grows all enclosing frames and releases 
   const saved = apply(project, edit);
   assert.deepEqual(planInlineExpansion(view(saved, [], expanded), opened), { moves: [], frames: [] });
   assert.deepEqual(object(view(saved, [], []), []).frame!.display, object(view(saved, [], expanded), []).frame!.display);
+});
+
+function displayedBounds(projection: ReturnType<typeof view>, path: InstancePath) {
+  const { bounds, frame } = object(projection, path);
+  return { ...bounds, width: frame?.display.width ?? bounds.width, height: frame?.display.height ?? bounds.height };
+}
+
+function assertSiblingsClear(projection: ReturnType<typeof view>) {
+  for (const [key, scope] of projection.scopes) {
+    const frame = projection.nodeByKey.get(key)?.frame;
+    const members = scope.members.map(node => displayedBounds(projection, node.item.instancePath));
+    for (const [index, a] of members.entries()) {
+      if (frame) {
+        assert.ok(a.x >= frame.display.x + frame.insets.left && a.y >= frame.display.y + frame.insets.top, key);
+        assert.ok(a.x + a.width <= frame.display.x + frame.display.width - frame.insets.right, key);
+        assert.ok(a.y + a.height <= frame.display.y + frame.display.height - framePadding, key);
+      }
+      for (const b of members.slice(index + 1)) {
+        assert.ok(a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y, key);
+      }
+    }
+  }
+}
+
+test('opening one module displaces folded and expanded siblings as units while retaining clear positions', () => {
+  const source = fixture(940, 540);
+  const project: Project = { ...source, moduleDefinitions: source.moduleDefinitions.map(d => d.id === 'root' ? {
+    ...d, instances: [instance('a', 'board'), instance('b', 'board'), instance('c', 'board'), instance('d', 'device'), instance('far', 'device')],
+  } : d), layout: {
+    topology: [at(['a'], 40, 80), at(['b'], 132, 80), at(['c'], 225, 80), at(['d'], 320, 150), at(['far'], 1700, 900)],
+    topologyFrames: [{ modulePath: ['a'], x: 0, y: 0, width: 600, height: 240 }],
+  } };
+  const before = view(project, [], [['c']]);
+  const expanded = [['a'], ['c']], opened = new Set([hierarchyKey(['a'])]);
+  const edit = planInlineExpansion(view(project, [], expanded), opened);
+  assert.deepEqual(edit.moves.map(m => m.instancePath.join('/')).sort(), ['b', 'c', 'd']);
+  const after = view(apply(project, edit), [], expanded);
+  assertSiblingsClear(after);
+  assert.deepEqual(object(after, ['a']).position, object(before, ['a']).position);
+  assert.deepEqual(object(after, ['c', 'inside']).position, object(before, ['c', 'inside']).position);
+  assert.deepEqual(object(after, ['far']).bounds, object(before, ['far']).bounds);
+});
+
+test('batch expansion resolves stacked siblings inside both enclosures and propagates growth through a frameless root', () => {
+  const source = fixture(420, 225);
+  const enclosures = ['receiver', 'other'];
+  const boards = ['third', 'second', 'first'];
+  const expanded = enclosures.flatMap(id => [[id], ...boards.map(b => [id, b])]);
+  const project: Project = { ...source, moduleDefinitions: source.moduleDefinitions.map(d => d.id === 'receiver'
+    ? { ...d, instances: boards.map(id => instance(id, 'board')) } : d), layout: {
+    topology: enclosures.flatMap((id, i) => [at([id], 100 + 214 * i, 90), ...boards.map(b => at([id, b], 22, 68))]),
+    topologyFrames: expanded.map(path => ({ modulePath: path, x: 0, y: 0, width: 420, height: 225 })),
+  } };
+  const opened = new Set(expanded.map(hierarchyKey));
+  const before = view(project, [], expanded);
+  assert.equal(before.nodeByKey.has('[]'), false);
+  const edit = planInlineExpansion(before, opened);
+  const saved = parseProjectJson(serializeProjectJson(apply(project, edit)));
+  const after = view(saved, [], expanded);
+  assertSiblingsClear(after);
+  assert.deepEqual(planInlineExpansion(after, opened), { moves: [], frames: [] });
+  assert.deepEqual(object(after, ['receiver']).position, object(before, ['receiver']).position);
+  for (const id of enclosures) {
+    assert.deepEqual(object(after, [id, 'first']).bounds, object(before, [id, 'first']).bounds);
+    assert.ok(edit.frames.some(frame => frame.modulePath.join('/') === id && (frame.width > 420 || frame.height > 225)));
+  }
+  const reversed = { ...project, moduleDefinitions: project.moduleDefinitions.map(d => ({ ...d, instances: [...d.instances].reverse() })) };
+  const reordered = view(apply(reversed, planInlineExpansion(view(reversed, [], expanded), opened)), [], expanded);
+  for (const path of expanded) assert.deepEqual(displayedBounds(reordered, path), displayedBounds(after, path));
+});
+
+test('a measured port edit retains both the enlarged frame and sibling placements in the edit history and JSON', () => {
+  for (const savedFrame of [true, false]) {
+    const source = fixture(940, 540);
+    const boardDefinition = source.moduleDefinitions.find(d => d.id === 'board')!;
+    boardDefinition.ports = [{ id: 'COM', name: 'COM', type: 'OPTICAL', direction: 'bidirectional' }];
+    if (!savedFrame) source.layout!.topologyFrames = source.layout!.topologyFrames!.filter(f => f.modulePath.length !== 2);
+    const store = createProjectStore(source);
+    const initial = store.getSnapshot().project;
+    const expanded = [receiver, board];
+    const original = view(initial, [], expanded);
+    const rename = (draft: Project, name: string) => ({ ...draft, moduleDefinitions: draft.moduleDefinitions.map(d =>
+      d.id === 'board' ? { ...d, ports: d.ports.map(p => ({ ...p, name })) } : d) });
+    store.commit(draft => rename(draft, 'Tall label'));
+    const edited = store.getSnapshot().project;
+    const tall = new Map([[hierarchyKey(board), { side: 0, top: 334 }]]);
+    const measured = view(edited, [], expanded, tall);
+    const edit = planInlineExpansion(measured, key, original);
+    const grown = edit.frames.find(frame => hierarchyKey(frame.modulePath) === hierarchyKey(board))!;
+    assert.equal(grown.height, object(measured, board).frame!.display.height);
+    assert.ok(grown.height > object(original, board).frame!.display.height);
+    assert.ok(edit.moves.length);
+    assert.equal(store.extendCommit(edited, draft => apply(draft, edit))?.ok, true);
+    const saved = parseProjectJson(serializeProjectJson(store.getSnapshot().project));
+    assertSiblingsClear(view(saved, [], expanded, tall));
+    store.undo();
+    assert.equal(store.getSnapshot().project, initial);
+    assert.equal(store.getSnapshot().canUndo, false);
+    store.redo();
+    assert.deepEqual(store.getSnapshot().project, saved);
+    store.commit(draft => rename(draft, 'COM'));
+    const shortened = store.getSnapshot().project;
+    assert.deepEqual(shortened.layout, saved.layout);
+    assert.equal(object(view(shortened, [], expanded), board).frame!.display.height, grown.height);
+  }
 });

@@ -12,8 +12,9 @@ import { hierarchyKey } from './hierarchy-view';
 import { frameInsets, framePadding } from './module-frame';
 import { groupDragBounds, placeDropGroup } from './reparent-drop';
 import { estimatedBlockSize, projectTopology } from './topology-projection';
+import { applyExpansionLayout, type ExpansionLayout } from './inline-expansion-layout';
 
-export type Projection = ReturnType<typeof projectTopology>;
+export type Projection = ReturnType<typeof projectTopology> & { expansionPreview?: ExpansionLayout };
 
 export function captureTopologyObjects(project: Project, paths: readonly InstancePath[], view: Projection) {
   const roots = outermostPaths(paths.filter(path => path.length && hierarchyKey(path) !== view.rootKey));
@@ -33,7 +34,7 @@ export function captureTopologyObjects(project: Project, paths: readonly Instanc
     const { width, height } = node.frame?.display ?? node.bounds;
     return { path, key, bounds: { x, y, width, height }, parentOrigin: { x: x - node.bounds.x, y: y - node.bounds.y } };
   });
-  return { project, objects, bounds: groupDragBounds(objects) };
+  return { project: applyExpansionLayout(project, view.expansionPreview), objects, bounds: groupDragBounds(objects) };
 }
 
 export type ObjectClipboard = ReturnType<typeof captureTopologyObjects>;
@@ -45,7 +46,7 @@ export function pasteInView(project: Project, clipboard: ObjectClipboard, destin
     path, id: ids[i], position: { x: bounds.x + delta.x, y: bounds.y + delta.y },
     routeOffset: { x: parentOrigin.x + delta.x, y: parentOrigin.y + delta.y },
   }));
-  const copied = pasteTopologyObjects(project, clipboard.project, roots, destination, nextId);
+  const copied = pasteTopologyObjects(applyExpansionLayout(project, view.expansionPreview), clipboard.project, roots, destination, nextId);
   return growFrameToFit(copied, { ...clipboard.bounds, ...position }, view);
 }
 
@@ -124,7 +125,7 @@ export function insertCanvasItem(project: Project, item: LibraryItem, moduleId: 
     ?? updated.moduleDefinitions.find(item => item.id === child.definitionId)!;
   if (typeof placement === 'function') {
     const centered = placement(definition, child.name);
-    if (centered) return growFrameToFit(moveTopologyNode(updated, [...modulePath, instanceId], centered.position),
+    if (centered) return growFrameToFit(moveTopologyNode(applyExpansionLayout(updated, centered.projection.expansionPreview), [...modulePath, instanceId], centered.position),
       { ...centered.position, ...estimatedBlockSize(definition.ports) }, centered.projection);
   }
   if (!frame) return updated;

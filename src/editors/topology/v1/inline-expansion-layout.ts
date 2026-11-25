@@ -1,13 +1,27 @@
 import type { CoordinateExtent, Rect } from '@xyflow/react';
-import type { TopologyFrame, TopologyPlacement } from '../../../model/v1/types';
+import type { Project, TopologyFrame, TopologyPlacement } from '../../../model/v1/types';
+import { moveTopologyNodes, resizeTopologyFrame } from '../../../state/v1/topology-edits';
 import { keepNodeInside, moduleExtent } from './frame-geometry';
-import { frameInsets, framePadding } from './module-frame';
+import { framePadding } from './module-frame';
 import type { projectTopology } from './topology-projection';
 
 const right = (r: Rect) => r.x + r.width;
 const bottom = (r: Rect) => r.y + r.height;
 const overlaps = (a: Rect, b: Rect) =>
   a.x < right(b) && b.x < right(a) && a.y < bottom(b) && b.y < bottom(a);
+
+export type ExpansionLayout = { moves: TopologyPlacement[]; frames: TopologyFrame[] };
+
+export function applyExpansionLayout(project: Project, layout?: ExpansionLayout) {
+  return layout ? layout.frames.reduce(resizeTopologyFrame, moveTopologyNodes(project, layout.moves)) : project;
+}
+
+export function extendExpansionLayout(previous: ExpansionLayout | undefined, next: ExpansionLayout): ExpansionLayout {
+  if (!previous) return next;
+  const moves = new Map([...previous.moves, ...next.moves].map(item => [JSON.stringify(item.instancePath), item]));
+  const frames = new Map([...previous.frames, ...next.frames].map(item => [JSON.stringify(item.modulePath), item]));
+  return { moves: [...moves.values()], frames: [...frames.values()] };
+}
 
 function nearestSlot(card: Rect, obstacles: readonly Rect[], extent: CoordinateExtent): Rect {
   const [[left, top], [east, south]] = extent;
@@ -42,7 +56,8 @@ function nearestSlot(card: Rect, obstacles: readonly Rect[], extent: CoordinateE
   return best!;
 }
 
-export function planInlineExpansion(projection: ReturnType<typeof projectTopology>, opened: ReadonlySet<string>) {
+export function planInlineExpansion(projection: ReturnType<typeof projectTopology>, opened: ReadonlySet<string>,
+  beforeEdit?: ReturnType<typeof projectTopology>) {
   const moves: TopologyPlacement[] = [];
   const frames: TopologyFrame[] = [];
   const growing = new Set(opened);
@@ -53,15 +68,19 @@ export function planInlineExpansion(projection: ReturnType<typeof projectTopolog
       const bounds = frame ? { ...node.bounds, width: frame.width, height: frame.height } : node.bounds;
       return { node, bounds };
     });
-    const anchors = members.filter(({ node }) => growing.has(node.key)).map(({ bounds }) => bounds);
-    if (!anchors.length) continue;
+    if (!opened.has(key) && !members.some(({ node }) => growing.has(node.key))) continue;
 
     const owner = projection.nodeByKey.get(key)?.frame;
-    const insets = frameInsets(scope.definition.ports, projection.portHeights?.get(key));
-    const extent: CoordinateExtent = owner ? moduleExtent(owner.display, insets) : [[-Infinity, -Infinity], [Infinity, Infinity]];
-    const moving = new Set(members.filter(({ node, bounds }) =>
-      node.item.definition.kind === 'component' && anchors.some(anchor => overlaps(anchor, bounds))));
-    const occupied = members.filter(member => !moving.has(member)).map(({ bounds }) => bounds);
+    const extent: CoordinateExtent = owner ? moduleExtent(owner.display, owner.insets) : [[-Infinity, -Infinity], [Infinity, Infinity]];
+    // Reserve clear positions before finding slots so a displaced sibling cannot displace a distant one.
+    members.sort(({ node: a }, { node: b }) => Number(growing.has(b.key)) - Number(growing.has(a.key))
+      || a.preferred.y - b.preferred.y || a.preferred.x - b.preferred.x || (a.key < b.key ? -1 : Number(a.key > b.key)));
+    const occupied: Rect[] = [];
+    const moving = new Set<typeof members[number]>();
+    for (const member of members) {
+      if (occupied.some(rect => overlaps(rect, member.bounds))) moving.add(member);
+      else occupied.push(member.bounds);
+    }
     for (const member of moving) {
       member.bounds = nearestSlot(member.bounds, occupied, extent);
       occupied.push(member.bounds);
@@ -69,10 +88,13 @@ export function planInlineExpansion(projection: ReturnType<typeof projectTopolog
     }
 
     if (!owner) continue;
+    const { insets } = owner;
     const { x, y } = owner.display;
     const width = Math.max(owner.display.width, ...occupied.map(r => (r.x - x) + r.width + insets.right));
     const height = Math.max(owner.display.height, ...occupied.map(r => (r.y - y) + r.height + framePadding));
-    const grew = width > owner.base.width + 1e-6 || height > owner.base.height + 1e-6;
+    // The compact minimum itself may have grown with a measured port row or child card.
+    const previous = owner.saved ?? beforeEdit?.nodeByKey.get(key)?.frame?.display ?? owner.base;
+    const grew = width > previous.width + 1e-6 || height > previous.height + 1e-6;
     if (!grew && (owner.saved || !moving.size)) continue;
 
     // Saving an automatic frame also keeps its origin fixed if a moved card defined its old left/top edge.
