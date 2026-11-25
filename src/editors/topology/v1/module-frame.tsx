@@ -6,7 +6,7 @@ import { useLayoutEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { isPowerPort } from '../../../model/v1/types';
 import type { PortDefinition } from '../../../model/v1/types';
-import { boundaryPortSide, PortLabel, portSides } from './block-ports';
+import { boundaryPortSide, PortLabel, portSides, type PortValue } from './block-ports';
 import { DeviceIcon, type DeviceIconKey } from './device-icon';
 export const framePortRow = 28;
 export const frameHeader = 52;
@@ -42,7 +42,7 @@ export function ModuleFrame({ frameKey, insets, onPortHeight, labelContext, icon
   ports: readonly PortDefinition[];
   labelContext?: PortLabelContext;
   metricTitle?: string;
-  portValue?: (id: string) => string | undefined;
+  portValue?: PortValue;
   newPortId?: string;
   highlighted: ReadonlySet<string>;
   handleId: (portId: string, inner: boolean) => string;
