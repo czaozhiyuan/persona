@@ -1,7 +1,26 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { frameInsets } from '../../src/editors/topology/v1/module-frame';
-import { groupDragBounds, groupDragExtent, groupDropDelta, placeDropGroup } from '../../src/editors/topology/v1/reparent-drop';
+import { groupDragBounds, groupDragExtent, groupDropDelta, placeDropGroup, reparentDropTarget } from '../../src/editors/topology/v1/reparent-drop';
+import type { TopologyItem } from '../../src/editors/topology/v1/topology-projection';
+
+test('the pointer picks the deepest visible module, exactly up to its edge', () => {
+  function moduleAt(path: string[], x: number, size: number): TopologyItem {
+    const id = path.at(-1)!, position = { x, y: x };
+    return { item: { instancePath: path, definition: { id, kind: 'module', name: id, instances: [], ports: [] }, parameters: new Map() },
+      key: JSON.stringify(path), bounds: { ...position, width: size, height: size }, position, preferred: position, offset: { x: 0, y: 0 } };
+  }
+  const source = moduleAt(['source'], 500, 80);
+  const outer = moduleAt(['chassis'], 100, 300), inner = moduleAt(['chassis', 'card'], 150, 100);
+  const visible = [source, inner, outer];
+  const geometry = new Map(visible.map(node => [node.key, node.bounds]));
+  const target = (from: TopologyItem, x: number) => reparentDropTarget(from, visible, [], geometry, { x, y: x });
+  assert.equal(target(source, 250)?.node, inner);
+  assert.equal(target(source, 251)?.node, outer);
+  assert.equal(target(outer, 200)?.node, inner);
+  assert.deepEqual(target(inner, 450)?.destination, []);
+  assert.equal(target(inner, 251), undefined);
+});
 
 test('a group drop translates the whole box and grows the saved destination without shifting its origin', () => {
   const box = { x: 80, y: 100, width: 420, height: 130 };

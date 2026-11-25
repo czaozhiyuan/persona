@@ -1,6 +1,6 @@
 import type { ParameterMapping } from '../../model/v1/parameters';
 import type { CableBundle, LocalEndpointRef } from '../../model/v1/topology';
-import type { ModuleDefinition, PortDefinition } from '../../model/v1/types';
+import type { Instance, ModuleDefinition, PortDefinition } from '../../model/v1/types';
 
 export function availableId(base: string, used: ReadonlySet<string>): string {
   let id = base;
@@ -18,35 +18,46 @@ export const rewriteBundles = (bundles: readonly CableBundle[] | undefined, rewr
     b: core.b.endpoint ? { ...core.b, endpoint: rewrite(core.b.endpoint) } : core.b,
   })) }));
 
-export function moveParametersDown(parent: ModuleDefinition, container: ModuleDefinition, slotId: string,
-  moving: ReadonlySet<string>) {
-  const parameters = [...(container.parameters ?? [])];
-  const parameterIds = new Set(parameters.map(parameter => parameter.id));
-  const forwarded = new Map<string, string>();
-  const internal = [...(container.parameterMappings ?? [])];
-  const external: ParameterMapping[] = [];
-  for (const mapping of parent.parameterMappings ?? []) {
-    if (!moving.has(mapping.target.instanceId)) {
-      external.push(mapping);
-      continue;
-    }
-    let id = forwarded.get(mapping.parameterId);
-    if (id === undefined) {
-      const source = parent.parameters!.find(parameter => parameter.id === mapping.parameterId)!;
-      const { defaultValue: _default, ...parameter } = source;
-      id = availableId(source.id, parameterIds);
-      parameterIds.add(id);
-      parameters.push({ ...parameter, id, overridable: true });
-      forwarded.set(source.id, id);
-      external.push({ parameterId: source.id, target: { instanceId: slotId, parameterId: id } });
-    }
-    internal.push({ ...mapping, parameterId: id });
+export type ModuleHop = { parentId: string; childId: string; slot: Instance };
+
+// Carry only the selected mappings through intermediate scopes. Instance IDs are local to each module.
+export function transferMoveParameters(modules: Map<string, ModuleDefinition>, fromId: string, toId: string,
+  moving: ReadonlySet<string>, sourceBranch: readonly ModuleHop[], targetBranch: readonly ModuleHop[],
+  hasOverride: (hop: ModuleHop, parameterId: string) => boolean) {
+  const source = modules.get(fromId)!;
+  let mappings = source.parameterMappings?.filter(mapping => moving.has(mapping.target.instanceId));
+  if (!mappings?.length) return;
+  modules.set(fromId, { ...source, parameterMappings: source.parameterMappings!.filter(mapping => !moving.has(mapping.target.instanceId)) });
+
+  for (const hop of [...sourceBranch].reverse()) {
+    const parent = modules.get(hop.parentId)!, child = modules.get(hop.childId)!;
+    mappings = mappings.map(mapping => ({ ...mapping, parameterId: forwardedParameterSource(parent, child, hop.slot.id,
+      mapping.parameterId, id => hasOverride(hop, id)) }));
   }
-  return {
-    outer: { ...parent, parameterMappings: parent.parameterMappings && external },
-    inner: { ...container, parameters: parameters.length ? parameters : container.parameters,
-      parameterMappings: internal.length ? internal : container.parameterMappings },
-  };
+  for (const hop of targetBranch) {
+    const parent = modules.get(hop.parentId)!, child = modules.get(hop.childId)!;
+    const parameters = [...(child.parameters ?? [])];
+    const usedIds = new Set(parameters.map(parameter => parameter.id));
+    const forwarded = new Map<string, string>();
+    const external: ParameterMapping[] = [...(parent.parameterMappings ?? [])];
+    mappings = mappings.map(mapping => {
+      let id = forwarded.get(mapping.parameterId);
+      if (id === undefined) {
+        const source = parent.parameters!.find(parameter => parameter.id === mapping.parameterId)!;
+        const { defaultValue: _default, ...parameter } = source;
+        id = availableId(source.id, usedIds);
+        usedIds.add(id);
+        parameters.push({ ...parameter, id, overridable: true });
+        forwarded.set(source.id, id);
+        external.push({ parameterId: source.id, target: { instanceId: hop.slot.id, parameterId: id } });
+      }
+      return { ...mapping, parameterId: id };
+    });
+    modules.set(parent.id, { ...parent, parameterMappings: external });
+    modules.set(child.id, { ...child, parameters });
+  }
+  const target = modules.get(toId)!;
+  modules.set(toId, { ...target, parameterMappings: [...(target.parameterMappings ?? []), ...mappings] });
 }
 
 export function unrestrictedAlias(boundary: PortDefinition, target: PortDefinition): boolean {
@@ -64,21 +75,6 @@ export function forwardedParameterSource(parent: ModuleDefinition, container: Mo
     throw new Error(`模块参数「${source.name}」依赖本层默认值、覆盖值或本层来源，无法安全移出其映射目标。`);
   }
   return incoming.parameterId;
-}
-
-export function moveParametersUp(parent: ModuleDefinition, container: ModuleDefinition, slotId: string,
-  moving: ReadonlySet<string>, hasContainerOverride: (parameterId: string) => boolean) {
-  const parentParameters = [...(parent.parameterMappings ?? [])];
-  const containerParameters = container.parameterMappings?.filter(mapping => {
-    if (!moving.has(mapping.target.instanceId)) return true;
-    const parameterId = forwardedParameterSource(parent, container, slotId, mapping.parameterId, hasContainerOverride);
-    parentParameters.push({ ...mapping, parameterId });
-    return false;
-  });
-  return {
-    outer: { ...parent, parameterMappings: parentParameters.length ? parentParameters : parent.parameterMappings },
-    inner: { ...container, parameterMappings: containerParameters },
-  };
 }
 
 export function moveLocalWiring(source: ModuleDefinition, destination: ModuleDefinition, moving: ReadonlySet<string>) {
