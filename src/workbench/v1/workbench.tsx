@@ -35,7 +35,7 @@ import { cleanLinkDraft, previewLinkDraft, stageLinkFields } from './links/link-
 import type { LinkDraft, LinkFields } from './links/link-draft';
 import { LinkEditor } from './links/link-editor';
 import { createLinkOptions } from './links/link-options';
-import { PortManagerDialog } from './properties/add-port-dialog';
+import { PortManagerDialog, type PortManagerMode } from './properties/add-port-dialog';
 import { structureLocations, structureScope } from './structure-scope';
 import { PropertiesPanel } from './properties/properties-panel';
 import { returnToTopology } from './view-navigation';
@@ -79,7 +79,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const importAttempt = useRef(0);
   const topologyLocation = useRef<TopologyLocation | undefined>(undefined);
   const [projectSession, setProjectSession] = useState(0);
-  const [portTarget, setPortTarget] = useState<InstancePath>();
+  const [portTarget, setPortTarget] = useState<{ path: InstancePath; initialMode: PortManagerMode }>();
   const [newPort, setNewPort] = useState<EndpointRef>();
   const [focusMoved, setFocusMoved] = useState<{ path: InstancePath; centerCanvas: boolean; onlyIfHidden?: boolean }>();
   const [dissolve, setDissolve] = useState<{ base: Project; plan: ReturnType<typeof planDissolveModule>; destination: string; error?: string }>();
@@ -117,7 +117,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const selected = selection.instancePath && store.resolveInstance(selection.instancePath);
   const selectedPaths = selectionPaths(selection);
   const properties = selection.instancePaths ? undefined : selected || activeOccurrence;
-  const targetPortOwner = portTarget && store.resolveInstance(portTarget);
+  const targetPortOwner = portTarget && store.resolveInstance(portTarget.path);
   const layout = selection.view === 'topology' ? project.layout?.topology : project.layout?.physical;
   const linkOptions = useMemo(() => createLinkOptions(project), [project]);
   const budget = useMemo(() => createLinkBudget(project), [project]);
@@ -703,7 +703,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
                 </div>}
                 store={store} state={state} module={active} pathResult={canvasPath} graph={linkOptions.graph} rename={renameSelection}
                 expanded={expandedCanvas} persistExpansion={expandedCanvas !== treeExpansion.current} setExpanded={setExpandedCanvas} budgetHighlight={budgetHighlight}
-                canEditLink={category === 'links' && !!savedLink} onPortBudget={selectBudgetPort} onDcBudget={showDc} onAddPort={setPortTarget} newPort={newPort}
+                canEditLink={category === 'links' && !!savedLink} onPortBudget={selectBudgetPort} onDcBudget={showDc}
+                openPorts={(path, initialMode) => setPortTarget({ path, initialMode })} newPort={newPort}
                 onSelectObject={selectObject} onSelectObjects={selectObjects}
                 copyObjects={copySelectedObjects} pasteObjects={pasteSelectedObjects} copyNotice={copyNotice}
                 fullPage={!!presentation} toggleFullPage={toggleFullPage}
@@ -812,7 +813,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
             <div className="v1-side-scroll v1-object-properties">
               {selection.instancePaths && !topologyActive && <p className="panel" role="status">已选中 {selection.instancePaths.length} 个对象。选中单个对象可编辑属性。</p>}
               {properties && <PropertiesPanel key={JSON.stringify([projectSession, properties.instancePath])}
-                store={store} occurrence={properties} occurrences={linkOptions.graph.instances} jumpToParameter={jumpToParameter} onAddPort={setPortTarget}
+                store={store} occurrence={properties} occurrences={linkOptions.graph.instances} jumpToParameter={jumpToParameter}
+                onAddPort={path => setPortTarget({ path, initialMode: 'manage' })}
                 receiverQuery={portId => {
                   const key = signalPortKey({ instancePath: properties.instancePath, portId });
                   const step = canvasPath?.trace?.steps.find(item => signalPortKey(item.port.ref) === key);
@@ -869,7 +871,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
           <button type="button" onClick={() => setMoveUp(undefined)}>取消</button>
         </div>
       </dialog>}
-      {targetPortOwner && <PortManagerDialog owner={targetPortOwner} name={targetPortOwner.instance?.name ?? targetPortOwner.definition.name}
+      {targetPortOwner && <PortManagerDialog initialMode={portTarget.initialMode} owner={targetPortOwner} name={targetPortOwner.instance?.name ?? targetPortOwner.definition.name}
         locations={structureScope(linkOptions.graph.instances, targetPortOwner.definition.id)}
         store={store} added={portId => setNewPort({ instancePath: targetPortOwner.instancePath, portId })} close={() => setPortTarget(undefined)} />}
     </div>

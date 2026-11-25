@@ -2,6 +2,7 @@ import { setWireRoute } from '../../../state/v1/wire-routes';
 import { createPortal } from 'react-dom';
 import { editablePortName, portDisplayName, portTypeLabels } from '../../../workbench/v1/labels';
 import { createPathNames, structureScope } from '../../../workbench/v1/structure-scope';
+import type { PortManagerMode } from '../../../workbench/v1/properties/add-port-dialog';
 import { useState } from 'react';
 import type { PathResult } from '../../../engine/v1/path-resolver';
 import type { SignalGraph } from '../../../engine/v1/signal-graph';
@@ -32,7 +33,7 @@ import './topology.css';
 
 import type { LibraryConfig } from '../../../library/v1/user-library';
 
-export function TopologyEditor({ multiplex, centerPlacement, linkControls, library, store, state, module, pathResult, graph, rename, expanded, persistExpansion, setExpanded, budgetHighlight, canEditLink, onPortBudget, onDcBudget, onAddPort, newPort, onSelectObject, onSelectObjects, moveAcrossLevels, focusMoved, copyObjects, pasteObjects, copyNotice, fullPage, toggleFullPage, restoreView, placingModule, setPlacingModule, toolsHost, viewHost, topologyActive }: {
+export function TopologyEditor({ multiplex, centerPlacement, linkControls, library, store, state, module, pathResult, graph, rename, expanded, persistExpansion, setExpanded, budgetHighlight, canEditLink, onPortBudget, onDcBudget, openPorts, newPort, onSelectObject, onSelectObjects, moveAcrossLevels, focusMoved, copyObjects, pasteObjects, copyNotice, fullPage, toggleFullPage, restoreView, placingModule, setPlacingModule, toolsHost, viewHost, topologyActive }: {
   multiplex: MultiplexPower;
   linkControls: import('react').ReactNode;
   library: LibraryConfig;
@@ -43,7 +44,7 @@ export function TopologyEditor({ multiplex, centerPlacement, linkControls, libra
   canEditLink: boolean;
   onPortBudget: (action: 'optical' | 'from' | 'to', ref: EndpointRef, editCurrent?: boolean) => void;
   onDcBudget: (scope: InstancePath) => void;
-  onAddPort: (path: InstancePath) => void;
+  openPorts: (path: InstancePath, initialMode: PortManagerMode) => void;
   onSelectObject: (path: InstancePath, extend: boolean) => void;
   onSelectObjects: (paths: readonly InstancePath[]) => void;
   moveAcrossLevels: (base: Project, plan: ApprovedMove, layout?: ReparentLayout) => string | undefined;
@@ -231,7 +232,7 @@ export function TopologyEditor({ multiplex, centerPlacement, linkControls, libra
         fullPage={fullPage} toggleFullPage={toggleFullPage} restoreView={restoreView}
         depth={depth} viewHost={viewHost} topologyActive={topologyActive}
         reparent={(base, plan, layout) => setMessage(moveAcrossLevels(base, plan, layout) ?? '')}
-        onAddPort={onAddPort} newPort={newPort}
+        onAddPort={path => openPorts(path, 'create')} newPort={newPort}
         openPort={(path, portId) => { setMessage(''); setPortAction({ path, portId }); }}
         add={add} placingModule={placingModule} cancelPlacement={() => { setPlacingModule(false); setMessage(''); }}
         deleteInstances={deleteInstances} deleteWiring={deleteWiring} rename={rename} copyObjects={copyObjects} pasteObjects={pasteObjects} report={setMessage} undo={store.undo} redo={store.redo}
@@ -279,7 +280,7 @@ export function TopologyEditor({ multiplex, centerPlacement, linkControls, libra
 
         {activeDcShortcut && <button type="button" onClick={() => onDcBudget(scope)}>查看供电/功耗 · {moduleName}</button>}
         <TopologyTool title="模块对外端口">
-          <button type="button" onClick={() => onAddPort(scope)}>＋ 添加对外端口</button>
+          <button type="button" onClick={() => openPorts(scope, 'manage')}>＋ 添加对外端口</button>
           {portRemoval(module.id, '删除对外端口')}
         </TopologyTool>
         <ConnectionForm module={module} ports={ports} update={updateWiring} />
