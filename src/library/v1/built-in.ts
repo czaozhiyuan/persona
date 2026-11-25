@@ -84,7 +84,7 @@ export const builtInDefinitions = [
         sensitivityDbm: parameter('sensitivity'), overloadDbm: parameter('overload') }],
   },
   {
-    kind: 'component', id: 'library-dml', iconKey: 'dml', name: '直调激光器（DML）',
+    kind: 'component', id: 'library-dml', iconKey: 'dml', name: '直调激光器',
     ports: [rfPorts[0], { ...opticalPorts[1], opticalEmitter: emitter }, fiveVoltInput],
     parameters: [{ ...laserPower, name: '平均输出信号光功率 P0' },
       { ...numeric('slope', '加载 50 Ω 的直调系数 K(f)', 'W/V', { min: 0 }), valueKind: 'rfValue', defaultValue: fixed(0.01) }],
