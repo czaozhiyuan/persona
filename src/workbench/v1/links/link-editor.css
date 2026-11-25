@@ -5,6 +5,8 @@
   display: block; width: 100%; min-width: 0; min-height: 2.15rem; margin-top: .25rem; padding: .35rem .5rem;
   border: 1px solid #becfce; border-radius: .35rem; background: #fff; color: inherit; font: inherit;
 }
+.v1-links .v1-local-endpoints { display: flex; align-items: center; gap: .4rem; }
+.v1-local-endpoints input { width: auto; min-height: auto; margin: 0; }
 .v1-links details { margin-top: .65rem; padding: .55rem .7rem; border: 1px solid #d2dfdb; border-radius: .35rem; }
 .v1-links summary { margin: .15rem 0 .4rem; cursor: pointer; }
 .v1-links form { margin: .65rem 0 .25rem; }

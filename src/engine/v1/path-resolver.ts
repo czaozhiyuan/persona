@@ -2,10 +2,10 @@ import { addSourceCarrier, cascadedModulation, findOpticalSupply, incompatibleSo
 import { resolveOpticalChannel } from '../../model/v1/channels';
 import type { OpticalChannelId } from '../../model/v1/channels';
 import type { CableCoreRef, NamedLink } from '../../model/v1/topology';
-import type { ConnectionRef, EndpointRef, InstancePath, Project } from '../../model/v1/types';
+import type { ConnectionRef, EndpointRef, InstancePath, PortFlow, Project } from '../../model/v1/types';
 import { supportsDirection } from '../../model/v1/types';
 import { validateNamedLinks } from '../../model/v1/validate-topology';
-import { chooseRouteChannel, intersectCarrier, searchSignalPath } from './path-search';
+import { chooseRouteChannel, intersectCarrier, reachableSignalPorts, searchSignalPath } from './path-search';
 import type { Carrier, SignalPath } from './path-search';
 import { buildSignalGraph, opticalSourceFlow, signalPortKey } from './signal-graph';
 import type { SignalEdge, SignalPort } from './signal-graph';
@@ -74,6 +74,27 @@ export function createPathResolver(project: Project) {
       port = edge.from === port ? edge.to : edge.from;
     }
     return port;
+  }
+
+  function routeConstraints(requiredEdges: readonly SignalEdge[]) {
+    // Both directed realizations of a physical wire satisfy the same via constraint.
+    const requiredRefs = new Map([...new Set(requiredEdges.map(edge => edge.source))].map((ref, index) => [ref, 1n << BigInt(index)]));
+    const required = new Map<SignalEdge, bigint>();
+    if (requiredRefs.size) for (const edge of graph.edges) {
+      const bit = requiredRefs.get(edge.source);
+      if (bit !== undefined) required.set(edge, bit);
+    }
+    return { required, allRequired: (1n << BigInt(requiredRefs.size)) - 1n };
+  }
+
+  function reachableFrom(start: SignalPort, channelId?: OpticalChannelId, startFlow?: PortFlow) {
+    const mappings: SignalEdge[] = [];
+    const from = start.definition.direction === 'out' ? followBoundary(start, mappings) : start;
+    return reachableSignalPorts({
+      starts: from.unmapped ? [] : [from], adjacent: outgoing, carrier: channelId && [channelId],
+      startFlow: from.definition.opticalEmitter ? opticalSourceFlow : startFlow ? () => startFlow : undefined,
+      ...routeConstraints(mappings),
+    });
   }
 
   function traceSupplies(path: SignalPath, sources: ReadonlyMap<SignalPort, Carrier>): PathResult {
@@ -156,16 +177,9 @@ export function createPathResolver(project: Project) {
       if (!edge) return { status: 'unreachable', reason: '必经纤芯未接通，请检查所选纤芯两端的附件。' };
       requiredEdges.push(edge);
     }
-    // Both directed realizations of a physical wire satisfy the same via constraint.
-    const requiredRefs = new Map([...new Set(requiredEdges.map(edge => edge.source))].map((ref, index) => [ref, 1n << BigInt(index)]));
-    const required = new Map<SignalEdge, bigint>();
-    if (requiredRefs.size) for (const edge of graph.edges) {
-      const bit = requiredRefs.get(edge.source);
-      if (bit !== undefined) required.set(edge, bit);
-    }
     const carrier: Carrier = request.channelId === undefined ? undefined : [request.channelId];
     const query = {
-      starts: [from], target: to, adjacent: outgoing, carrier, required, allRequired: (1n << BigInt(requiredRefs.size)) - 1n,
+      starts: [from], target: to, adjacent: outgoing, carrier, ...routeConstraints(requiredEdges),
       startFlow: from.definition.opticalEmitter || sources.has(from) ? opticalSourceFlow : undefined,
       startCarriers: sources,
     };
@@ -249,5 +263,5 @@ export function createPathResolver(project: Project) {
     return resolve(request, options);
   }
 
-  return { graph, resolveNamedLink, resolveLocalPath };
+  return { graph, resolveNamedLink, resolveLocalPath, reachableFrom };
 }
