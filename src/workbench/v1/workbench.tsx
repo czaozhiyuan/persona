@@ -578,7 +578,10 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   }
 
   return (
-    <div className="v1-workbench" data-full-page={!!presentation}>
+    <div className="v1-workbench" data-full-page={!!presentation} onKeyDownCapture={event => {
+      if (event.target instanceof HTMLInputElement && event.target.type === 'number'
+        && (event.key === 'ArrowUp' || event.key === 'ArrowDown') && !event.nativeEvent.isComposing) event.preventDefault();
+    }}>
       <header className="toolbar">
         <div className="brand">persona <span>V1</span></div>
         <span className="divider" />

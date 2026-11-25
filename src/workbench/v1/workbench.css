@@ -9,8 +9,9 @@
 body { margin: 0; }
 button, input, select { font: inherit; }
 input[type="number"] { appearance: textfield; }
+/* Removing the spin button also lets Chromium scroll the native container over a focused number field. */
 input[type="number"]::-webkit-inner-spin-button,
-input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="number"]::-webkit-outer-spin-button { display: none; }
 
 button {
   min-height: 2.25rem;
