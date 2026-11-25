@@ -40,7 +40,7 @@ export type PortDefinition = {
   name?: string;
   type: PortType;
   direction: PortDirection;
-  side?: 'top';
+  side?: 'top' | 'left';
   channelIds?: readonly OpticalChannelId[];
   opticalEmitter?: OpticalEmitter;
   inputRating?: InputRating;
@@ -61,7 +61,7 @@ type DefinitionIdentity = {
 export type PhysicalFootprint = { widthMm: number; depthMm: number };
 
 export const componentIconKeys = [
-  'laser', 'dml', 'multiWavelengthSource', 'mzm', 'photodiode', 'opticalSwitch', 'opticalAttenuator',
+  'laser', 'dml', 'multiWavelengthSource', 'mzm', 'photodiode', 'opticalSwitch', 'opticalAttenuator', 'opticalAmplifier', 'circulator', 'isolator',
   'amplifier', 'rfAttenuator', 'dcSupply', 'dcConverter', 'controlCircuit', 'splitter', 'sfp',
 ] as const;
 export type ComponentIconKey = typeof componentIconKeys[number];

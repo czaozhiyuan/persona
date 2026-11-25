@@ -3,14 +3,15 @@ import type { OpticalSource } from '../../model/v1/topology';
 import type { EndpointRef, PortFlow } from '../../model/v1/types';
 import { addSourceCarrier, findOpticalSupply, selectOpticalSource } from './optical-supply';
 import { searchSignalPath, type Carrier, type SignalPath } from './path-search';
-import { opticalSourceFlow, signalPortKey, type SignalEdge, type SignalGraph, type SignalPort } from './signal-graph';
+import { isDarkSplitterEdge, opticalSourceFlow, signalPortKey, type SignalEdge, type SignalGraph, type SignalPort } from './signal-graph';
 
 export const cochannelConflict = '同方向、同波长存在多路来源或重复汇入，超出光功率合成模型。';
 type Origin = { source: OpticalSource; path: SignalPath; modulator?: { eo: SignalEdge; supply: SignalPath } };
-type Origins = { paths: Origin[]; unresolved: EndpointRef[] };
+type Origins = { paths: Origin[]; unresolved: EndpointRef[]; dark?: boolean };
 
 export function createOpticalOrigins(graph: SignalGraph, trials: readonly OpticalSource[] = []) {
   const adjacent = new Map<SignalPort, SignalEdge[]>();
+  const hasDark = graph.edges.some(isDarkSplitterEdge);
   const modulators: SignalEdge[] = [];
   const emitters = new Set([...graph.ports.values()].filter(p => p.definition.opticalEmitter));
   const selected = new Map<SignalPort, Carrier>();
@@ -25,20 +26,21 @@ export function createOpticalOrigins(graph: SignalGraph, trials: readonly Optica
     if (edge.supply) modulators.push(edge);
   }
   const cache = new Map<string, Origins>();
-  return (target: SignalPort, channel: OpticalChannelId, flow: PortFlow): Origins => {
-    const key = JSON.stringify([target.ref, channel, flow]);
+  function lookup(target: SignalPort, channel: OpticalChannelId | undefined, flow: PortFlow, physical: boolean): Origins {
+    const key = JSON.stringify([target.ref, channel, flow, physical]);
     const cached = cache.get(key);
     if (cached) return cached;
+    const splitterRouting = physical ? 'physical' : 'transmitting';
     const paths: Origin[] = [], unresolved: EndpointRef[] = [];
     function trace(start: SignalPort, eo?: SignalEdge) {
       const carrier = eo?.channels.kind === 'enter' ? eo.channels.channelIds : undefined;
       const result = searchSignalPath({ starts: [start], startFlow: opticalSourceFlow, target, targetFlow: flow,
-        targetCarrier: [channel], startCarriers: eo ? undefined : selected,
-        carrier, adjacent, opticalOnly: true });
+        targetCarrier: channel ? [channel] : undefined, startCarriers: eo ? undefined : selected,
+        carrier, adjacent, opticalOnly: true, splitterRouting });
       if (result.status === 'unreachable') return;
       if (result.status !== 'resolved') {
         if (eo) {
-          const supply = findOpticalSupply(graph, adjacent, eo.supply!, carrier, selected);
+          const supply = findOpticalSupply(graph, adjacent, eo.supply!, carrier, selected, splitterRouting);
           if (supply.status === 'unreachable' || supply.status === 'incompatible_source') return;
         }
         unresolved.push(start.ref);
@@ -51,7 +53,7 @@ export function createOpticalOrigins(graph: SignalGraph, trials: readonly Optica
         else unresolved.push(start.ref);
         return;
       }
-      const supply = findOpticalSupply(graph, adjacent, eo.supply!, first.channelIds, selected);
+      const supply = findOpticalSupply(graph, adjacent, eo.supply!, first.channelIds, selected, splitterRouting);
       if (supply.status === 'unreachable' || supply.status === 'incompatible_source') return;
       if (supply.status !== 'resolved') { unresolved.push(start.ref); return; }
       const source = selectOpticalSource(supply.path.steps[0], trials);
@@ -63,5 +65,12 @@ export function createOpticalOrigins(graph: SignalGraph, trials: readonly Optica
     const result = { paths, unresolved };
     cache.set(key, result);
     return result;
+  }
+  return (target: SignalPort, channel: OpticalChannelId | undefined, flow: PortFlow, reportDark = false): Origins => {
+    const active = lookup(target, channel, flow, false);
+    if (!reportDark || !hasDark || active.paths.length || active.unresolved.length) return active;
+    // Distinguish a connected zero-power wave from a disconnected channel on the power display.
+    const wired = lookup(target, channel, flow, true);
+    return { ...active, dark: wired.paths.length > 0 || wired.unresolved.length > 0 };
   };
 }

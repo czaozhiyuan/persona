@@ -74,8 +74,9 @@ export function createMultiplexPower(graph: SignalGraph, trials: readonly Optica
     if (!port || port.definition.type !== 'OPTICAL'
       || (port.definition.direction !== 'bidirectional' && port.definition.direction !== flow)) return;
     origins ??= createOpticalOrigins(graph, trials);
-    const { paths, unresolved } = origins(port, channelId, flow);
+    const { paths, unresolved, dark } = origins(port, channelId, flow, true);
     const sources = [...paths.map(p => p.source.endpoint), ...unresolved];
+    if (dark) return { channelId, flow, sources, power: logZero('dBm') };
     if (!sources.length) return;
     if (unresolved.length || paths.length > 1) return { channelId, flow, sources, power: unavailable('dBm', cochannelConflict) };
     budget ??= createOpticalBudgetForGraph(graph, origins);

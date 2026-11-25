@@ -1,6 +1,6 @@
 import type { OpticalChannelId } from '../../model/v1/channels';
 import type { PortFlow } from '../../model/v1/types';
-import { channelRoutingPorts, portFlowAt } from './signal-graph';
+import { channelRoutingPorts, isDarkSplitterEdge, portFlowAt } from './signal-graph';
 import type { SignalEdge, SignalPort } from './signal-graph';
 
 /** Undefined denotes an unrestricted optical carrier, or no carrier at an electrical port. */
@@ -18,6 +18,8 @@ type State = {
 };
 type Arc = { state: State; edge: SignalEdge };
 
+export type SplitterRouting = 'transmitting' | 'physical';
+
 type Search = {
   starts: readonly SignalPort[];
   target?: SignalPort;
@@ -33,6 +35,7 @@ type Search = {
   allRequired?: bigint;
   opticalOnly?: boolean;
   reverse?: boolean;
+  splitterRouting?: SplitterRouting;
 };
 
 export type SearchResult =
@@ -99,6 +102,62 @@ function toPath(states: readonly State[], edges: readonly SignalEdge[], reverse:
 
 /** Searches a bounded state graph, then counts viable routes up to two without enumerating paths. */
 export function searchSignalPath(query: Search): SearchResult {
+  if (query.splitterRouting === 'physical') return searchRoutes(query);
+  let skippedDark = false;
+  const transmitting = searchRoutes(query, edge => {
+    if (!isDarkSplitterEdge(edge)) return false;
+    skippedDark = true;
+    return true;
+  });
+  // An explicitly required or solely connected dark leg is still a measurable zero-power path.
+  return transmitting.status === 'unreachable' && skippedDark && query.splitterRouting !== 'transmitting'
+    ? searchRoutes(query, undefined, true) : transmitting;
+}
+
+/** Keep the shared prefix and suffix without choosing a branch from parallel, fully extinguished optical routes. */
+function darkParallelPath(start: State, target: State, relevant: ReadonlySet<State>, targetCarrier: Carrier): SignalPath | undefined {
+  const head = [start], headEdges: SignalEdge[] = [];
+  let from = start;
+  for (;;) {
+    const outgoing = from.next.filter(arc => relevant.has(arc.state));
+    if (outgoing.length !== 1) break;
+    headEdges.push(outgoing[0].edge);
+    from = outgoing[0].state;
+    head.push(from);
+  }
+  const tail = [target], tailEdges: SignalEdge[] = [];
+  let to = target;
+  while (to.previous.length === 1) {
+    const before = to.previous[0];
+    tailEdges.push(before.next.find(arc => arc.state === to)!.edge);
+    to = before;
+    tail.push(to);
+  }
+  // Every physical route crosses a zero-share edge. Keep that loss inside the summarized span.
+  const headZero = headEdges.findIndex(isDarkSplitterEdge), tailZero = tailEdges.findIndex(isDarkSplitterEdge);
+  if (headZero >= 0) { head.length = headZero + 1; headEdges.length = headZero; }
+  if (tailZero >= 0) { tail.length = tailZero + 1; tailEdges.length = tailZero; }
+  from = head.at(-1)!;
+  to = tail.at(-1)!;
+  const middle = new Set(relevant);
+  for (const state of head.slice(0, -1)) middle.delete(state);
+  for (const state of tail.slice(0, -1)) middle.delete(state);
+  const departures = new Set<PortFlow>(), arrivals = new Set<PortFlow>();
+  for (const state of middle) {
+    for (const arc of state.next) {
+      if (!middle.has(arc.state)) continue;
+      if (arc.edge.channels.kind !== 'preserve') return;
+      if (state === from) departures.add(portFlowAt(arc.edge, from.port));
+      if (arc.state === to) arrivals.add(portFlowAt(arc.edge, to.port));
+    }
+  }
+  if (departures.size !== 1 || arrivals.size !== 1) return;
+  const edge: SignalEdge = { from: from.port, to: to.port, channels: { kind: 'preserve', channelIds: to.carrier },
+    source: { kind: 'darkParallelPaths', fromFlow: [...departures][0], toFlow: [...arrivals][0] } };
+  return toPath([...head, ...tail.reverse()], [...headEdges, edge, ...tailEdges.reverse()], false, targetCarrier);
+}
+
+function searchRoutes(query: Search, skip?: (edge: SignalEdge) => boolean, allDark = false): SearchResult {
   const reverse = query.reverse ?? false;
   const allRequired = query.allRequired ?? 0n;
   const index = new Map<SignalPort, Map<string, State>>();
@@ -141,6 +200,7 @@ export function searchSignalPath(query: Search): SearchResult {
     }
     for (const edge of query.adjacent.get(current.port) ?? []) {
       if (current.flow && current.flow !== portFlowAt(edge, current.port)) continue;
+      if (skip?.(edge)) continue;
       const port = reverse ? edge.from : edge.to;
       if (query.opticalOnly && port.definition.type !== 'OPTICAL') continue;
       const emitted = edge.channels.kind === 'enter' && !edge.supply ? query.startCarriers?.get(edge.to) : undefined;
@@ -188,6 +248,10 @@ export function searchSignalPath(query: Search): SearchResult {
   const viable = [...starts].filter(state => counts.has(state));
   if (viable.length !== 1) return { status: 'ambiguous' };
   if (counts.get(viable[0]) !== 1) {
+    if (allDark && !reverse && targets.length === 1) {
+      const path = darkParallelPath(viable[0], targets[0], relevant, query.targetCarrier);
+      if (path) return { status: 'resolved', path };
+    }
     const routers = query.carrier?.length === 1 || query.targetCarrier?.length === 1 ? undefined : channelRoutingPorts(viableEdges(relevant));
     const channelPort = routers?.from.values().next().value ?? routers?.to.values().next().value;
     return { status: 'ambiguous', channelPort };

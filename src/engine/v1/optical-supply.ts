@@ -1,7 +1,7 @@
 import type { OpticalChannelId } from '../../model/v1/channels';
 import type { OpticalSource } from '../../model/v1/topology';
 import { searchSignalPath } from './path-search';
-import type { Carrier, SignalStep } from './path-search';
+import type { Carrier, SignalStep, SplitterRouting } from './path-search';
 import { opticalSourceFlow, signalPortKey } from './signal-graph';
 import type { SignalEdge, SignalGraph, SignalPort } from './signal-graph';
 
@@ -25,10 +25,10 @@ export function selectOpticalSource(first: SignalStep, sources: readonly Optical
 
 /** An explicit selection applies only to the supply branch it can reach. */
 export function findOpticalSupply(graph: SignalGraph, adjacent: ReadonlyMap<SignalPort, readonly SignalEdge[]>,
-  target: SignalPort, targetCarrier: Carrier, selected: ReadonlyMap<SignalPort, Carrier>) {
+  target: SignalPort, targetCarrier: Carrier, selected: ReadonlyMap<SignalPort, Carrier>, splitterRouting?: SplitterRouting) {
   const search = (starts: readonly SignalPort[], startCarriers?: ReadonlyMap<SignalPort, Carrier>, ignoreChannels = false) =>
     searchSignalPath({ starts, startCarriers, startFlow: opticalSourceFlow, target, targetFlow: 'in',
-      adjacent, carrier: undefined, targetCarrier: ignoreChannels ? undefined : targetCarrier, opticalOnly: true, ignoreChannels });
+      adjacent, carrier: undefined, targetCarrier: ignoreChannels ? undefined : targetCarrier, opticalOnly: true, ignoreChannels, splitterRouting });
   const dmlOutputs = graph.edges.filter(edge => edge.source.kind === 'transfer' && edge.source.transfer.kind === 'dml').map(edge => edge.to);
   if (dmlOutputs.length) {
     const cascade = search(dmlOutputs);
