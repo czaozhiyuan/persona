@@ -5,7 +5,10 @@ import { createLinkBudget } from '../../src/engine/v1/link-budget';
 import { createMultiplexPower } from '../../src/engine/v1/multiplex-power';
 import { createOpticalBudget, createOpticalBudgetForGraph } from '../../src/engine/v1/optical-budget';
 import { createPathResolver } from '../../src/engine/v1/path-resolver';
+import type { ComponentDefinition } from '../../src/model/v1/types';
+import { wireRouteKey } from '../../src/model/v1/wire-route';
 import { parseProjectJson, serializeProjectJson } from '../../src/storage/v1/project-json';
+import { portPowerLines, totalText } from '../../src/workbench/v1/budgets/multiplex-details';
 import { endpoint, fixed, local, wdmProject } from './fixtures/wdm-project';
 
 function numeric(metric: BudgetMetric) {
@@ -26,7 +29,20 @@ test('two nested WDMs multiplex four separate waves over one lossy fibre or MPO 
     const restored = parseProjectJson(serializeProjectJson(p));
     const resolver = createPathResolver(restored), optical = createOpticalBudgetForGraph(resolver.graph);
     const multiplex = createMultiplexPower(resolver.graph);
+    const key = wireRouteKey([], mpo ? { kind: 'core', id: 'core1', bundleId: 'MPO' } : { kind: 'connection', id: 'fibre' });
+    const directions = multiplex.wire(key)!;
+    assert.equal(directions.length, 2);
+    for (const d of directions) {
+      assert.equal(d.lossDb, 2);
+      near(d.start.known, 2.010299956639812);
+      near(d.arrival.known, .010299956639812);
+      assert.equal(d.waves.length, 2);
+      assert.ok(d.waves.every(w => numeric(w.power) === -1 && numeric(w.arrival) === -3));
+    }
     for (const box of ['A', 'B']) {
+      const mapping = multiplex.wire(wireRouteKey([box], { kind: 'mapping', id: 'COM' }))!;
+      assert.deepEqual(mapping.map(d => [d.fromFlow, d.toFlow, d.from.instancePath, d.to.instancePath]),
+        [['in', 'in', [box], [box, 'wdm']], ['out', 'out', [box, 'wdm'], [box]]]);
       for (const ref of [endpoint(box, 'wdm', 'COM'), {instancePath: [box], portId: 'COM'}]) {
         const point = multiplex.at(ref)!;
         near(point.out.known, 2.010299956639812);
@@ -43,6 +59,79 @@ test('two nested WDMs multiplex four separate waves over one lossy fibre or MPO 
       assert.deepEqual(point.stages.filter(s => s.endpoint.portId === 'COM').map(s => numeric(s.powerDbm)), [-1, -1, -3, -3]);
     }
     assert.equal(multiplex.at(endpoint('A', 'wdm', 'CH1')), undefined);
+  }
+});
+
+test('same-wave counterpropagation retains its source, power and port side after reversing stored wire ends', () => {
+  const p = wdmProject(), [root, a] = p.moduleDefinitions;
+  p.namedLinks = [];
+  root.instances = root.instances.map(i => ({ ...i, definitionId: 'A' }));
+  a.connections = a.connections!.filter(c => c.id !== 'branch1');
+  const trials = ['A', 'B'].map((box, i) => ({ endpoint: endpoint(box, 'wave0', 'OPT_OUT'), channelId: 'CWDM_1311' as const, powerDbm: i ? 10 : 13 }));
+  const fibre = root.connections![0];
+  for (const reverse of [false, true]) {
+    root.connections = [{ ...fibre, from: reverse ? fibre.to : fibre.from, to: reverse ? fibre.from : fibre.to, lossDb: 0 }];
+    const mux = createMultiplexPower(createPathResolver(p).graph, trials);
+    const wire = mux.wire(wireRouteKey([], { kind: 'connection', id: fibre.id }))!;
+    assert.equal(wire.length, 2);
+    for (const d of wire) {
+      const box = d.from.instancePath[0], launch = box === 'A' ? 12 : 9;
+      assert.deepEqual(d.waves.map(w => [w.channelId, w.sources]), [['CWDM_1311', [endpoint(box, 'wave0', 'OPT_OUT')]]]);
+      near(d.start.known, launch); near(d.arrival.known, launch);
+      const at = mux.at(d.from)!;
+      for (const [side, outArrow, inArrow] of [['top', '↑', '↓'], ['left', '←', '→'], ['right', '→', '←']] as const) {
+        assert.deepEqual(portPowerLines(at, side), [outArrow + ' 出 ' + launch.toFixed(2) + ' dBm',
+          inArrow + ' 入 ' + (box === 'A' ? '9.00' : '12.00') + ' dBm']);
+      }
+    }
+  }
+});
+
+test('wire readings isolate parallel channel filters, incoming branches, and empty, unknown or partial power', () => {
+  const p = wdmProject(), root = p.moduleDefinitions[0], a = p.moduleDefinitions[1];
+  const sink: ComponentDefinition = { id: 'sink', kind: 'component', name: 'Sink', ports: [
+    { id: 'IN', type: 'OPTICAL', direction: 'in', channelIds: ['CWDM_1311'] }] };
+  p.componentDefinitions = [...p.componentDefinitions, sink];
+  root.instances = [...root.instances, { id: 'tap', name: 'Tap', definitionId: 'sink' }];
+  root.connections = [...root.connections!, { id: 'tap', from: local('A', 'COM'), to: local('tap', 'IN') },
+    { id: 'other', from: local('B', 'COM'), to: local('tap', 'IN') }];
+  const wire = (id: string) => wireRouteKey([], { kind: 'connection', id });
+  const get = () => createMultiplexPower(createPathResolver(p).graph);
+  const tap = () => get().wire(wire('tap'))!;
+  assert.equal(tap().length, 1);
+  assert.deepEqual(tap()[0].waves.map(w => w.channelId), ['CWDM_1311']);
+  near(tap()[0].start.known, -1);
+  assert.deepEqual(get().wire(wire('other')), []);
+  sink.ports = [{ ...sink.ports[0], channelIds: ['CWDM_1311', 'CWDM_1371'] }];
+  const branched = get();
+  near(branched.at({ instancePath: ['tap'], portId: 'IN' })!.in.known, -1 + 10 * Math.log10(2));
+  assert.deepEqual(branched.wire(wire('other'))![0].waves.map(w => w.channelId), ['CWDM_1371']);
+  assert.deepEqual(branched.wire(wire('tap'))![0].waves.map(w => w.channelId), ['CWDM_1311']);
+  const laser = p.componentDefinitions.find(d => d.id === 'library-laser')!;
+  laser.parameters = laser.parameters?.map(param => ({ ...param, defaultValue: undefined }));
+  a.instances.find(i => i.id === 'wave0')!.parameterOverrides = {};
+  assert.equal(totalText(tap()[0].start, 2), '未确定');
+  const trunk = get().wire(wire('fibre'))!.find(d => d.from.instancePath[0] === 'A')!;
+  assert.equal(totalText(trunk.start, 2), '已知 -1.00 dBm');
+  a.connections = a.connections!.filter(c => c.id !== 'branch0');
+  assert.deepEqual(tap(), []);
+});
+
+test('two levels of bidirectional public ports preserve the module-relative faces of both mapping directions', () => {
+  const p = wdmProject(), box = p.moduleDefinitions[1];
+  const child = { ...box, id: 'inner' };
+  p.moduleDefinitions = [...p.moduleDefinitions, child];
+  box.instances = [{ id: 'inner', name: 'Inner', definitionId: child.id }];
+  box.connections = []; box.portMappings = [{ portId: 'COM', target: local('inner', 'COM') }];
+  delete p.layout; delete p.namedLinks;
+  const mux = createMultiplexPower(createPathResolver(p).graph);
+  for (const scope of [['A'], ['A', 'inner']]) {
+    const directions = mux.wire(wireRouteKey(scope, { kind: 'mapping', id: 'COM' }))!;
+    assert.deepEqual(directions.map(d => [d.fromFlow, d.toFlow]), [['in', 'in'], ['out', 'out']]);
+    assert.deepEqual(directions[0].from.instancePath, scope);
+    assert.deepEqual(directions[1].to.instancePath, scope);
+    near(directions[0].start.known, .010299956639812);
+    near(directions[1].start.known, 2.010299956639812);
   }
 });
 

@@ -1,12 +1,13 @@
 import type { OpticalChannelId } from '../../model/v1/channels';
 import { portDisplayName } from '../../model/v1/display-names';
 import type { EndpointRef, PortFlow } from '../../model/v1/types';
-import { budgetValue, logZero, unavailable, type BudgetMetric } from './budget-metric';
+import { wireRouteKey } from '../../model/v1/wire-route';
+import { addGain, budgetValue, logZero, unavailable, type BudgetMetric } from './budget-metric';
 import { createOpticalBudgetForGraph } from './optical-budget';
 import { createPathNames } from './path-names';
 import { cochannelConflict, createOpticalOrigins } from './optical-origins';
 import type { OpticalSource } from '../../model/v1/topology';
-import { signalPortKey, type SignalGraph, type SignalPort } from './signal-graph';
+import { portFlowAt, signalPortKey, type SignalEdge, type SignalGraph, type SignalPort } from './signal-graph';
 
 export type MultiplexWave = {
   channelId: OpticalChannelId;
@@ -16,10 +17,21 @@ export type MultiplexWave = {
 };
 export type MultiplexTotal = { known: BudgetMetric<'dBm'>; partial: boolean };
 export type MultiplexPoint = { ref: EndpointRef; waves: MultiplexWave[]; in: MultiplexTotal; out: MultiplexTotal };
+export type MultiplexDirection = {
+  from: EndpointRef; to: EndpointRef; fromFlow: PortFlow; toFlow: PortFlow;
+  start: MultiplexTotal; arrival: MultiplexTotal; lossDb: number;
+  waves: (MultiplexWave & { arrival: BudgetMetric<'dBm'> })[];
+};
 
-function total(waves: readonly MultiplexWave[]): MultiplexTotal {
-  const values = waves.flatMap(w => w.power.availability === 'available' ? [w.power.value] : []);
-  const partial = values.length < waves.length;
+function physicalWireKey({ source }: SignalEdge) {
+  if (source.kind === 'connection') return wireRouteKey(source.ref.scopePath, { kind: 'connection', id: source.ref.connectionId });
+  if (source.kind === 'cableCore') return wireRouteKey(source.ref.scopePath, { kind: 'core', bundleId: source.ref.bundleId, id: source.ref.coreId });
+  if (source.kind === 'portMapping') return wireRouteKey(source.publicPort.instancePath, { kind: 'mapping', id: source.publicPort.portId });
+}
+
+function total(powers: readonly BudgetMetric<'dBm'>[]): MultiplexTotal {
+  const values = powers.flatMap(p => p.availability === 'available' ? [p.value] : []);
+  const partial = values.length < powers.length;
   if (!values.length) return { known: unavailable('dBm', partial ? '各通道功率均未确定。' : '没有活动通道。'), partial };
   const max = Math.max(...values);
   // Sum in linear units relative to the largest carrier to avoid overflow.
@@ -98,13 +110,45 @@ export function createMultiplexPower(graph: SignalGraph, trials: readonly Optica
         if (wave) waves.push(wave);
       }
     }
-    const point = { ref, waves, in: total(waves.filter(w => w.flow === 'in')), out: total(waves.filter(w => w.flow === 'out')) };
+    const sum = (flow: PortFlow) => total(waves.flatMap(w => w.flow === flow ? [w.power] : []));
+    const point = { ref, waves, in: sum('in'), out: sum('out') };
     cached.set(port, point);
     return point;
   }
+  const arcs = new Map<string, SignalEdge[]>();
+  for (const edge of graph.edges) {
+    if (!channelsAt.has(edge.from) || !channelsAt.has(edge.to)) continue;
+    const key = physicalWireKey(edge);
+    if (!key) continue;
+    const directions = arcs.get(key);
+    if (directions) directions.push(edge);
+    else arcs.set(key, [edge]);
+  }
+  const wires = new Map<string, MultiplexDirection[]>();
+  function wire(key: string) {
+    const edges = arcs.get(key);
+    if (!edges) return;
+    const cachedWire = wires.get(key);
+    if (cachedWire) return cachedWire;
+    const directions: MultiplexDirection[] = [];
+    for (const edge of edges) {
+      const { from, to, source, channels } = edge;
+      if (channels.kind !== 'preserve') continue;
+      const fromFlow = portFlowAt(edge, from), toFlow = portFlowAt(edge, to);
+      const lossDb = (source.kind === 'connection' || source.kind === 'cableCore' ? source.lossDb : undefined) ?? 0;
+      // A receiver can have other incoming wires. Propagate only waves admitted by this arc.
+      const gain = budgetValue('dB', -lossDb);
+      const waves = at(from.ref)!.waves.filter(w => w.flow === fromFlow && (!channels.channelIds || channels.channelIds.includes(w.channelId)))
+        .map(w => ({ ...w, arrival: addGain(w.power, gain) }));
+      if (waves.length) directions.push({ from: from.ref, to: to.ref, fromFlow, toFlow, lossDb, waves,
+        start: total(waves.map(w => w.power)), arrival: total(waves.map(w => w.arrival)) });
+    }
+    wires.set(key, directions);
+    return directions;
+  }
   const { showPath } = createPathNames(graph.instances);
   const label = (ref: EndpointRef) => showPath(ref.instancePath) + ' · ' + portDisplayName(graph.ports.get(signalPortKey(ref))!.definition);
-  return { at, readWave, label };
+  return { at, readWave, wire, label };
 }
 
 export type MultiplexPower = ReturnType<typeof createMultiplexPower>;

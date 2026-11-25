@@ -10,6 +10,7 @@ import { buildSignalGraph } from '../../src/engine/v1/signal-graph';
 import { builtInDefinitions } from '../../src/library/v1/built-in';
 import { factoryLibrary, parseLibrary, saveDefinition } from '../../src/library/v1/user-library';
 import type { ComponentDefinition, PortDefinition } from '../../src/model/v1/types';
+import { wireRouteKey } from '../../src/model/v1/wire-route';
 import { parseProjectJson, serializeProjectJson } from '../../src/storage/v1/project-json';
 import { endpoint, fixed, local, wdmProject } from './fixtures/wdm-project';
 
@@ -132,7 +133,10 @@ test('a dark splitter branch has zero power even with unknown launch power; a tr
     spare.ports = spare.ports.map(port => port.opticalEmitter ? { ...port, opticalEmitter: {} } : port);
     const result = createOpticalBudget(p).calculateLocal({ source: { endpoint: { instancePath: ['spare'], portId: 'OPT_OUT' },
       channelId: 'CWDM_1311' }, to: endpoint('B','wave0','OPT_IN') });
-    const wave = createMultiplexPower(buildSignalGraph(p)).readWave(endpoint('B','wdm','COM'), 'CWDM_1311', 'in');
+    const multiplex = createMultiplexPower(buildSignalGraph(p));
+    const wave = multiplex.readWave(endpoint('B','wdm','COM'), 'CWDM_1311', 'in');
+    const wire = multiplex.wire(wireRouteKey([], { kind: 'connection', id: 'fibre' }))!.find(d => d.from.instancePath[0] === 'split')!;
+    assert.deepEqual(wire.waves.map(w => [w.channelId, w.arrival]), [['CWDM_1311', wave!.power]]);
     if (ratio === 100) {
       assert.equal(numeric(result.powerDbm), -Infinity);
       assert.deepEqual(wave?.sources, []);

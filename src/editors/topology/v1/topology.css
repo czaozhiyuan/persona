@@ -61,7 +61,11 @@
   font: inherit; text-align: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; pointer-events: auto;
 }
 .v1-topology-port .v1-port-label:hover { text-decoration: underline; }
-.v1-port-multiplex { display: block; font-size: .65rem; font-weight: normal; white-space: normal; }
+.v1-port-multiplex { display: block; font-size: .65rem; font-weight: normal; line-height: 1.2; }
+.v1-port-multiplex > span { display: block; }
+.v1-topology-device:has(.v1-block-columns .v1-port-multiplex) { min-width: 15rem; }
+.v1-block-column.top:has(.v1-port-multiplex) { grid-auto-columns: minmax(6.5rem, 1fr); }
+.v1-block-column .v1-topology-port:has(.v1-port-multiplex) { height: auto; }
 .v1-wire-readings:has(details) { position: absolute; left: .5rem; bottom: .5rem; z-index: 4; max-width: min(42rem, 85%); max-height: 45%; overflow: auto; padding: .4rem .6rem; background: white; border: 1px solid #b6c7c1; border-radius: 4px; }
 .v1-multiplex-details table { border-collapse: collapse; }
 .v1-multiplex-details :is(th, td) { text-align: left; padding: .2rem .4rem; border-bottom: 1px solid #d8e2de; }
@@ -69,6 +73,7 @@
 .v1-port-actions textarea { display: block; width: 100%; resize: vertical; }
 .v1-port-actions form + form { border-top: 1px solid #ccdad5; margin-top: .8rem; padding-top: .6rem; }
 .v1-block-column .v1-topology-port span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.v1-block-column .v1-topology-port .v1-port-multiplex > span { white-space: normal; }
 .v1-module-frame { box-sizing: border-box; width: 100%; height: 100%; border: 2px solid transparent; border-radius: .5rem; }
 .v1-frame-surfaces { position: absolute; inset: 0; z-index: -1; pointer-events: none; }
 .v1-frame-surface { position: absolute; border: 2px solid #82948e; border-radius: .5rem; background: var(--v1-frame-fill); }

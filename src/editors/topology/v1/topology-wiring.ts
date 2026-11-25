@@ -23,6 +23,7 @@ export type WiringEdge = Edge<{
   scope: InstancePath;
   portType: PortType;
   caption?: string;
+  powerLabels?: { reverse: boolean; text: string }[];
   fan?: { x: number; y: number };
 }, 'signal'>;
 
