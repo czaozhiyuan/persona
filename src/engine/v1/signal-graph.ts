@@ -43,6 +43,24 @@ export function isDigitalEdge(edge: SignalEdge) {
   return edge.source.kind === 'transfer' && (edge.source.transfer.kind === 'digitalTx' || edge.source.transfer.kind === 'digitalRx');
 }
 
+/** Identifies mux/demux ports by their channel-specific routes, independent of device names or icons. */
+export function channelRoutingPorts(edges: Iterable<SignalEdge>) {
+  const filters = new Map<SignalPort, string>();
+  const ports = new Set<SignalPort>();
+  for (const edge of edges) {
+    if (edge.source.kind !== 'switchRoute' && !(edge.source.kind === 'transfer'
+      && (edge.source.transfer.kind === 'optical' || edge.source.transfer.kind === 'wavelengthConversion'))) continue;
+    for (const port of [edge.from, edge.to]) {
+      const filter = edge.channels.kind === 'convert' ? [port === edge.from ? edge.channels.fromChannelId : edge.channels.toChannelId]
+        : edge.channels.kind === 'preserve' ? edge.channels.channelIds : undefined;
+      const key = filter ? [...filter].sort().join(',') : '';
+      if (filters.has(port) && filters.get(port) !== key) ports.add(port);
+      filters.set(port, key);
+    }
+  }
+  return ports;
+}
+
 export function signalPortKey({ instancePath, portId }: EndpointRef): string {
   return JSON.stringify([instancePath, portId]);
 }

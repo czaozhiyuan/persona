@@ -177,7 +177,7 @@ const requiredEdge: Check = (value, path) => {
 const link = shape(identity, {
   from: endpoint, to: endpoint, channelId: text, via: list(requiredEdge),
   trial: shape({ frequencyGHz: number }, { inputPowerDbm: number,
-    opticalSources: list(shape({ endpoint, channelId: text }, { powerDbm: number })) }),
+    opticalSources: list(shape({ endpoint }, { channelId: text, powerDbm: number })) }),
 });
 const projectShape = shape({
   ...identity, rootModuleDefinitionId: text, componentDefinitions: list(component), moduleDefinitions: list(moduleDefinition),

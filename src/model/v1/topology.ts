@@ -38,7 +38,7 @@ export type ConversionBoundary = {
   toPortId: string;
 };
 
-export type OpticalSource = { endpoint: EndpointRef; channelId: OpticalChannelId; powerDbm?: number };
+export type OpticalSource = { endpoint: EndpointRef; channelId?: OpticalChannelId; powerDbm?: number };
 
 export type LinkTrial = {
   frequencyGHz: number;

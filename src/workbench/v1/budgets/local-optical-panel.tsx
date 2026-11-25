@@ -45,7 +45,7 @@ export function LocalOpticalPanel({ options, settings, onChange, target, result,
       <option value="direct">纯光路径</option>
       <option value="eo">外部供光的电光路径</option>
     </select></label>
-    {!query && target && <p role="status">目标为 {options.showEndpoint(target)}。请选择供光来源和光通道，并填写已知的光源功率。</p>}
+    {!query && target && <p role="status">目标为 {options.showEndpoint(target)}。请选择供光来源，光源功率默认使用器件值。</p>}
     {!options.opticalEndpoints.length && <p className="empty">当前工程没有可查询的光端口。</p>}
     {mode === 'eo' && <LinkSupplyFields options={options.opticalSources} sources={sources}
       onChange={next => onChange({ ...settings, sources: next })} />}
@@ -54,15 +54,15 @@ export function LocalOpticalPanel({ options, settings, onChange, target, result,
       const data = new FormData(event.currentTarget);
       const to = options.opticalEndpoints.find(item => item.key === data.get('opticalTarget'))?.value;
       const channel = resolveOpticalChannel(String(data.get('opticalChannel') ?? ''));
-      if (!to || !channel) return;
+      if (!to) return;
       if (mode === 'eo') {
         const boundary = options.eo.find(item => item.key === data.get('opticalEo'))?.value;
-        if (boundary) onChange({ ...settings, query: { to, eo: boundary, channelId: channel.id } });
+        if (boundary) onChange({ ...settings, query: { to, eo: boundary, channelId: channel?.id } });
       } else {
         const endpoint = options.opticalSources.find(item => item.key === data.get('opticalSource'))?.value;
         const power = data.get('opticalPower');
         if (endpoint) onChange({ ...settings, query: { to, source: {
-          endpoint, channelId: channel.id, powerDbm: typeof power === 'string' && power !== '' ? Number(power) : undefined,
+          endpoint, channelId: channel?.id, powerDbm: typeof power === 'string' && power !== '' ? Number(power) : undefined,
         } } });
       }
     }}>
@@ -72,7 +72,7 @@ export function LocalOpticalPanel({ options, settings, onChange, target, result,
           value={eo && conversionKey(eo.eo)} />}
         <PortSelect name="opticalTarget" label="目标光端口" options={options.opticalEndpoints} value={query ? signalPortKey(query.to) : targetKey} />
         <ChannelField name="opticalChannel" label={mode === 'eo' ? '电光转换输出通道' : '光源通道'}
-          value={mode === 'eo' ? eo?.channelId : direct?.channelId ?? targetPort?.channelIds?.[0]} required />
+          value={mode === 'eo' ? eo?.channelId : direct?.channelId ?? (targetPort?.channelIds?.length === 1 ? targetPort.channelIds[0] : undefined)} />
         {mode === 'direct' && <label>光源功率 (dBm，可选)
           <input name="opticalPower" type="number" step="any" placeholder="未知" defaultValue={direct?.powerDbm} />
         </label>}
@@ -112,7 +112,7 @@ export function OpticalResult({ result, target, showEndpoint, locate }: {
         {lossColumns && <><th>最大透过插损</th><th>正交损耗</th></>}
         <th>输入额定</th>
       </tr></thead><tbody>{result.stages.map((stage, index) => <tr key={index}>
-        <th scope="row"><EndpointLocation endpoint={stage.endpoint} label={showEndpoint(stage.endpoint)} locate={locate} /></th><td>{stage.channelId}</td>
+        <th scope="row"><EndpointLocation endpoint={stage.endpoint} label={showEndpoint(stage.endpoint)} locate={locate} /></th><td>{stage.channelId ?? '—'}</td>
         <td><Metric metric={stage.powerDbm} /></td><td><Metric metric={stage.incoming?.gainDb} /></td>
         {lossColumns && <><td><Metric metric={stage.incoming?.opticalLoss?.intrinsicLossDb} /></td>
           <td><Metric metric={stage.incoming?.opticalLoss?.quadratureLossDb} /></td></>}

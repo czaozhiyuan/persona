@@ -87,7 +87,7 @@ function PointDetails({ point, labels: { showEndpoint, showPort }, locate }: {
         {segment.optical?.stages.length ? <div className="v1-budget-table"><table><thead><tr>
           <th>光端口</th><th>通道</th><th>光功率</th><th>本级增益</th><th>输入额定</th>
         </tr></thead><tbody>{segment.optical.stages.map((stage, index) => <tr key={index}>
-          <th scope="row"><EndpointLocation endpoint={stage.endpoint} label={showEndpoint(stage.endpoint)} locate={locate} /></th><td>{stage.channelId}</td>
+          <th scope="row"><EndpointLocation endpoint={stage.endpoint} label={showEndpoint(stage.endpoint)} locate={locate} /></th><td>{stage.channelId ?? '—'}</td>
           <td><Metric metric={stage.powerDbm} /></td><td><Metric metric={stage.incoming?.gainDb} /></td>
           <td><Rating check={stage.rating} /></td>
         </tr>)}</tbody></table></div> : null}
