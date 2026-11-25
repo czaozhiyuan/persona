@@ -36,6 +36,15 @@ type Props = {
   locate: (endpoint: EndpointRef) => void;
 };
 
+function useEndpointDraft(saved: EndpointRef | undefined, options: LinkOptions) {
+  const [edited, setEdited] = useState<string>();
+  const savedKey = saved ? signalPortKey(saved) : '';
+  // A removed draft port follows the current model and must not reappear on undo.
+  if (edited && !options.graph.ports.has(edited)) setEdited(undefined);
+  const change = (key?: string) => setEdited(key === savedKey ? undefined : key);
+  return [edited ?? savedKey, change] as const;
+}
+
 function EndpointChoice({ name, title, options, current, retainedLabel, power, onChange }: {
   name: string; title: string; options: Option<EndpointRef>[]; current?: Option<EndpointRef>;
   retainedLabel: string; power: boolean; onChange: (key: string) => void;
@@ -79,10 +88,11 @@ function Diagnostics({ result, showEndpoint, locate }: {
 export function LinkEditor({ store, options, selected, result, budget, point, conditions, setConditions,
   draft, opticalLink, opticalResult, saveTrial, trialSaved, choose, locate, setDraftChannel }: Props) {
   const [error, setError] = useState('');
-  const [fromKey, setFromKey] = useState(selected?.from ? signalPortKey(selected.from) : '');
-  const [toKey, setToKey] = useState(selected?.to ? signalPortKey(selected.to) : '');
+  const [fromKey, setFromKey] = useEndpointDraft(selected?.from, options);
+  const [toKey, setToKey] = useEndpointDraft(selected?.to, options);
   const [local, setLocal] = useState(false);
-  const [channel, setChannel] = useState(selected?.channelId);
+  const [editedChannel, setEditedChannel] = useState<NamedLink['channelId'] | ''>();
+  const channel = (editedChannel ?? selected?.channelId) || undefined;
   const choices = useMemo(() => options.endpointChoices(fromKey, channel, local), [options, fromKey, channel, local]);
   const currentFrom = options.endpoints.find(item => item.key === fromKey);
   const currentTo = options.endpoints.find(item => item.key === toKey);
@@ -110,7 +120,12 @@ export function LinkEditor({ store, options, selected, result, budget, point, co
         : [...(draft.namedLinks ?? []), link],
     }));
     setError(edit.ok ? '' : edit.message);
-    if (edit.ok) choose(link.id);
+    if (edit.ok) {
+      setFromKey(undefined);
+      setToKey(undefined);
+      setEditedChannel(undefined);
+      choose(link.id);
+    }
     return edit.ok;
   }
 
@@ -136,7 +151,7 @@ export function LinkEditor({ store, options, selected, result, budget, point, co
     {error && <p className="error" role="alert">{error}</p>}
     <details open={!selected || draft || undefined}>
       <summary>链路设置</summary>
-      <form key={JSON.stringify(draft ? [selected?.from, selected?.to] : selected ?? null)} onSubmit={event => {
+      <form onSubmit={event => {
         event.preventDefault();
         const fields = new FormData(event.currentTarget);
         const name = String(fields.get('name') ?? '').trim();
@@ -155,11 +170,11 @@ export function LinkEditor({ store, options, selected, result, budget, point, co
         const field = event.target;
         if (field instanceof HTMLSelectElement && field.name === 'channel') {
           const next = resolveOpticalChannel(field.value)?.id;
-          setChannel(next);
+          setEditedChannel(next === selected?.channelId ? undefined : next ?? '');
           if (draft) setDraftChannel(next);
         }
       }}>
-        <label>链路名称<input name="name" required defaultValue={selected?.name} /></label>
+        <label>链路名称<input key={selected?.name} name="name" required defaultValue={selected?.name} /></label>
         <div className="v1-link-fields">
           <EndpointChoice title="起点" name="from" options={choices.from} current={currentFrom} retainedLabel="局部"
             power={isPowerPort(domain(fromKey))} onChange={setFromKey} />
@@ -169,10 +184,10 @@ export function LinkEditor({ store, options, selected, result, budget, point, co
             onChange={event => setLocal(event.target.checked)} />显示局部及未接通端点</label>
           {choices.limited && <p role="status">可达性搜索达到上限，已保留系统级终点。</p>}
           {!local && (!choices.from.length || !choices.to.length) && <p role="status">请检查接线，或开启「显示局部及未接通端点」。</p>}
-          {showOptical && <ChannelField label="光通道" name="channel" value={channel} />}
+          {showOptical && <ChannelField key={draft ? undefined : selected?.channelId} label="光通道" name="channel" value={channel} />}
           {options.via.length > 0 && <details>
             <summary>必经连接{options.via.some(item => 'bundleId' in item.value) && '与 MPO 纤芯'}</summary>
-            <label>约束路径（可多选）<select name="via" multiple size={4} defaultValue={selected?.via?.map(requiredEdgeKey) ?? []}>
+            <label>约束路径（可多选）<select key={JSON.stringify(selected?.via)} name="via" multiple size={4} defaultValue={selected?.via?.map(requiredEdgeKey) ?? []}>
               {options.via.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}
             </select></label>
           </details>}
