@@ -238,7 +238,8 @@ export function calculateDcBudget(project: Project): DcBudget {
     if (capacity?.unit !== 'A') return evaluate(node, 'W', capacity?.value, '额定输出功率');
     const amps = evaluate(node, 'A', capacity.value, '额定输出电流');
     if (amps.availability === 'unavailable') return unavailable('W', amps.reason);
-    const v = netAt.get(node)!.voltage;
+    // A source's nameplate power remains known even if parallel sources disagree on operating voltage.
+    const v = resolveEmpiricalValue('V', node.port.definition.outputVoltageV, {}, node.instance);
     if (v.availability === 'available') return budgetValue('W', amps.value * v.value);
     const reason = '需要相应的输出电压，才能将额定输出电流换算为功率。';
     report(node, 'missing_parameter', reason);

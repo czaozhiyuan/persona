@@ -137,6 +137,32 @@ test('AC and DC preserve voltage conflicts, partial capacities and undocumented 
   }
 });
 
+test('a parallel source retains its own ampere nameplate rating when the common voltage is undetermined', () => {
+  function budget(voltage?: number) {
+    const project = powerBus('DC_POWER', [{ voltage: 5, amps: 2 }, { voltage, amps: 1 }], [1], [['s0', 's1'], ['s0', 'l0']]);
+    return calculateDcBudget(parseProjectJson(serializeProjectJson(project)));
+  }
+  const partial = budget(), missing = partial.networks[0];
+  assert.equal(value(partial.supplies[0].capacityW), 10);
+  assert.equal(partial.supplies[1].capacityW.availability, 'unavailable');
+  assert.equal(value(missing.knownCapacityW), 10);
+  assert.equal(missing.capacityW.availability, 'unavailable');
+  assert.equal(missing.voltageV.availability, 'unavailable');
+  assert.equal(missing.marginW.availability, 'unavailable');
+  assert.equal(missing.capacityStatus, 'unknown');
+
+  const same = budget(5).networks[0];
+  assert.deepEqual([value(same.voltageV), value(same.knownCapacityW), value(same.capacityW), value(same.marginW)], [5, 15, 15, 14]);
+  assert.equal(same.capacityStatus, 'within_capacity');
+
+  const conflict = budget(12), net = conflict.networks[0];
+  assert.deepEqual(conflict.supplies.map(source => value(source.capacityW)), [10, 12]);
+  assert.equal(value(net.knownCapacityW), 22);
+  unavailableBecause(net.voltageV, /不一致/);
+  assert.equal(net.marginW.availability, 'unavailable');
+  assert.equal(net.capacityStatus, 'unknown');
+});
+
 test('parallel converters retain the output budget and reflect a common input demand only when it is determined', () => {
   const base = fixture();
   const rail = base.moduleDefinitions.find(d => d.id === 'rail')!;
