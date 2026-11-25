@@ -9,10 +9,23 @@ import type { ProjectStore } from '../../../state/v1/project-store';
 import { editablePortName, portDisplayName, portTypeLabels } from '../labels';
 import { PortParameterFields, readPort } from './device-fields';
 import { ratingUnits } from './input-rating-field';
+import { readPortVoltage } from './port-voltage-field';
 import { WdmPortDialog } from './wdm-configuration';
 
 function signature(form: HTMLFormElement) {
   return JSON.stringify(Array.from(new FormData(form).entries()));
+}
+
+type PortPreview = { name: string; type: PortType; direction: PortDirection };
+
+function portPreview(form: HTMLFormElement, seed: PortDefinition, owner: ResolvedInstance): PortPreview {
+  const data = new FormData(form);
+  const { type, direction } = seed;
+  const voltageField = direction === 'in' ? 'inputVoltageV' : 'outputVoltageV';
+  const name = isPowerPort(type)
+    ? portDisplayName({ ...seed, [voltageField]: readPortVoltage(data, direction) }, false, undefined, owner)
+    : String(data.get('name') ?? '').trim() || '新建端口';
+  return { name, type, direction };
 }
 
 type PortManagerProps = {
@@ -30,6 +43,7 @@ function StandardPortDialog({ name, owner, locations, store, added, close }: Por
   const { ports, id: definitionId } = owner.definition;
   const [selected, setSelected] = useState<string | undefined>(ports[0]?.id);
   const [revision, setRevision] = useState(0);
+  const [preview, setPreview] = useState<PortPreview>({ name: '新建端口', type: 'RF', direction: 'in' });
   const [deletion, setDeletion] = useState<string>();
   const port = ports.find(item => item.id === selected);
   const form = useRef<HTMLFormElement>(null);
@@ -85,11 +99,14 @@ function StandardPortDialog({ name, owner, locations, store, added, close }: Por
               <strong>{portDisplayName(item, false, ports, owner)}</strong>
               <span>{portTypeLabels[item.type]}</span><span>{portDirectionLabels[item.direction]}</span>
             </button>)}
-            {!ports.length && <p className="empty">暂无端口</p>}
+            {!port && <button type="button" aria-pressed="true" ref={selectedRow}>
+              <strong>{preview.name} <span>未保存</span></strong>
+              <span>{portTypeLabels[preview.type]}</span><span>{portDirectionLabels[preview.direction]}</span>
+            </button>}
           </div>
           <div className="v1-port-new"><button type="button" onClick={() => select()}>＋ 新建端口</button></div>
         </section>
-        <PortDetail key={revision} form={form} port={port} owner={owner} save={save} close={leave} remove={() => {
+        <PortDetail key={revision} form={form} port={port} owner={owner} preview={port ? undefined : setPreview} save={save} close={leave} remove={() => {
           if (port && discard()) {
             setRevision(value => value + 1);
             setDeletion(port.id);
@@ -106,13 +123,18 @@ function StandardPortDialog({ name, owner, locations, store, added, close }: Por
   </>;
 }
 
-function PortDetail({ form, port, owner, save, remove, close }: {
+function PortDetail({ form, port, owner, preview, save, remove, close }: {
   form: RefObject<HTMLFormElement | null>; port?: PortDefinition; owner: ResolvedInstance;
+  preview?: (summary: PortPreview) => void;
   save: (next: PortDefinition) => void; remove: () => void; close: () => void;
 }) {
   const [seed, setSeed] = useState<PortDefinition>(() => port ?? { id: crypto.randomUUID(), type: 'RF', direction: 'in' });
   const [error, setError] = useState('');
   const { type, direction } = seed;
+  useLayoutEffect(() => {
+    if (preview && form.current) preview(portPreview(form.current, seed, owner));
+  }, [preview, form, seed, owner]);
+
   function change(nextType: PortType, nextDirection: PortDirection) {
     if (nextType !== 'OPTICAL' && nextDirection === 'bidirectional') nextDirection = 'in';
     const power = isPowerPort(nextType);
@@ -127,7 +149,12 @@ function PortDetail({ form, port, owner, save, remove, close }: {
       supplyCapacity: isSupplyOutput(owner.definition, { type: nextType, direction: nextDirection }) ? seed.supplyCapacity : undefined,
     });
   }
-  return <form ref={form} onChange={() => setError('')} onSubmit={event => {
+  return <form ref={form} onChange={event => {
+    setError('');
+    if (preview && !(event.target instanceof HTMLInputElement && event.target.type === 'radio')) {
+      preview(portPreview(event.currentTarget, seed, owner));
+    }
+  }} onSubmit={event => {
     event.preventDefault();
     try { save(readPort(new FormData(event.currentTarget), seed)); }
     catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
