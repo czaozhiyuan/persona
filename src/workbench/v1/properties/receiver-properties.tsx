@@ -47,7 +47,7 @@ export function ReceiverPreview({ pd, instance, query, showPorts }: {
   const rho = resolveEmpiricalValue('A/W', pd.responsivity, query, instance);
   const gain = loadedResponse(pd, instance, rho, query.frequencyGHz);
   return <section className="v1-receiver-preview">
-    <h3>{ports}{active ? '厂家 / 用户填写的加载转换增益 C(f)' : '有效加载转换增益（自动计算）'}</h3>
+    <h3>{ports}{active ? '加载转换增益 C(f)' : '有效加载转换增益（自动计算）'}</h3>
     <p>{gain.availability === 'available' ? <strong>{Number(gain.value.toPrecision(6))} V/W</strong>
       : active && !hasReceiverValue(pd.loadedGain, instance) ? '请填写加载转换增益 C(f)（V/W）。' : gain.reason}</p>
     {(query.channelId || query.frequencyGHz !== undefined) && <p>当前查询 · {[query.channelId,

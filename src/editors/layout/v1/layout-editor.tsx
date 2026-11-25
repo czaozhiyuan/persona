@@ -97,7 +97,7 @@ export function LayoutEditor({ store, state, onDcBudget }: {
 
   if (!active) return <section className="panel v1-layout" aria-labelledby="layout-title">
     <h2 id="layout-title">机箱俯视布局</h2>
-    <p className="empty">请先在框图中创建带物理包络的机箱。</p>
+    <p className="empty">先在框图中添加机箱。</p>
   </section>;
 
   const objects = placements.filter(item => pathKey(item.enclosurePath) === active.key).map(placement => {

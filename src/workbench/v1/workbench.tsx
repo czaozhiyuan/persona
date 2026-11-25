@@ -579,13 +579,13 @@ export function Workbench({ store, loadExample, newProject }: Props) {
         <div className="v1-project-heading">
           <button className="v1-project-name" type="button" onClick={() => openPage('project')}
             title={project.name}>{project.name}</button>
-          <span className="v1-project-status" role="status" data-modified={modified}>{modified ? '未保存' : '无未保存修改'}</span>
+          <span className="v1-project-status" role="status" data-modified={modified}>{modified && '未保存'}</span>
         </div>
         <div className="v1-project-actions" role="group" aria-label="工程操作">
-          <button type="button" onClick={() => openProject(newProject)}>新建空工程</button>
+          <button type="button" onClick={() => openProject(newProject)}>新建工程</button>
           <button type="button" onClick={() => openProject(loadExample)}>加载示例</button>
-          <button type="button" onClick={() => { closeWorkbenchMenu(); fileInput.current?.click(); }}>打开工程 JSON</button>
-          <button type="button" onClick={downloadProject}>保存工程 JSON</button>
+          <button type="button" onClick={() => { closeWorkbenchMenu(); fileInput.current?.click(); }}>打开工程</button>
+          <button type="button" onClick={downloadProject}>保存工程</button>
           <button type="button" onClick={() => openPage('project')}>工程状态</button>
         </div>
         <span className="divider" />

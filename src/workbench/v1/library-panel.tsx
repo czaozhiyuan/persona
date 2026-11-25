@@ -185,11 +185,11 @@ export function LibraryPanel({ centerPlacement, library, store, state, module }:
       <label>同 ID 的旧工程定义<select value={templateId} onChange={event => selectTemplate(event.target.value)}>
         {installed.map(item => <option key={item.id} value={item.id}>{labels.get(item.id)}</option>)}
       </select></label>
-      <button type="button" onClick={prepareUpdate}>预检从库更新</button>
+      <button type="button" onClick={prepareUpdate}>预览更新</button>
     </details>}
-    {preview && !activePreview && <p role="status">工程或器件库已变化，请重新预检。</p>}
-    {activePreview && <div className="v1-property-effective" aria-label="模板更新预检">
-      <h3>{activePreview.result.ok ? '预检通过' : '无法更新工程定义'}</h3>
+    {preview && !activePreview && <p role="status">工程或器件库已变化，请重新预览更新。</p>}
+    {activePreview && <div className="v1-property-effective" aria-label="模板更新预览">
+      <h3>{activePreview.result.ok ? '更新内容' : '无法更新工程定义'}</h3>
       <p>更新目标「{target?.name}」。已存在的依赖定义沿用工程快照。</p>
       {activePreview.paths.length > 0 && <details><summary>受影响实例路径（{activePreview.paths.length}）</summary>
         <ul>{activePreview.paths.map(path => <li key={path}><code>{path}</code></li>)}</ul>
@@ -215,7 +215,7 @@ export function LibraryPanel({ centerPlacement, library, store, state, module }:
       {!activePreview.result.ok && <p className="error" role="alert">{activePreview.result.message}</p>}
       <div className="actions">
         <button type="button" onClick={() => setPreview(undefined)}>取消更新</button>
-        {activePreview.result.ok ? (hasChanges && <button type="button" onClick={applyUpdate}>确认应用上述变更</button>)
+        {activePreview.result.ok ? (hasChanges && <button type="button" onClick={applyUpdate}>应用更新</button>)
           : activePreview.result.removedPorts.map(port => <button type="button" key={port}
             onClick={() => setUnlink(port)}>预览解绑 {portName(port)}</button>)}
       </div>
@@ -239,7 +239,7 @@ export function LibraryPanel({ centerPlacement, library, store, state, module }:
         <button type="submit" draggable title="点击或拖入框图，独立复制此定义" onDragStart={event => {
           const form = event.currentTarget.form;
           if (form) drag(event, selectedItem(form, namedOption.source, namedOption.item.id));
-        }}>添加实例</button>
+        }}>添加</button>
       </form>
     </details>}
     <details><summary>新建空机箱</summary>

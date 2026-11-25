@@ -46,8 +46,6 @@ export function DcBudgetPanel({ project, labels: { showEndpoint, showPort, showP
   const ratings = budget.ports.flatMap(port => port.rating ? [port.rating] : []);
   return <section className="panel v1-budget-report" aria-labelledby="v1-dc-heading">
     <h2 id="v1-dc-heading">直流供电预算</h2>
-    {project.componentDefinitions.some(d => d.dcSupply && d.ports.some(p => p.type === 'AC_POWER')) &&
-      <p>仅计算直流侧预算。交流输入是否通电及交流侧功耗未建模。</p>}
     {scope && <p>机箱范围 · {showPath(scope)}</p>}
     {!budget.ports.length && <p className="empty">当前工程没有直流供电端口。</p>}
     {!!budget.ports.length && !budget.supplies.length && !budget.converters.length && !budget.loads.length &&
