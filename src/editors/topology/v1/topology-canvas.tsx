@@ -38,7 +38,7 @@ import { groupDragBounds, groupDragExtent, groupDropDelta, placeDropGroup, repar
 import type { ApprovedMove, ReparentLayout } from './reparent-drop';
 import { handleId, nodeId, portKey, projectWiring, scopedWiringProblem } from './topology-wiring';
 import type { WiringEdge } from './topology-wiring';
-import type { CenterPlacement } from './topology-layout-edits';
+import type { CenterPlacement, Projection } from './topology-layout-edits';
 import { preserveDeletionLayout } from './topology-layout-edits';
 import { planInlineExpansion } from './inline-expansion-layout';
 import { SignalWire, signalColor } from './signal-wire';
@@ -149,12 +149,13 @@ type Props = {
   selectObjects: (paths: readonly InstancePath[]) => void;
   pathResult?: PathResult;
   budgetHighlight?: BudgetHighlight;
+  persistExpansion: boolean;
   expanded: ReadonlySet<string>;
   toggleModule: (path: InstancePath) => void;
   openPort: (path: InstancePath, portId: string) => void;
   enterModule: (path: InstancePath) => void;
   reparent: (base: Project, plan: ApprovedMove, layout?: ReparentLayout) => void;
-  focusMoved?: InstancePath;
+  focusMoved?: { path: InstancePath; onlyIfHidden?: boolean };
   depth: ExpansionDepth;
   viewHost: HTMLDivElement | null;
   topologyActive: boolean;
@@ -173,9 +174,9 @@ type Props = {
   route: (scope: InstancePath, wire: WiringSelection, point?: XYPosition) => void;
   deleteWiring: (path: InstancePath, wire: WiringSelection) => boolean;
   rename: () => void;
-  copyModule: () => boolean;
+  copyObjects: (view: Projection) => void;
   centerPlacement: React.Ref<CenterPlacement>;
-  pasteModule: (placement: (ports: readonly PortDefinition[]) => XYPosition | undefined) => boolean;
+  pasteObjects: (view: Projection, placement: (size: Rect) => XYPosition | undefined) => void;
   report: (message: string) => void;
   undo: () => void;
   redo: () => void;
@@ -185,9 +186,9 @@ export function TopologyCanvas(props: Props) {
   return <ReactFlowProvider><EditableTopologyCanvas {...props} /></ReactFlowProvider>;
 }
 
-function EditableTopologyCanvas({ multiplex, project, instances, modulePath, selectedInstance, selectedPaths, pathResult, budgetHighlight, expanded,
+function EditableTopologyCanvas({ multiplex, project, instances, modulePath, selectedInstance, selectedPaths, pathResult, budgetHighlight, expanded, persistExpansion,
   toggleModule, selectObject, selectObjects, enterModule, reparent, focusMoved, move, resize, connect, mapPort, add, placingModule, cancelPlacement,
-  deleteInstances, deleteWiring, route, rename, copyModule, pasteModule, centerPlacement, report, undo, redo, openPort, onAddPort, newPort,
+  deleteInstances, deleteWiring, route, rename, copyObjects, pasteObjects, centerPlacement, report, undo, redo, openPort, onAddPort, newPort,
   depth, fullPage, toggleFullPage, restoreView, viewHost, topologyActive, saveExpansion }: Props) {
   const flowStore = useStoreApi<CanvasNode, WiringEdge>();
   const boxSelection = useRef<readonly InstancePath[] | undefined>(undefined);
@@ -216,6 +217,8 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
   const [drag, setDrag] = useState<ReadonlyMap<string, XYPosition>>();
   const [selectedEdgeKey, setSelectedEdgeKey] = useState<string | undefined>(() => restoreView?.edgeId);
   const canvas = useRef<HTMLDivElement>(null);
+  const pointerInEditor = useRef(false);
+  const draggingTree = useRef(false);
   const flow = useRef<ReactFlowInstance<CanvasNode, WiringEdge>>(null);
 
   const projection = useMemo(() => projectTopology(project, instances, modulePath, expanded, measured, resizePreview, portHeights),
@@ -227,7 +230,7 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
     const visible = new Set(scopes.keys());
     visible.delete(rootKey);
     const pending = pendingExpansion.current;
-    for (const key of visible) if (!previousFrames.current.has(key)) pending.add(key);
+    for (const key of visible) if (persistExpansion && !previousFrames.current.has(key)) pending.add(key);
     for (const key of pending) if (!visible.has(key)) pending.delete(key);
     previousFrames.current = visible;
     if (!pending.size || !topologyActive) return;
@@ -236,13 +239,16 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
     const layout = planInlineExpansion(projection, pending);
     pending.clear();
     if (layout.moves.length || layout.frames.length) saveExpansion(layout);
-  }, [projection, items, scopes, rootKey, topologyActive, portHeights, measured, saveExpansion]);
+  }, [projection, items, scopes, rootKey, topologyActive, portHeights, measured, saveExpansion, persistExpansion]);
   // An empty scope has nothing to fit. A queued fit would zoom to its first insertion.
   const [fitInitialNodes] = useState(() => !initialViewport && items.length > 0);
   useEffect(() => {
     if (!focusMoved) return;
-    const id = nodeId(hierarchyKey(focusMoved));
+    const id = nodeId(hierarchyKey(focusMoved.path));
     const frame = requestAnimationFrame(() => {
+      const node = canvas.current?.querySelector('[data-id="' + CSS.escape(id) + '"]')?.getBoundingClientRect();
+      const pane = canvas.current?.getBoundingClientRect();
+      if (focusMoved.onlyIfHidden && node && pane && node.right > pane.left && node.left < pane.right && node.bottom > pane.top && node.top < pane.bottom) return;
       if (flow.current?.getNode(id)) void flow.current.fitView({ ...canvasFitOptions, nodes: [{ id }], maxZoom: 1.2 });
     });
     return () => cancelAnimationFrame(frame);
@@ -574,35 +580,29 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
 
   useImperativeHandle(centerPlacement, () => (definition, name) => {
     if (!topologyActive) return;
-    const position = viewportPosition(definition.ports, name);
+    if (!canvas.current) return;
+    const size = estimatedBlockSize(definition.ports);
+    const width = parseFloat(getComputedStyle(canvas.current).getPropertyValue('--v1-block-width-rem'))
+      * parseFloat(getComputedStyle(document.documentElement).fontSize);
+    const height = (scopes.get(rootKey)?.members ?? []).reduce((height, node) =>
+      !node.frame && node.item.instance?.name === name && node.item.definition.ports.length === definition.ports.length
+        ? Math.max(height, node.bounds.height) : height, size.height);
+    const position = viewportPosition({ width, height });
     return position && { position, projection };
   });
 
-  function viewportPosition(ports: readonly PortDefinition[], name?: string) {
-    const inserting = name !== undefined;
+  function viewportPosition({ width, height }: Pick<Rect, 'width' | 'height'>) {
     if (!canvas.current || !flow.current) return;
     const screen = canvas.current.getBoundingClientRect();
-    const left = inserting ? Math.max(0, screen.left) : screen.left;
-    const top = inserting ? Math.max(0, screen.top) : screen.top;
-    const right = inserting ? Math.min(window.innerWidth, screen.right) : screen.right;
-    const bottom = inserting ? Math.min(window.innerHeight, screen.bottom) : screen.bottom;
+    const left = Math.max(0, screen.left);
+    const top = Math.max(0, screen.top);
+    const right = Math.min(window.innerWidth, screen.right);
+    const bottom = Math.min(window.innerHeight, screen.bottom);
     if (right <= left || bottom <= top) return;
     const topLeft = flow.current.screenToFlowPosition({ x: left, y: top });
     const bottomRight = flow.current.screenToFlowPosition({ x: right, y: bottom });
-    const scope = nodeByKey.get(rootKey);
-    const extent = !inserting && scope?.frame?.saved ? moduleExtent(scope.frame.base, scope.frame.insets) : undefined;
-    const visible: CoordinateExtent = extent ? [
-      [Math.max(topLeft.x, extent[0][0]), Math.max(topLeft.y, extent[0][1])],
-      [Math.min(bottomRight.x, extent[1][0]), Math.min(bottomRight.y, extent[1][1])],
-    ] : [[topLeft.x, topLeft.y], [bottomRight.x, bottomRight.y]];
-    const size = estimatedBlockSize(ports);
-    const width = inserting ? parseFloat(getComputedStyle(canvas.current).getPropertyValue('--v1-block-width-rem'))
-      * parseFloat(getComputedStyle(document.documentElement).fontSize) : size.width;
+    const visible: CoordinateExtent = [[topLeft.x, topLeft.y], [bottomRight.x, bottomRight.y]];
     const members = scopes.get(rootKey)?.members ?? [];
-    // A rendered copy accounts for wrapping in the selected card's title and controls.
-    const height = inserting ? members.reduce((height, node) =>
-      !node.frame && node.item.instance?.name === name && node.item.definition.ports.length === ports.length
-        ? Math.max(height, node.bounds.height) : height, size.height) : size.height;
     const center = { x: (topLeft.x + bottomRight.x - width) / 2, y: (topLeft.y + bottomRight.y - height) / 2 };
     const occupied = members.map(item => ({
       ...item.bounds, width: item.frame?.display.width ?? item.bounds.width, height: item.frame?.display.height ?? item.bounds.height,
@@ -612,9 +612,9 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
     const offsets = [[0, 0], [0, 1], [1, 0], [0, -1], [-1, 0], [1, 1], [-1, 1], [1, -1], [-1, -1]];
     function candidateAt(x: number, y: number) {
       const rect = { x, y, width, height };
-      const limit = fits ? visible : extent;
+      const limit = fits ? visible : undefined;
       const position = limit ? keepNodeInside(rect, limit) : { x: rect.x, y: rect.y };
-      if (inserting && !fits) {
+      if (!fits) {
         position.x = Math.max(topLeft.x - width / 2, Math.min(position.x, bottomRight.x - width / 2));
         position.y = Math.max(topLeft.y - height / 2, Math.min(position.y, bottomRight.y - height / 2));
       }
@@ -630,7 +630,7 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
     }
     const candidates = offsets.map(([x, y]) => candidateAt(center.x + x * (width + 16), center.y + y * (height + 16)));
     let best = candidates.reduce((best, candidate) => candidate.overlap < best.overlap ? candidate : best);
-    if (!inserting || !best.overlap) return best.position;
+    if (!best.overlap) return best.position;
 
     // Try the free edges of visible cards. In a full view, a half-card stagger keeps titles distinguishable.
     for (const node of occupied) {
@@ -648,49 +648,72 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
   }
 
   useEffect(() => {
+    const context = '.v1-topology-canvas, .v1-hierarchy-tree';
+    function remember(event: PointerEvent) {
+      pointerInEditor.current = event.target instanceof Element && !!event.target.closest(context);
+    }
+    function startTreeDrag(event: DragEvent) {
+      draggingTree.current = event.target instanceof Element && !!event.target.closest('.v1-hierarchy-tree');
+    }
+    function endTreeDrag() { draggingTree.current = false; }
+    document.addEventListener('pointerdown', remember, true);
+    document.addEventListener('dragstart', startTreeDrag);
+    document.addEventListener('dragend', endTreeDrag);
+    return () => {
+      document.removeEventListener('pointerdown', remember, true);
+      document.removeEventListener('dragstart', startTreeDrag);
+      document.removeEventListener('dragend', endTreeDrag);
+    };
+  }, []);
+
+  useEffect(() => {
     function keyboard(event: KeyboardEvent) {
-      if (event.defaultPrevented || canvas.current?.closest('[inert]') || document.querySelector('dialog[open]')) return;
-      if (event.key === 'Escape' && placingModule) {
-        event.preventDefault();
-        cancelWiring();
-        cancelPlacement();
+      const target = event.target;
+      if (!topologyActive || event.defaultPrevented || event.isComposing || document.querySelector('dialog[open]')
+        || !(target instanceof Element) || target.closest('input, textarea, select, [contenteditable]')
+        || !window.getSelection()?.isCollapsed) return;
+      if (placingModule) {
+        if (event.key === 'Escape') { event.preventDefault(); cancelWiring(); cancelPlacement(); }
         return;
       }
-      if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable]')) return;
-      if (event.key === 'Escape' && wireStart) {
+      if (!target.closest('.v1-topology-canvas, .v1-hierarchy-tree') && !(target === document.body && pointerInEditor.current)) return;
+      if (draggingTree.current || resizePreview) return;
+      const boxing = flowStore.getState().userSelectionActive;
+      if (event.key === 'Escape') {
         event.preventDefault();
-        cancelWiring();
+        if (wireStart) cancelWiring();
+        else if (dragSession.current) cancelDrag();
+        else if (boxing) cancelBoxSelection();
+        else { setSelectedEdgeKey(undefined); selectObjects([]); }
         report('');
-      } else if (event.key === 'Escape') {
-        event.preventDefault();
-        cancelBoxSelection();
-        const dragging = !!dragSession.current;
-        cancelDrag();
-        setSelectedEdgeKey(undefined);
-        if (!dragging) selectObjects([]);
-        report('');
-      } else if (event.key === 'Enter' && event.target instanceof HTMLElement && event.target.matches('.react-flow__node')) {
-        const node = flow.current?.getNode(event.target.dataset.id ?? '');
+        return;
+      }
+      if (wireStart || dragSession.current || boxing) return;
+      if (event.key === 'Enter' && target instanceof HTMLElement && target.matches('.react-flow__node')) {
+        const node = flow.current?.getNode(target.dataset.id ?? '');
         if (node && node.selectable !== false) selectObject(node.data.path, event.ctrlKey || event.shiftKey || event.metaKey);
       } else if (event.key === 'F2' && selectedNode && selectedNode.key !== rootKey) {
         event.preventDefault();
         rename();
       } else if (event.key === 'Delete') {
         const targets = selectedPaths.filter(path => hierarchyKey(path) !== rootKey);
-        if (targets.length && targets.every(path => nodeByKey.has(hierarchyKey(path)))) {
+        if (targets.length) {
           event.preventDefault();
-          deleteInstances(targets, (next, parentIds) => preserveDeletionLayout(next, parentIds, projection, modulePath, expanded, measured));
+          if (targets.every(path => nodeByKey.has(hierarchyKey(path)))) {
+            deleteInstances(targets, (next, parentIds) => preserveDeletionLayout(next, parentIds, projection, modulePath, expanded, measured));
+          } else report('所选对象在当前画布不可见，请重新选择。');
         } else if (selectedWiring && selectedWiring.data) {
           event.preventDefault();
           if (deleteWiring(selectedWiring.data.scope, selectedWiring.data.wire)) setSelectedEdgeKey(undefined);
         }
-      } else if (event.ctrlKey || event.metaKey) {
+      } else if ((event.ctrlKey || event.metaKey) && !event.altKey) {
         const key = event.key.toLowerCase();
-        if (!event.altKey && !event.shiftKey && key === 'c' && !event.repeat
-          && (window.getSelection()?.isCollapsed ?? true) && copyModule()) {
+        if (!event.shiftKey && (key === 'c' || key === 'v')) {
           event.preventDefault();
-        } else if (!event.altKey && !event.shiftKey && key === 'v' && !event.repeat && pasteModule(viewportPosition)) {
-          event.preventDefault();
+          if (event.repeat) return;
+          report('');
+          if (key === 'c') copyObjects(projection);
+          else pasteObjects(projection, viewportPosition);
         } else if (key === 'z' || key === 'y') {
           event.preventDefault();
           if (event.shiftKey || key === 'y') redo();

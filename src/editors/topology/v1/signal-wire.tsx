@@ -115,7 +115,9 @@ export function SignalWire(edge: EdgeProps<WiringEdge>) {
           }}
           onLostPointerCapture={cancel} onPointerCancel={cancel}
           onKeyDown={event => {
-            if (event.key === 'Escape' && drag.current) { event.preventDefault(); event.stopPropagation(); cancel(); }
+            if (!drag.current) return;
+            event.stopPropagation();
+            if (event.key === 'Escape') { event.preventDefault(); cancel(); }
           }}
           onClick={event => event.stopPropagation()} />
         {saved && !preview && <button type="button" className="v1-wire-reset" style={edge.data?.powerLabels?.length ? { top: 25 } : undefined}
