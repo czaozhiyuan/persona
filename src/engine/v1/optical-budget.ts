@@ -176,15 +176,17 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
       stages.push(stage(edge.to, previous.channelId, addGain(previous.powerDbm, gain), { edge, gainDb: gain }));
       return addGain(gainDb, gain);
     }
+    const loss = source.kind === 'transfer' && source.transfer.kind === 'optical' ? source.transfer.insertionLossDb : undefined;
     const declared = source.kind === 'switchRoute' ? source.route.gainDb
       : source.kind === 'transfer' && 'gainDb' in source.transfer ? source.transfer.gainDb : undefined;
     // Every device route needs an explicit gain, even if its specified gain is zero.
     const value = source.kind === 'switchRoute' || source.kind === 'transfer'
       ? !previous.channelId && (wavelengthPorts.from.has(edge.from) || wavelengthPorts.to.has(edge.to))
-        ? unavailable('dB', '该器件按波长选路，请选择光通道。') : resolveEmpiricalValue('dB', declared, query, instance)
+        ? unavailable('dB', '该器件按波长选路，请选择光通道。') : resolveEmpiricalValue('dB', loss ?? declared, query, instance)
       : budgetValue('dB', 0);
     const gain = value.availability === 'unavailable'
-      ? unavailable('dB', `${showPath(edge.from.ref.instancePath)} 光增益：${value.reason}`) : value;
+      ? unavailable('dB', `${showPath(edge.from.ref.instancePath)} ${loss ? '光插损' : '光增益'}：${value.reason}`)
+      : loss ? budgetValue('dB', 0 - value.value) : value;
     const nextChannel = edge.channels.kind === 'convert' ? edge.channels.toChannelId : previous.channelId;
     stages.push(stage(edge.to, nextChannel, addGain(previous.powerDbm, gain), { edge, gainDb: gain }));
     return addGain(gainDb, gain);
