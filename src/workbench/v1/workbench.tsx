@@ -140,15 +140,16 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const conditions = useMemo(() => ({ ...activeTrial, opticalSources }), [activeTrial, opticalSources]);
   const pathResult = useMemo(() => selectedLink ? budget.resolveNamedLink(selectedLink, { opticalSources }) : undefined,
     [selectedLink, budget, opticalSources]);
-  const digitalLink = pathResult?.trace?.edges.some(isDigitalEdge) || (pathResult?.status !== 'resolved'
-    && !!selectedLink && linkOptions.graph.edges.some(edge => isDigitalEdge(edge) && (
-      (selectedLink.from && signalPortKey(selectedLink.from) === signalPortKey(edge.from.ref) && edge.from.definition.type === 'CONTROL')
-      || (selectedLink.to && signalPortKey(selectedLink.to) === signalPortKey(edge.to.ref) && edge.to.definition.type === 'CONTROL')
-    )));
+  const digitalLink = pathResult?.trace?.edges.some(isDigitalEdge)
+    || (pathResult && pathResult.status !== 'resolved' && !!pathResult.digitalAccess);
+  const ends = [selectedLink?.from, selectedLink?.to].filter(ref => ref !== undefined);
+  const controlLink = !digitalLink && ends.length > 0 && ends.every(ref => linkOptions.graph.ports.get(signalPortKey(ref))?.definition.type === 'CONTROL');
   const opticalLink = pureOptical || digitalLink;
+  const signalNotice = controlLink ? (pathResult?.status === 'resolved' ? '纯控制信号路径，无光学预算。' : '控制信号路径待确认，无可计算的光学段。')
+    : digitalLink && pathResult?.status !== 'resolved' ? (pathResult?.status === 'ambiguous' ? '数字信号路径待确定。' : '数字信号路径待修复。') : undefined;
   const canvasPath = category === 'links' ? pathResult : undefined;
-  const point = useMemo(() => pathResult && !opticalLink ? budget.calculatePath(pathResult, conditions) : undefined,
-    [budget, pathResult, opticalLink, conditions]);
+  const point = useMemo(() => pathResult && !opticalLink && !controlLink ? budget.calculatePath(pathResult, conditions) : undefined,
+    [budget, pathResult, opticalLink, controlLink, conditions]);
   const opticalBudget = useMemo(() => createOpticalBudgetForGraph(linkOptions.graph), [linkOptions]);
   const opticalResult = useMemo(() => {
     const query = localOptical.query;
@@ -164,7 +165,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const annotations = useMemo(() => showMetrics && canvasPath
     ? linkAnnotations(linkOptions.graph, canvasPath, point, linkedOpticalResult) : undefined,
     [showMetrics, canvasPath, linkOptions, point, linkedOpticalResult]);
-  const issue = pathResult && pathResult.status !== 'resolved' ? pathResult.reason
+  const issue = pathResult && pathResult.status !== 'resolved' ? [signalNotice, pathResult.reason].filter(Boolean).join(' ')
+    : signalNotice ? signalNotice
     : opticalLink && !linkedOpticalResult ? '请检查光路。'
     : point?.kind === 'conversion' ? point.diagnostics[0]?.reason : point?.pathIssue?.reason ?? linkedOpticalResult?.pathIssue?.reason;
   const budgetHighlight = useMemo((): BudgetHighlight | undefined => {
@@ -696,7 +698,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
                     {linkOptions.namedLinks.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
                   </select></label>
                   {category === 'links' && selectedLink && <><label><input type="checkbox" checked={showMetrics} onChange={e => setShowMetrics(e.target.checked)} />显示指标</label>
-                    {!opticalLink && Number.isFinite(conditions.frequencyGHz) && <small>{conditions.frequencyGHz} GHz</small>}
+                    {!opticalLink && !controlLink && Number.isFinite(conditions.frequencyGHz) && <small>{conditions.frequencyGHz} GHz</small>}
                     {issue && <small role="status" title={issue}>{issue}</small>}</>}
                 </div>}
                 store={store} state={state} module={active} pathResult={canvasPath} graph={linkOptions.graph} rename={renameSelection}
@@ -786,7 +788,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
               </select></label>
               <div hidden={category !== 'links'}>
                 <LinkEditor key={JSON.stringify([projectSession, savedLink?.id, linkFormSession])} store={store}
-                  options={linkOptions} opticalLink={opticalLink} draft={canvasDraft} formLink={formLink} selected={selectedLink} result={pathResult} point={point} budget={budget}
+                  options={linkOptions} opticalLink={!!opticalLink} signalNotice={signalNotice} draft={canvasDraft} formLink={formLink} selected={selectedLink} result={pathResult} point={point} budget={budget}
                   conditions={conditions} opticalResult={linkedOpticalResult} trialSaved={sameTrial(savedLink?.trial, conditions)}
                   saveTrial={saveTrial} choose={chooseLink} locate={locateBudgetPort}
                   changeFields={changeLinkFields}
@@ -816,7 +818,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
                   const step = canvasPath?.trace?.steps.find(item => signalPortKey(item.port.ref) === key);
                   const channelId = step?.channelIds?.length === 1 ? step.channelIds[0]
                     : opticalResult?.stages.find(stage => signalPortKey(stage.endpoint) === key)?.channelId;
-                  const frequencyGHz = step && !opticalLink && isRfFrequency(conditions.frequencyGHz)
+                  const frequencyGHz = step && !opticalLink && !controlLink && isRfFrequency(conditions.frequencyGHz)
                     ? conditions.frequencyGHz : undefined;
                   return { channelId, frequencyGHz };
                 }}

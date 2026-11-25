@@ -28,7 +28,7 @@ export function findOpticalSupply(graph: SignalGraph, adjacent: ReadonlyMap<Sign
   target: SignalPort, targetCarrier: Carrier, selected: ReadonlyMap<SignalPort, Carrier>, splitterRouting?: SplitterRouting) {
   const search = (starts: readonly SignalPort[], startCarriers?: ReadonlyMap<SignalPort, Carrier>, ignoreChannels = false) =>
     searchSignalPath({ starts, startCarriers, startFlow: opticalSourceFlow, target, targetFlow: 'in',
-      adjacent, carrier: undefined, targetCarrier: ignoreChannels ? undefined : targetCarrier, opticalOnly: true, ignoreChannels, splitterRouting });
+      adjacent, carrier: undefined, targetCarrier: ignoreChannels ? undefined : targetCarrier, portType: 'OPTICAL', ignoreChannels, splitterRouting });
   const dmlOutputs = graph.edges.filter(edge => edge.source.kind === 'transfer' && edge.source.transfer.kind === 'dml').map(edge => edge.to);
   if (dmlOutputs.length) {
     const cascade = search(dmlOutputs);

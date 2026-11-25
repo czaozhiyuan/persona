@@ -37,12 +37,16 @@ export function projectPathHighlight(result: PathResult | undefined, scope: Inst
     edges.add(key);
     if (budget?.annotations) {
       const caption = budget.annotations.ports.get(signalPortKey(edge.to.ref));
-      captions.set(key, caption ?? portTypeLabels[edge.to.definition.type]);
+      const loss = budget.annotations.wireLoss.get(edge);
+      captions.set(key, [caption ?? portTypeLabels[edge.to.definition.type], loss].filter(Boolean).join(' · '));
     }
   }
   for (const path of paths) {
     for (const step of path?.steps ?? []) markPort(step.port.ref);
     for (const edge of path?.edges ?? []) markEdge(edge);
+  }
+  if (result && result.status !== 'resolved') for (const edge of result.digitalAccess ?? []) {
+    markPort(edge.from.ref); markPort(edge.to.ref); markEdge(edge);
   }
   budget?.endpoints?.forEach(markPort);
   budget?.edges?.forEach(markEdge);

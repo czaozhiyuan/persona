@@ -8,12 +8,35 @@ import { createLinkBudget } from '../../src/engine/v1/link-budget';
 import { createOpticalBudgetForGraph } from '../../src/engine/v1/optical-budget';
 import { buildSignalGraph } from '../../src/engine/v1/signal-graph';
 import { parseProjectJson } from '../../src/storage/v1/project-json';
+import { digitalControlProject } from './fixtures/digital-control-project';
 
 const project = parseProjectJson(readFileSync(new URL('../../examples/v1-project.json', import.meta.url), 'utf8'));
 const graph = buildSignalGraph(project);
 const budget = createLinkBudget(project);
 const from = { instancePath: ['TX_A', 'laser'], portId: 'OUT' };
 const channelId = 'DWDM_CH28';
+
+test('a TTL to TTL link highlights both control legs, the selected MPO core and both mapped boxes using one optical result', () => {
+  const fixture = digitalControlProject();
+  for (const [index, [tx, rx]] of [['a','b'], ['b','a']].entries()) {
+    const graph = buildSignalGraph(fixture), path = createLinkBudget(fixture).resolveNamedLink(fixture.namedLinks![index]);
+    assert.equal(path.status, 'resolved');
+    const optics = createOpticalBudgetForGraph(graph).calculateDigitalPath(path.trace, 'MM850')!;
+    const loss = index ? 1 : 3, annotations = linkAnnotations(graph, path, undefined, optics);
+    const root = projectPathHighlight(path, [], { annotations });
+    assert.deepEqual(root.edges, new Set([canvasEdgeKey('connection', 'tx-' + tx), canvasEdgeKey('core', 'mpo', tx + rx), canvasEdgeKey('connection', 'rx-' + rx)]));
+    assert.deepEqual(root.folded, new Set([tx, rx]));
+    assert.deepEqual(projectPathHighlight(path, [tx]).edges, new Set([canvasEdgeKey('mapping', 'DATA_TX_IN'), canvasEdgeKey('mapping', 'OPT_TX_OUT')]));
+    assert.deepEqual(projectPathHighlight(path, [rx]).edges, new Set([canvasEdgeKey('mapping', 'OPT_RX_IN'), canvasEdgeKey('mapping', 'DATA_RX_OUT')]));
+    assert.match(root.captions.get(canvasEdgeKey('core', 'mpo', tx + rx))!, new RegExp('插损 ' + loss + ' dB'));
+    assert.equal(root.captions.get(canvasEdgeKey('connection', 'tx-' + tx)), '控制');
+    const notes = (id: string) => captionNotes(annotations.nodes.get(JSON.stringify([id, 'sfp']))!).map(n => n.text);
+    assert.ok(notes(tx).includes('光出 0.0 dBm'));
+    assert.ok(notes(rx).includes('光入 -' + loss + '.0 dBm'));
+    assert.ok(notes(rx).includes('接收余量 ' + (20 - loss) + '.0 dB'));
+    assert.ok(!annotations.nodes.has(JSON.stringify(['ctl-' + tx])));
+  }
+});
 
 test('canvas annotates the selected optical supply, mapped chassis and MPO core using the evaluated trace', () => {
   const link = project.namedLinks!.find(l => l.id === 'full')!;
