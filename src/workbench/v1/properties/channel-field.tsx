@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import { resolveOpticalChannel } from '../../../model/v1/channels';
 import type { OpticalChannelId } from '../../../model/v1/channels';
+import { wdmChannelPresets } from './channel-presets';
 
-const presets: readonly OpticalChannelId[] = [
-  'MM850', ...Array.from({ length: 18 }, (_, i): OpticalChannelId => `CWDM_${1271 + i * 20}`), 'DWDM_CH28', 'DWDM_CH30',
-];
+const presets: readonly OpticalChannelId[] = ['MM850', ...wdmChannelPresets];
 
 export function ChannelField({ label, name, value, multiple, required }: {
   label: string; name: string; value?: OpticalChannelId | readonly OpticalChannelId[]; multiple?: boolean; required?: boolean;
