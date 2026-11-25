@@ -306,6 +306,9 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
             save={read => changeDefinition(() => ({ ...definition,
               transfers: definition.transfers?.map((item, i) => i === index ? read() : item),
             }))} />
+          {transfer.kind === 'control' && <button type="button" onClick={() => changeDefinition(() => ({
+            ...definition, transfers: definition.transfers?.filter((_, i) => i !== index),
+          }))}>删除传输</button>}
         </details>)}
         {definition.kind === 'component' && definition.switchStates?.filter(state => state.routes.length).map(state => <details key={state.id}>
           <summary>开关路由 · {state.name}</summary>

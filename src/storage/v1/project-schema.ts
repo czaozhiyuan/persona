@@ -123,6 +123,7 @@ const port = shape({ id: text, type: oneOf('RF', 'OPTICAL', 'DC_POWER', 'AC_POWE
 const portPair = { fromPortId: text, toPortId: text };
 const opticalOptions = { channelIds: channels, gainDb: opticalQuantity };
 const transfer = byKind({
+  control: shape({ ...portPair, kind: oneOf('control') }),
   rf: shape({ ...portPair, kind: oneOf('rf') }, { gainDb: rfQuantity, nfDb: rfQuantity }),
   optical: shape({ ...portPair, kind: oneOf('optical') }, { ...opticalOptions, insertionLossDb: opticalQuantity }),
   wavelengthConversion: shape({

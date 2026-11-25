@@ -147,6 +147,7 @@ function readReceiver(value: string) {
 export function readTransfer(data: FormData, transfer: Transfer): Transfer {
   const ports = { fromPortId: choice(data, 'from'), toPortId: choice(data, 'to') };
   switch (transfer.kind) {
+    case 'control': return { ...transfer, ...ports };
     case 'digitalTx': return { ...transfer, ...ports, channelIds: channelList(data, 'channels') };
     case 'digitalRx': return { ...transfer, ...ports, channelIds: channelList(data, 'channels'),
       sensitivityDbm: readQuantity(data, 'sensitivity', opticalKinds), overloadDbm: readQuantity(data, 'overload', opticalKinds) };

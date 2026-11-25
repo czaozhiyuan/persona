@@ -77,6 +77,7 @@ export function channelSetsOverlap(a: PortDefinition, b: PortDefinition): boolea
 }
 
 export const transferTypes: Record<Transfer['kind'], readonly [PortType, PortType]> = {
+  control: ['CONTROL', 'CONTROL'],
   rf: ['RF', 'RF'], optical: ['OPTICAL', 'OPTICAL'], wavelengthConversion: ['OPTICAL', 'OPTICAL'],
   splitter: ['OPTICAL', 'OPTICAL'], digitalTx: ['CONTROL', 'OPTICAL'], digitalRx: ['OPTICAL', 'CONTROL'],
   eo: ['RF', 'OPTICAL'], dml: ['RF', 'OPTICAL'], oe: ['OPTICAL', 'RF'], dc: ['DC_POWER', 'DC_POWER'],
@@ -124,9 +125,9 @@ export function validateDevice(
         && [to.id, route.secondPortId].some(id => other.toPortId === id || (other.kind === 'splitter' && other.secondPortId === id))),
         `${context}: 分光输出不能重复配置传输`);
     }
-    if (route.kind === 'digitalTx' || route.kind === 'digitalRx') {
+    if (route.kind === 'control' || route.kind === 'digitalTx' || route.kind === 'digitalRx') {
       requireValid(!definition.transfers?.some(other => other !== route && other.fromPortId === from.id && other.toPortId === to.id),
-        `${context}: 数字光端口对已有传输关系`);
+        `${context}: ${route.kind === 'control' ? '控制' : '数字光'}端口对已有传输关系`);
     }
     if (route.kind === 'digitalRx') {
       for (const limit of [route.sensitivityDbm, route.overloadDbm]) {

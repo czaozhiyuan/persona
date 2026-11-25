@@ -13,7 +13,7 @@ import { curveProblem } from './properties/curve-graph';
 import { readPower, TemplatePower } from './template-power';
 import { TemplateSwitch, readSwitchStates } from './template-switch';
 import { TemplateModule } from './template-module';
-import { conversionCandidates } from './properties/add-conversion';
+import { controlTransferKind, conversionCandidates } from './properties/add-conversion';
 import { TemplateParameter } from './template-parameter';
 
 export function TemplateEditor({ initial, definitions, hidden, save, cancel, report }: {
@@ -25,14 +25,16 @@ export function TemplateEditor({ initial, definitions, hidden, save, cancel, rep
     .map(t => ({ key: crypto.randomUUID(), transfer: t, pair: { fromPortId: t.fromPortId, toPortId: t.toPortId } })));
   const [kind, setKind] = useState<Transfer['kind']>('rf');
   const body = useRef<HTMLDivElement>(null);
-  const digitalPairs = draft.kind === 'component' ? conversionCandidates({ ...draft, transfers: rows.map(row => ({ ...row.transfer, ...row.pair })) })
-    .flatMap(({ input, outputs }) => outputs.filter(out => input.type === 'CONTROL' || out.type === 'CONTROL')
-      .map(out => ({ kind: input.type === 'CONTROL' ? 'digitalTx' : 'digitalRx', fromPortId: input.id, toPortId: out.id }))) : [];
+  const controlPairs = draft.kind === 'component' ? conversionCandidates({ ...draft, transfers: rows.map(row => ({ ...row.transfer, ...row.pair })) })
+    .flatMap(({ input, outputs }) => outputs.flatMap(output => {
+      const kind = controlTransferKind(input, output);
+      return kind ? [{ kind, fromPortId: input.id, toPortId: output.id }] : [];
+    })) : [];
   const splitInput = draft.ports.find(p => supportsDirection(p.direction, 'in') && p.type === 'OPTICAL');
   const splitOutputs = draft.ports.filter(p => p.id !== splitInput?.id && supportsDirection(p.direction, 'out') && p.type === 'OPTICAL');
   const availableKinds = Object.entries(transferLabels).filter(([k]) => {
     if (k === 'splitter') return splitInput && splitOutputs.length >= 2;
-    return (k !== 'digitalTx' && k !== 'digitalRx') || digitalPairs.some(pair => pair.kind === k);
+    return (k !== 'control' && k !== 'digitalTx' && k !== 'digitalRx') || controlPairs.some(pair => pair.kind === k);
   });
   const activeKind = availableKinds.some(([k]) => k === kind) ? kind : 'rf';
   const parameters = draft.parameters ?? [];
@@ -112,7 +114,7 @@ export function TemplateEditor({ initial, definitions, hidden, save, cancel, rep
         {availableKinds.map(([k, label]) => <option key={k} value={k}>{label}</option>)}</select></label>
       <button onClick={() => {
         const kind = activeKind;
-        const pair = digitalPairs.find(pair => pair.kind === kind);
+        const pair = controlPairs.find(pair => pair.kind === kind);
         const ports = pair ? { fromPortId: pair.fromPortId, toPortId: pair.toPortId } : {
           fromPortId: draft.ports.find(p => supportsDirection(p.direction, 'in') && p.type === transferTypes[kind][0])?.id ?? '',
           toPortId: kind === 'splitter' ? splitOutputs[0].id
