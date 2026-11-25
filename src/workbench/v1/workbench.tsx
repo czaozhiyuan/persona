@@ -1,11 +1,12 @@
-import type { XYPosition } from '@xyflow/react';
+import type { Rect, XYPosition } from '@xyflow/react';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { LayoutEditor } from '../../editors/layout/v1/layout-editor';
 import { HierarchyTree } from '../../editors/topology/v1/hierarchy-tree';
 import { hierarchyKey, inHierarchy } from '../../editors/topology/v1/hierarchy-view';
 import type { ApprovedMove, ReparentLayout } from '../../editors/topology/v1/reparent-drop';
 import type { CanvasView } from '../../editors/topology/v1/canvas-controls';
-import type { CenterPlacement } from '../../editors/topology/v1/topology-layout-edits';
+import { captureTopologyObjects, pasteInView } from '../../editors/topology/v1/topology-layout-edits';
+import type { CenterPlacement, ObjectClipboard, Projection } from '../../editors/topology/v1/topology-layout-edits';
 import { TopologyEditor } from '../../editors/topology/v1/topology-editor';
 import { createMultiplexPower } from '../../engine/v1/multiplex-power';
 import { MultiplexDetails } from './budgets/multiplex-details';
@@ -14,12 +15,12 @@ import { createLinkBudget } from '../../engine/v1/link-budget';
 import { createOpticalBudgetForGraph } from '../../engine/v1/optical-budget';
 import type { LinkTrial, NamedLink } from '../../model/v1/topology';
 import { isDigitalEdge, signalPortKey } from '../../engine/v1/signal-graph';
-import type { EndpointRef, InstancePath, PortDefinition, Project } from '../../model/v1/types';
+import type { EndpointRef, InstancePath, Project } from '../../model/v1/types';
 import { pasteModule } from '../../state/v1/instantiate-module';
 import { planDissolveModule } from '../../state/v1/dissolve-module';
 import { moveWiringSummary, planInstanceMove } from '../../state/v1/reparent-instance';
 import { moveTopologyNodes, resizeTopologyFrame } from '../../state/v1/topology-edits';
-import type { ProjectStore } from '../../state/v1/project-store';
+import { selectionPaths, type ProjectStore } from '../../state/v1/project-store';
 import { parseProjectJson, projectErrorMessage, serializeProjectJson } from '../../storage/v1/project-json';
 import type { BudgetHighlight } from '../../editors/topology/v1/path-highlight';
 import { linkAnnotations } from '../../editors/topology/v1/link-annotations';
@@ -71,14 +72,14 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const [error, setError] = useState('');
   const [copyNotice, setCopyNotice] = useState('');
   const centerPlacement = useRef<CenterPlacement>(null);
-  const moduleClipboard = useRef<{ project: Project; path: InstancePath; ports: readonly PortDefinition[] }>(undefined);
+  const objectClipboard = useRef<ObjectClipboard>(undefined);
   const fileInput = useRef<HTMLInputElement>(null);
   const importAttempt = useRef(0);
   const topologyLocation = useRef<TopologyLocation | undefined>(undefined);
   const [projectSession, setProjectSession] = useState(0);
   const [portTarget, setPortTarget] = useState<InstancePath>();
   const [newPort, setNewPort] = useState<EndpointRef>();
-  const [focusMoved, setFocusMoved] = useState<{ path: InstancePath; centerCanvas: boolean }>();
+  const [focusMoved, setFocusMoved] = useState<{ path: InstancePath; centerCanvas: boolean; onlyIfHidden?: boolean }>();
   const [dissolve, setDissolve] = useState<{ base: Project; plan: ReturnType<typeof planDissolveModule>; destination: string; error?: string }>();
   const [moveUp, setMoveUp] = useState<{ base: Project; plan: ReturnType<typeof planInstanceMove>; destination: string; error?: string }>();
   const [page, setPage] = useState<Page>('canvas');
@@ -94,6 +95,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     window.matchMedia('(max-width: 48rem)').matches ? undefined : 'structure');
   const [propertiesOpen, setPropertiesOpen] = useState(() => !window.matchMedia('(max-width: 48rem)').matches);
   const [expandedHierarchy, setExpandedHierarchy] = useState<ReadonlySet<string>>(new Set(['[]']));
+  const treeExpansion = useRef<ReadonlySet<string>>(undefined);
   const [expandedCanvas, setExpandedCanvas] = useState<ReadonlySet<string>>(new Set());
   const [presentation, setPresentation] = useState<Presentation>();
   const [restoredView, setRestoredView] = useState<{ scope: string; view: CanvasView }>();
@@ -110,7 +112,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const activeOccurrence = store.resolveInstance(selection.modulePath);
   const active = activeOccurrence?.definition;
   const selected = selection.instancePath && store.resolveInstance(selection.instancePath);
-  const selectedPaths = selection.instancePaths ?? (selection.instancePath ? [selection.instancePath] : []);
+  const selectedPaths = selectionPaths(selection);
   const properties = selection.instancePaths ? undefined : selected || activeOccurrence;
   const targetPortOwner = portTarget && store.resolveInstance(portTarget);
   const layout = selection.view === 'topology' ? project.layout?.topology : project.layout?.physical;
@@ -199,7 +201,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
       for (let depth = 0; depth <= selection.modulePath.length; depth++) {
         next.add(hierarchyKey(selection.modulePath.slice(0, depth)));
       }
-      for (const path of selection.instancePaths ?? (selection.instancePath ? [selection.instancePath] : [])) {
+      for (const path of selectionPaths(selection)) {
         for (let depth = 0; depth < path.length; depth++) next.add(hierarchyKey(path.slice(0, depth)));
       }
       return next.size === current.size ? current : next;
@@ -241,26 +243,36 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   }
 
   function selectObject(path: InstancePath, extend: boolean) {
-    if (!extend || !path.length) {
+    const current = store.getSnapshot().selection;
+    const boundary = hierarchyKey(current.modulePath);
+    if (!extend || hierarchyKey(path) === boundary) {
       selectObjects([path]);
       return;
     }
-    const current = store.getSnapshot().selection;
-    const paths = (current.instancePaths ?? (current.instancePath ? [current.instancePath] : [])).filter(item => item.length);
+    const paths = selectionPaths(current).filter(item => item.length && hierarchyKey(item) !== boundary);
     const key = hierarchyKey(path);
     selectObjects(paths.some(item => hierarchyKey(item) === key)
       ? paths.filter(item => hierarchyKey(item) !== key) : [...paths, path]);
   }
 
   function selectTreeObject(path: InstancePath, extend: boolean) {
-    if (inHierarchy(selection.modulePath, path)) {
-      setExpandedCanvas(previous => {
-        const next = new Set(previous);
-        for (let depth = selection.modulePath.length + 1; depth < path.length; depth++) next.add(hierarchyKey(path.slice(0, depth)));
-        return next.size === previous.size ? previous : next;
-      });
+    if (!inHierarchy(selection.modulePath, path)) {
+      treeExpansion.current = expandedCanvas;
+      store.selectModule(path.slice(0, -1));
+      selectObjects([path]);
+      setCopyNotice(extend ? '已切换到目标所在的模块，当前仅选中该对象。' : '');
+    } else {
+      const next = new Set(expandedCanvas);
+      for (let depth = selection.modulePath.length + 1; depth < path.length; depth++) next.add(hierarchyKey(path.slice(0, depth)));
+      if (next.size !== expandedCanvas.size) {
+        treeExpansion.current = next;
+        setExpandedCanvas(next);
+      }
+      selectObject(path, extend);
     }
-    selectObject(path, extend);
+    if (selectionPaths(store.getSnapshot().selection).some(p => hierarchyKey(p) === hierarchyKey(path))) {
+      setFocusMoved({ path, centerCanvas: true, onlyIfHidden: true });
+    }
     openPage('canvas');
   }
 
@@ -299,15 +311,12 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     openPage('canvas');
   }
 
-  function copyModuleTo(copiedProject: Project, source: InstancePath, destination: InstancePath, position?: XYPosition) {
+  function copyModuleTo(copiedProject: Project, source: InstancePath, destination: InstancePath) {
     const id = crypto.randomUUID();
     const path = [...destination, id];
     const snapshot = store.getSnapshot();
     const owner = store.resolveInstance(destination);
-    const result = store.commit(draft => {
-      const next = pasteModule(draft, copiedProject, source, destination, id, () => crypto.randomUUID());
-      return position ? moveTopologyNodes(next, [{ instancePath: path, ...position }]) : next;
-    });
+    const result = store.commit(draft => pasteModule(draft, copiedProject, source, destination, id, () => crypto.randomUUID()));
     if (!result.ok) {
       setCopyNotice('');
       setError(result.message);
@@ -325,21 +334,32 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     setCopyNotice(`已在「${location}」添加「${copyName}」。${shared.length ? `共享定义同时更新：${shared.join('、')}。` : ''}`);
   }
 
-  function copySelectedModule() {
-    const { project, selection } = store.getSnapshot();
-    const path = selection.instancePath;
-    const source = path?.length ? store.resolveInstance(path) : undefined;
-    if (!path || !source?.instance || source.definition.kind !== 'module') return false;
-    moduleClipboard.current = { project, path, ports: source.definition.ports };
-    setCopyNotice(`已复制「${source.instance.name}」。可在目标模块视图按 Ctrl+V 粘贴。`);
-    return true;
+  function copySelectedObjects(view: Projection) {
+    objectClipboard.current = undefined;
+    try {
+      const copied = captureTopologyObjects(project, selectedPaths, view);
+      objectClipboard.current = copied;
+      const label = copied.objects.length === 1 ? '「' + store.resolveInstance(copied.objects[0].path)!.instance!.name + '」'
+        : copied.objects.length + ' 个对象';
+      setCopyNotice('已复制' + label + '。可在目标模块视图按 Ctrl+V 粘贴。');
+    } catch (error) {
+      setCopyNotice(projectErrorMessage(error));
+    }
   }
 
-  function pasteSelectedModule(placement: (ports: readonly PortDefinition[]) => XYPosition | undefined) {
-    const copied = moduleClipboard.current;
-    if (!copied) return false;
-    copyModuleTo(copied.project, copied.path, store.getSnapshot().selection.modulePath, placement(copied.ports));
-    return true;
+  function pasteSelectedObjects(view: Projection, placement: (size: Rect) => XYPosition | undefined) {
+    const copied = objectClipboard.current;
+    if (!copied) { setCopyNotice('剪贴板中没有可粘贴的对象。'); return; }
+    const position = placement(copied.bounds);
+    if (!position) { setCopyNotice('当前画布没有可见的粘贴位置。'); return; }
+    const destination = selection.modulePath;
+    const ids = copied.objects.map(() => crypto.randomUUID());
+    const result = store.commit(draft => pasteInView(draft, copied, destination, ids, position, view, () => crypto.randomUUID()));
+    if (!result.ok) { setCopyNotice(result.message); return; }
+    selectObjects(ids.map(id => [...destination, id]));
+    setError('');
+    const shared = active ? structureScope(linkOptions.graph.instances, active.id) : [];
+    setCopyNotice('已粘贴 ' + ids.length + ' 个对象。' + (shared.length ? '共享定义同时更新：' + shared.join('、') + '。' : ''));
   }
 
   function requestMoveUp(source: InstancePath) {
@@ -387,7 +407,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     const result = store.replaceProject(candidate);
     setError(result.ok ? '' : result.message);
     if (result.ok) {
-      moduleClipboard.current = undefined;
+      objectClipboard.current = undefined;
       setCopyNotice('');
       setSavedProject(store.getSnapshot().project);
       setCategory('links');
@@ -668,13 +688,13 @@ export function Workbench({ store, loadExample, newProject }: Props) {
                     {issue && <small role="status" title={issue}>{issue}</small>}</>}
                 </div>}
                 store={store} state={state} module={active} pathResult={canvasPath} graph={linkOptions.graph} rename={renameSelection}
-                expanded={expandedCanvas} setExpanded={setExpandedCanvas} budgetHighlight={budgetHighlight}
+                expanded={expandedCanvas} persistExpansion={expandedCanvas !== treeExpansion.current} setExpanded={setExpandedCanvas} budgetHighlight={budgetHighlight}
                 onPortBudget={selectBudgetPort} onDcBudget={showDc} onAddPort={setPortTarget} newPort={newPort}
                 onSelectObject={selectObject} onSelectObjects={selectObjects}
-                copyModule={copySelectedModule} pasteModule={pasteSelectedModule} copyNotice={copyNotice}
+                copyObjects={copySelectedObjects} pasteObjects={pasteSelectedObjects} copyNotice={copyNotice}
                 fullPage={!!presentation} toggleFullPage={toggleFullPage}
                 restoreView={restoredView?.scope === currentScope ? restoredView.view : undefined}
-                focusMoved={focusMoved?.centerCanvas ? focusMoved.path : undefined}
+                focusMoved={focusMoved?.centerCanvas ? focusMoved : undefined}
                 moveAcrossLevels={(base, plan, layout) => moveAcrossLevels(base, plan, layout, false)}
                 placingModule={topologyActive && placingModule} setPlacingModule={setPlacingModule}
                 toolsHost={toolsHost} viewHost={viewHost} topologyActive={topologyActive} />}
@@ -788,7 +808,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
                     ? conditions.frequencyGHz : undefined;
                   return { channelId, frequencyGHz };
                 }}
-                onCopyModule={path => copyModuleTo(store.getSnapshot().project, path, path.slice(0, -1))}
+                onCopyModule={topologyActive && hierarchyKey(properties.instancePath) === currentScope ? undefined
+                  : path => copyModuleTo(store.getSnapshot().project, path, path.slice(0, -1))}
                 onAddInside={topologyActive && selected?.instance && selected.definition.kind === 'module'
                   ? path => { enterModule(path); setLeftTab('library'); } : undefined}
                 onDcBudget={topologyActive && properties.definition.kind === 'module' && properties.definition.physicalEnclosure ? showDc : undefined}

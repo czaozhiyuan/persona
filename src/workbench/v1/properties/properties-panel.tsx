@@ -39,7 +39,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
   store: ProjectStore; occurrence: ResolvedInstance; occurrences: readonly ResolvedInstance[];
   receiverQuery: (portId: string) => ReceiverQuery;
   onAddPort: (path: InstancePath) => void;
-  onCopyModule: (path: InstancePath) => void;
+  onCopyModule?: (path: InstancePath) => void;
   onAddInside?: (path: InstancePath) => void;
   onDcBudget?: (path: InstancePath) => void;
   onMoveUp?: (path: InstancePath) => void;
@@ -210,7 +210,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
         <h3>模块操作</h3>
         {onDissolve && <button type="button" onClick={() => onDissolve(instancePath)}>解散模块（保留内部对象）</button>}
         {parentLocations.length > 0 && <p className="v1-property-effective">在上级模块添加后，以下位置都会新增此对象：{parentLocations.join('、')}。</p>}
-        <button type="button" onClick={() => onCopyModule(instancePath)}>复制模块</button>
+        {onCopyModule && <button type="button" onClick={() => onCopyModule(instancePath)}>复制模块</button>}
         <button type="button" aria-describedby="v1-module-reuse-hint" onClick={reuseModule}>复用模块</button>
         <p className="v1-property-effective" id="v1-module-reuse-hint">修改结构会同步到其他复用位置</p>
       </section>}

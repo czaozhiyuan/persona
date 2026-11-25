@@ -1,5 +1,6 @@
 import { resolveHierarchy } from '../../engine/v1/hierarchy';
 import type { InstancePath, Project, WireRef } from '../../model/v1/types';
+import { outermostPaths } from './object-selection';
 import { editModuleWiring } from './topology-edits';
 
 export type { WireRef as WiringSelection } from '../../model/v1/types';
@@ -21,7 +22,7 @@ export function removeTopologyInstance(project: Project, parentId: string, insta
 export function removeTopologyInstances(project: Project, paths: readonly InstancePath[]) {
   const original = resolveHierarchy(project);
   const byParent = new Map<string, InstancePath[]>();
-  for (const path of paths) {
+  for (const path of outermostPaths(paths)) {
     if (!path.length || !original.resolveInstance(path)) throw new Error('所选对象已不存在或是编辑边界。');
     const parentId = original.resolveInstance(path.slice(0, -1))!.definition.id;
     const siblings = byParent.get(parentId);

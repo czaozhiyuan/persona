@@ -157,7 +157,7 @@ function darkParallelPath(start: State, target: State, relevant: ReadonlySet<Sta
   return toPath([...head, ...tail.reverse()], [...headEdges, edge, ...tailEdges.reverse()], false, targetCarrier);
 }
 
-function searchRoutes(query: Search, skip?: (edge: SignalEdge) => boolean, allDark = false): SearchResult {
+function scanRoutes(query: Search, skip?: (edge: SignalEdge) => boolean) {
   const reverse = query.reverse ?? false;
   const allRequired = query.allRequired ?? 0n;
   const index = new Map<SignalPort, Map<string, State>>();
@@ -187,7 +187,7 @@ function searchRoutes(query: Search, skip?: (edge: SignalEdge) => boolean, allDa
       ? intersectCarrier(intersectCarrier(query.carrier, query.startCarriers?.get(port)), port.definition.channelIds) : undefined;
     if (carrier?.length !== 0) starts.add(stateAt(port, carrier, 0n, query.startFlow?.(port)));
   }
-  if (pending.length > MAX_STATES) return { status: 'search_limit' };
+  if (pending.length > MAX_STATES) return;
 
   let arcCount = 0;
   for (let cursor = 0; cursor < pending.length; cursor++) {
@@ -208,11 +208,35 @@ function searchRoutes(query: Search, skip?: (edge: SignalEdge) => boolean, allDa
       const carrier = query.ignoreChannels ? undefined : transition(edge, current.carrier, requested, reverse);
       if (carrier === false || carrier?.length === 0) continue;
       const next = stateAt(port, carrier, current.required | (query.required?.get(edge) ?? 0n), portFlowAt(edge, port));
-      if (pending.length > MAX_STATES || ++arcCount > MAX_ARCS) return { status: 'search_limit' };
-      current.next.push({ state: next, edge });
-      next.previous.push(current);
+      if (pending.length > MAX_STATES || ++arcCount > MAX_ARCS) return;
+      if (query.target) {
+        current.next.push({ state: next, edge });
+        next.previous.push(current);
+      }
     }
   }
+  return { starts, targets, pending };
+}
+
+/** Visit physical paths once, retaining arrival direction at bidirectional boundaries. */
+export function reachableSignalPorts(query: Pick<Search, 'starts' | 'adjacent' | 'carrier' | 'startFlow' | 'required' | 'allRequired'>) {
+  const scan = scanRoutes(query);
+  if (!scan) return undefined;
+  const reached = { in: new Set<SignalPort>(), out: new Set<SignalPort>() };
+  for (const { port, flow, required } of scan.pending) {
+    if (required !== (query.allRequired ?? 0n)) continue;
+    const direction = flow ?? port.definition.direction;
+    if (direction !== 'out') reached.in.add(port);
+    if (direction !== 'in') reached.out.add(port);
+  }
+  return reached;
+}
+
+function searchRoutes(query: Search, skip?: (edge: SignalEdge) => boolean, allDark = false): SearchResult {
+  const scan = scanRoutes(query, skip);
+  if (!scan) return { status: 'search_limit' };
+  const { starts, targets, pending } = scan;
+  const reverse = query.reverse ?? false;
   if (targets.length === 0) return { status: 'unreachable', reached: new Set(pending.map(state => state.port)) };
 
   // Only a state that can reach an admissible target can affect the query.

@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { canvasEdgeKey, projectPathHighlight } from '../../src/editors/topology/v1/path-highlight';
+import { createPathResolver } from '../../src/engine/v1/path-resolver';
 import { signalPortKey } from '../../src/engine/v1/signal-graph';
+import { builtInDefinitions } from '../../src/library/v1/built-in';
+import type { ComponentDefinition, ModuleDefinition, PortDefinition, Project } from '../../src/model/v1/types';
 import { topologyExample } from '../../src/model/v1/topology-example';
 import { editModule } from '../../src/state/v1/topology-edits';
+import { createEndpointChoices } from '../../src/workbench/v1/links/link-endpoints';
 import { createLinkOptions, requiredEdgeKey } from '../../src/workbench/v1/links/link-options';
 
 test('Link choices distinguish reused scoped records, half-open cores, and EO/OE instance boundaries', () => {
@@ -33,4 +37,104 @@ test('path projection shows the active fibre and mapping only in their actual oc
   assert.deepEqual([...projectPathHighlight(result, ['TX_A']).edges],
     [canvasEdgeKey('connection', 'rf-feed'), canvasEdgeKey('mapping', 'OPT_OUT')]);
   assert.equal(projectPathHighlight(result, ['TX_B']).edges.size, 0);
+});
+
+const local = (instanceId: string, portId: string) => ({ instanceId, portId });
+const ref = (portId: string, ...instancePath: string[]) => ({ instancePath, portId });
+const wire = (id: string, from: ReturnType<typeof local>, to: ReturnType<typeof local>) => ({ id, from, to });
+const slot = (id: string, definitionId: string) => ({ id, name: definitionId, definitionId });
+const port = (id: string, type: PortDefinition['type'], direction: PortDefinition['direction']): PortDefinition => ({ id, type, direction });
+const component = (id: string) => builtInDefinitions.find(item => item.id === 'library-' + id)! as ComponentDefinition;
+
+test('three independent RF/optical chains use their outermost mapped boundaries and their physical fibre', () => {
+  const rfIn = port('a', 'RF', 'in'), rfOut = port('b', 'RF', 'out');
+  const tx = (model: string): ModuleDefinition => ({
+    kind: 'module', id: model, name: model, ports: [rfIn, port('b', 'OPTICAL', 'out'), port('ac', 'AC_POWER', 'in')],
+    instances: [slot('stage', component(model).id)], portMappings: [
+      { portId: 'a', target: local('stage', 'RF_IN') }, { portId: 'b', target: local('stage', 'OPT_OUT') },
+    ],
+  });
+  const chains = ['1', '2', '3'];
+  const root: ModuleDefinition = { kind: 'module', id: 'root', name: 'System', ports: [],
+    instances: chains.flatMap(i => [slot('t' + i, i === '1' ? 'mzm' : 'dml'), slot('r' + i, 'rx')]),
+    connections: chains.slice(1).map(i => wire(i, local('t' + i, 'b'), local('r' + i, 'a'))),
+    cableBundles: [{ id: 'mpo', coreCount: 1, cores: [{ id: 'pair', a: { pin: 1, endpoint: local('t1', 'b') },
+      b: { pin: 1, endpoint: local('r1', 'a') } }] }],
+  };
+  const project: Project = { id: 'test', name: 'Test', rootModuleDefinitionId: root.id,
+    componentDefinitions: ['mzm', 'dml', 'pd', 'rf-gain'].map(component),
+    moduleDefinitions: [root, tx('mzm'), tx('dml'), { kind: 'module', id: 'rx', name: 'Rx',
+      ports: [port('a', 'OPTICAL', 'in'), rfOut], instances: [slot('pd', 'library-pd'), slot('amp', 'library-rf-gain')],
+      connections: [wire('rf', local('pd', 'RF_OUT'), local('amp', 'RF_IN'))],
+      portMappings: [{ portId: 'a', target: local('pd', 'OPT_IN') }, { portId: 'b', target: local('amp', 'RF_OUT') }] }] };
+  const options = createLinkOptions(project);
+  const starts = chains.map(i => ref('a', 't' + i)), ends = chains.map(i => ref('b', 'r' + i));
+  const initial = options.endpointChoices('', undefined, false);
+  assert.deepEqual(initial.from.map(o => o.value), starts);
+  assert.deepEqual(initial.to.map(o => o.value), ends);
+  for (const [i, start] of starts.entries()) {
+    const { from, to } = options.endpointChoices(signalPortKey(start), undefined, false);
+    assert.deepEqual(from.map(o => o.value), starts);
+    assert.deepEqual(to.map(o => o.value), [ends[i]]);
+  }
+  const localChoices = options.endpointChoices(signalPortKey(starts[0]), undefined, true);
+  assert.deepEqual(localChoices.from, localChoices.to);
+  assert.ok(localChoices.from.some(o => o.key === signalPortKey(ref('OPT_OUT', 't1', 'stage'))));
+  assert.ok(localChoices.from.every(o => !options.graph.ports.get(o.key)?.definition.type.endsWith('POWER')));
+  const mapped = editModule(project, 'root', module => ({ ...module, ports: [rfIn, rfOut],
+    portMappings: [{ portId: 'a', target: local('t2', 'a') }, { portId: 'b', target: local('r2', 'b') }] }));
+  const outer = createLinkOptions(mapped).endpointChoices(signalPortKey(ref('a')), undefined, false);
+  assert.deepEqual(outer.from.map(o => o.value), [ref('a'), starts[0], starts[2]]);
+  assert.deepEqual(outer.to.map(o => o.value), [ref('b')]);
+});
+
+test('CONTROL sources and terminal inputs follow SFP, switch, channel and bidirectional dark splitter routes', () => {
+  const controller: ComponentDefinition = { kind: 'component', id: 'ctl', name: 'Controller',
+    ports: [port('send', 'CONTROL', 'out'), port('receive', 'CONTROL', 'in')] };
+  const project: Project = { id: 'test', name: 'Test', rootModuleDefinitionId: 'root',
+    componentDefinitions: [controller, ...['sfp', 'optical-switch', 'splitter', 'laser'].map(component)],
+    moduleDefinitions: [{ kind: 'module', id: 'root', name: 'System', ports: [],
+      instances: [slot('a', 'ctl'), slot('b', 'ctl'), slot('tx', 'library-sfp'), slot('rx', 'library-sfp'),
+        { ...slot('sw', 'library-optical-switch'), switchStateId: 'pass' }, slot('sp', 'library-splitter'), slot('source', 'library-laser')],
+      connections: [wire('drive', local('a', 'send'), local('tx', 'DATA_TX_IN')),
+        wire('fibre', local('tx', 'OPT_TX_OUT'), local('sw', 'OPT_IN')),
+        wire('launch', local('sw', 'OPT_OUT'), local('sp', 'OPT_IN')),
+        wire('dark', local('sp', 'OPT_OUT_1'), local('rx', 'OPT_RX_IN')),
+        wire('data', local('rx', 'DATA_RX_OUT'), local('b', 'receive'))] }],
+    instanceSettings: [{ instancePath: ['sp'], parameterOverrides: { firstPercent: { kind: 'fixed', value: 0 } } }],
+  };
+  const filtered = { ...project, componentDefinitions: project.componentDefinitions.map(d => d.id !== 'library-sfp' ? d : {
+    ...d, ports: d.ports.map(p => p.type === 'OPTICAL' ? { ...p, channelIds: ['DWDM_CH28' as const] } : p),
+  }) };
+  const key = signalPortKey(ref('send', 'a')), sink = signalPortKey(ref('receive', 'b'));
+  const options = createLinkOptions(filtered);
+  const choices = options.endpointChoices(key, undefined, false);
+  assert.ok(choices.from.some(o => o.key === key));
+  assert.ok(choices.from.some(o => o.key === signalPortKey(ref('OPT_OUT', 'source'))));
+  assert.ok(!choices.from.some(o => o.key === signalPortKey(ref('OPT_TX_OUT', 'tx'))));
+  assert.ok(choices.to.some(o => o.key === sink));
+  assert.ok(!choices.to.some(o => o.key === signalPortKey(ref('OPT_IN', 'sp'))));
+  assert.equal(options.endpointChoices(key, 'DWDM_CH30', false).to.length, 0);
+  const blocked = createLinkOptions({ ...filtered, instanceSettings: [
+    ...filtered.instanceSettings!, { instancePath: ['sw'], switchStateId: 'block' }] });
+  assert.equal(blocked.endpointChoices(key, undefined, false).to.length, 0);
+  const cut = editModule(filtered, 'root', m => ({ ...m, connections: m.connections?.filter(c => c.id !== 'fibre') }));
+  assert.ok(!createLinkOptions(cut).endpointChoices(key, undefined, false).to.some(o => o.key === sink));
+});
+
+test('ambiguous RF routes remain eligible and an exhausted search keeps the unconfirmed system ends', () => {
+  const amp = component('rf-gain');
+  const project: Project = { id: 'rf', name: 'RF', rootModuleDefinitionId: 'root', componentDefinitions: [amp],
+    moduleDefinitions: [{ kind: 'module', id: 'root', name: 'System', ports: [],
+      instances: ['input', 'a', 'b', 'output', 'isolated'].map(id => slot(id, amp.id)),
+      connections: ['a', 'b'].flatMap(id => [wire('to-' + id, local('input', 'RF_OUT'), local(id, 'RF_IN')),
+        wire('from-' + id, local(id, 'RF_OUT'), local('output', 'RF_IN'))]) }] };
+  const from = ref('RF_IN', 'input'), to = ref('RF_OUT', 'output');
+  const options = createLinkOptions(project);
+  assert.equal(options.resolveNamedLink({ id: 'rf', name: 'RF', from, to }).status, 'ambiguous');
+  assert.deepEqual(options.endpointChoices(signalPortKey(from), undefined, false).to.map(o => o.value), [to]);
+  const limited = createEndpointChoices({ ...createPathResolver(project), reachableFrom: () => undefined }, options.endpoints);
+  const choices = limited(signalPortKey(from), undefined, false);
+  assert.equal(choices.limited, true);
+  assert.deepEqual(choices.to.map(o => o.value), [to, ref('RF_OUT', 'isolated')]);
 });

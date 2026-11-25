@@ -13,7 +13,7 @@ import { groupModule } from '../../../state/v1/group-module';
 import { connectBoundaryPort, exposeModulePort, renamePort } from '../../../state/v1/module-ports';
 import type { WiringSelection } from '../../../state/v1/remove-topology-object';
 import type { EndpointRef, InstancePath, ModuleDefinition, Project } from '../../../model/v1/types';
-import type { ProjectStore, ProjectStoreSnapshot } from '../../../state/v1/project-store';
+import { selectionPaths, type ProjectStore, type ProjectStoreSnapshot } from '../../../state/v1/project-store';
 import { editModule, editModuleWiring, moveTopologyNodes, resizeTopologyFrame } from '../../../state/v1/topology-edits';
 import { PortActionsDialog } from './port-actions-dialog';
 import type { MultiplexPower } from '../../../engine/v1/multiplex-power';
@@ -32,11 +32,12 @@ import './topology.css';
 
 import type { LibraryConfig } from '../../../library/v1/user-library';
 
-export function TopologyEditor({ multiplex, centerPlacement, linkControls, library, store, state, module, pathResult, graph, rename, expanded, setExpanded, budgetHighlight, onPortBudget, onDcBudget, onAddPort, newPort, onSelectObject, onSelectObjects, moveAcrossLevels, focusMoved, copyModule, pasteModule, copyNotice, fullPage, toggleFullPage, restoreView, placingModule, setPlacingModule, toolsHost, viewHost, topologyActive }: {
+export function TopologyEditor({ multiplex, centerPlacement, linkControls, library, store, state, module, pathResult, graph, rename, expanded, persistExpansion, setExpanded, budgetHighlight, onPortBudget, onDcBudget, onAddPort, newPort, onSelectObject, onSelectObjects, moveAcrossLevels, focusMoved, copyObjects, pasteObjects, copyNotice, fullPage, toggleFullPage, restoreView, placingModule, setPlacingModule, toolsHost, viewHost, topologyActive }: {
   multiplex: MultiplexPower;
   linkControls: import('react').ReactNode;
   library: LibraryConfig;
   store: ProjectStore; state: ProjectStoreSnapshot; module: ModuleDefinition; pathResult?: PathResult; graph: SignalGraph; rename: () => void;
+  persistExpansion: boolean;
   expanded: ReadonlySet<string>; setExpanded: (value: ReadonlySet<string>) => void;
   budgetHighlight?: BudgetHighlight;
   onPortBudget: (action: 'optical' | 'from' | 'to', ref: EndpointRef) => void;
@@ -46,8 +47,8 @@ export function TopologyEditor({ multiplex, centerPlacement, linkControls, libra
   onSelectObjects: (paths: readonly InstancePath[]) => void;
   moveAcrossLevels: (base: Project, plan: ApprovedMove, layout?: ReparentLayout) => string | undefined;
   centerPlacement: Parameters<typeof TopologyCanvas>[0]['centerPlacement'];
-  copyModule: Parameters<typeof TopologyCanvas>[0]['copyModule'];
-  pasteModule: Parameters<typeof TopologyCanvas>[0]['pasteModule'];
+  copyObjects: Parameters<typeof TopologyCanvas>[0]['copyObjects'];
+  pasteObjects: Parameters<typeof TopologyCanvas>[0]['pasteObjects'];
   copyNotice: string;
   fullPage: boolean;
   toggleFullPage: (view: CanvasView) => void;
@@ -57,7 +58,7 @@ export function TopologyEditor({ multiplex, centerPlacement, linkControls, libra
   toolsHost: HTMLDivElement | null;
   viewHost: HTMLDivElement | null;
   topologyActive: boolean;
-  focusMoved?: InstancePath;
+  focusMoved?: Parameters<typeof TopologyCanvas>[0]['focusMoved'];
   newPort?: EndpointRef;
 }) {
   const { project, selection } = state;
@@ -65,7 +66,7 @@ export function TopologyEditor({ multiplex, centerPlacement, linkControls, libra
   const scopeOccurrence = store.resolveInstance(scope);
   const moduleName = scopeOccurrence?.instance?.name ?? module.name;
   const [message, setMessage] = useState('');
-  const selectedPaths = selection.instancePaths ?? (selection.instancePath ? [selection.instancePath] : []);
+  const selectedPaths = selectionPaths(selection);
   const [groupDialog, setGroupDialog] = useState(false);
   const maxDepth = displayDepth(graph.instances, scope);
   const visibleDepth = displayDepth(graph.instances, scope, expanded);
@@ -139,15 +140,15 @@ export function TopologyEditor({ multiplex, centerPlacement, linkControls, libra
 
   function applyExpansion(next: Set<string>) {
     setExpanded(next);
-    const visiblePaths = selectedPaths.map(path => {
-      if (!inHierarchy(scope, path)) return path;
+    const visiblePaths = selectedPaths.filter(path => {
+      if (!inHierarchy(scope, path)) return false;
       for (let length = scope.length + 1; length < path.length; length++) {
         const ancestor = path.slice(0, length);
-        if (!next.has(hierarchyKey(ancestor))) return ancestor;
+        if (!next.has(hierarchyKey(ancestor))) return false;
       }
-      return path;
+      return true;
     });
-    if (visiblePaths.some((path, index) => path !== selectedPaths[index])) store.selectInstances(visiblePaths);
+    if (visiblePaths.length !== selectedPaths.length) store.selectInstances(visiblePaths);
   }
 
   function toggleModule(path: InstancePath) {
@@ -222,7 +223,7 @@ export function TopologyEditor({ multiplex, centerPlacement, linkControls, libra
   return <section className="v1-topology" aria-label={`框图 · ${moduleName}`}>
     <div className="v1-hierarchy-workspace">
       <TopologyCanvas multiplex={multiplex} centerPlacement={centerPlacement} project={project} instances={graph.instances} modulePath={scope} selectedInstance={selection.instancePath}
-        pathResult={pathResult} budgetHighlight={budgetHighlight} expanded={expanded} toggleModule={toggleModule}
+        pathResult={pathResult} budgetHighlight={budgetHighlight} expanded={expanded} persistExpansion={persistExpansion} toggleModule={toggleModule}
         selectedPaths={selectedPaths} selectObject={onSelectObject} selectObjects={onSelectObjects}
         enterModule={store.selectModule} focusMoved={focusMoved}
         fullPage={fullPage} toggleFullPage={toggleFullPage} restoreView={restoreView}
@@ -231,7 +232,7 @@ export function TopologyEditor({ multiplex, centerPlacement, linkControls, libra
         onAddPort={onAddPort} newPort={newPort}
         openPort={(path, portId) => { setMessage(''); setPortAction({ path, portId }); }}
         add={add} placingModule={placingModule} cancelPlacement={() => { setPlacingModule(false); setMessage(''); }}
-        deleteInstances={deleteInstances} deleteWiring={deleteWiring} rename={rename} copyModule={copyModule} pasteModule={pasteModule} report={setMessage} undo={store.undo} redo={store.redo}
+        deleteInstances={deleteInstances} deleteWiring={deleteWiring} rename={rename} copyObjects={copyObjects} pasteObjects={pasteObjects} report={setMessage} undo={store.undo} redo={store.redo}
         route={(scope, wire, point) => commit(draft => setWireRoute(draft, scope, wire, point))}
         move={(moves, frame) => commit(draft => {
           const placed = moveTopologyNodes(draft, moves);
