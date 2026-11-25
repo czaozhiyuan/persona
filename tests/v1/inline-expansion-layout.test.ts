@@ -45,7 +45,7 @@ const key = new Set([hierarchyKey(board)]);
 test('expanding a child keeps displaced devices below the measured top optical port row and header', () => {
   const project = fixture(540, 300);
   const parent = project.moduleDefinitions.find(d => d.id === 'receiver')!;
-  parent.ports = [{ id: 'COM', name: 'COM', type: 'OPTICAL', direction: 'bidirectional', side: 'top' }];
+  parent.ports = [{ id: 'COM', name: 'COM', type: 'OPTICAL', direction: 'bidirectional' }];
   const portHeights = new Map([[hierarchyKey(receiver), { side: 0, top: 112 }]]);
   const expanded = [receiver, board];
   const edit = planInlineExpansion(view(project, [], expanded, portHeights), key);

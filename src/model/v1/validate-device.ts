@@ -42,8 +42,6 @@ function validateQuantity(
 
 export function validatePortConstraints(port: PortDefinition, parameters: ReadonlyMap<string, ParameterDefinition>, context: string): void {
   requireValid(port.name === undefined || port.name.trim(), `${context}: 端口显示名称不能为空`);
-  requireValid(port.side === undefined || port.side === 'top' || (port.side === 'left' && port.direction === 'bidirectional'),
-    `${context}: 端口位置无效`);
   if (port.channelIds !== undefined) {
     requireValid(port.type === 'OPTICAL', `${context}: 仅光端口可以设置光通道 ID`);
     validateChannelIds(port.channelIds, context);

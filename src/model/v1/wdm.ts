@@ -23,8 +23,8 @@ export function withWdmPorts(definition: ComponentDefinition, ports: readonly Po
 
 export function validateWdm(definition: ComponentDefinition) {
   const common = definition.ports.find(port => port.id === 'COM');
-  requireValid(common?.type === 'OPTICAL' && common.direction === 'bidirectional' && common.side === 'top'
-    && !common.channelIds && !common.opticalEmitter, 'WDM 需要一个顶部、双向的公共光口 COM。');
+  requireValid(common?.type === 'OPTICAL' && common.direction === 'bidirectional'
+    && !common.channelIds && !common.opticalEmitter, 'WDM 需要一个双向的公共光口 COM。');
   requireValid(!definition.dcSupply && !definition.dcLoad && !definition.switchStates?.length, 'WDM 是无源器件。');
   const loss = definition.parameters?.find(parameter => parameter.id === 'insertionLoss');
   requireValid(loss?.kind === 'numeric' && loss.unit === 'dB' && loss.valueKind === 'fixed' && (loss.range?.min ?? -1) >= 0,
@@ -33,7 +33,7 @@ export function validateWdm(definition: ComponentDefinition) {
   for (const port of definition.ports) {
     if (port.id === 'COM') continue;
     const id = port.channelIds?.[0];
-    requireValid(port.type === 'OPTICAL' && port.direction !== 'bidirectional' && !port.side && !port.opticalEmitter
+    requireValid(port.type === 'OPTICAL' && port.direction !== 'bidirectional' && !port.opticalEmitter
       && port.channelIds?.length === 1 && id && id !== 'MM850' && resolveOpticalChannel(id),
     'WDM 波长端口需要一个标准 CWDM 或 DWDM 通道及单向输入/输出方向。');
     requireValid(!channels.has(id), 'WDM 波长通道重复：' + id);

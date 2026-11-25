@@ -1,6 +1,6 @@
 import { resolveHierarchy } from '../../engine/v1/hierarchy';
 import type { InstancePath, ModuleDefinition, Project } from '../../model/v1/types';
-import { validateProjectSnapshot } from '../../storage/v1/project-json';
+import { discardImportedPortSides, validateProjectSnapshot } from '../../storage/v1/project-json';
 import { builtInDefinitions } from './built-in';
 import type { LibraryDefinition } from './project-snapshots';
 
@@ -77,6 +77,7 @@ export function parseLibrary(source: string): LibraryConfig {
   let value: unknown;
   try { value = JSON.parse(source); } catch { throw new Error('器件库 JSON 语法无效。'); }
   validateLibrary(value);
+  discardImportedPortSides([...value.overrides, ...value.custom]);
   return value;
 }
 

@@ -78,7 +78,7 @@ export function ModuleFrame({ frameKey, insets, onPortHeight, labelContext, icon
       <strong title={metricTitle ?? name}>{name}</strong>
       {controls}
     </div>
-    {portSides.map(side => (side !== 'top' || ports.some(p => p.side === 'top')) && <div key={side} className={`v1-module-pins ${side}`}
+    {portSides.map(side => (side !== 'top' || ports.some(p => boundaryPortSide(p) === 'top')) && <div key={side} className={`v1-module-pins ${side}`}
       style={side === 'top' ? undefined : { width: insets[side], top: insets.top }}>
       {ports.filter(port => boundaryPortSide(port) === side).map(port => {
         const input = port.direction === 'in';

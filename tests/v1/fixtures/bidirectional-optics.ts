@@ -2,7 +2,7 @@ import type { OpticalChannelId } from '../../../src/model/v1/channels';
 import type { ComponentDefinition, ModuleDefinition, PortDefinition, Project } from '../../../src/model/v1/types';
 
 const fixed = (value: number) => ({ kind: 'fixed' as const, value });
-const com: PortDefinition = { id: 'COM', name: 'COM', type: 'OPTICAL', direction: 'bidirectional', side: 'top' };
+const com: PortDefinition = { id: 'COM', name: 'COM', type: 'OPTICAL', direction: 'bidirectional' };
 const local = (instanceId: string, portId: string) => ({ instanceId, portId });
 
 export function duplexFixture(): Project {

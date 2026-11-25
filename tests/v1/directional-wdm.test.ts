@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { boundaryPortSide } from '../../src/editors/topology/v1/block-ports';
 import { createLinkBudget } from '../../src/engine/v1/link-budget';
 import type { BudgetMetric } from '../../src/engine/v1/budget-metric';
 import { createMultiplexPower } from '../../src/engine/v1/multiplex-power';
@@ -7,7 +8,8 @@ import { createOpticalBudget } from '../../src/engine/v1/optical-budget';
 import { createPathResolver } from '../../src/engine/v1/path-resolver';
 import { buildSignalGraph } from '../../src/engine/v1/signal-graph';
 import { builtInDefinitions } from '../../src/library/v1/built-in';
-import type { ComponentDefinition } from '../../src/model/v1/types';
+import { factoryLibrary, parseLibrary, saveDefinition } from '../../src/library/v1/user-library';
+import type { ComponentDefinition, PortDefinition } from '../../src/model/v1/types';
 import { parseProjectJson, serializeProjectJson } from '../../src/storage/v1/project-json';
 import { endpoint, fixed, local, wdmProject } from './fixtures/wdm-project';
 
@@ -200,4 +202,23 @@ test('split and rejoined power follows the number of transmitting legs and expli
       }
     }
   }
+});
+
+test('legacy port sides are ignored on project and library import without changing routes or IDs', () => {
+  const project = wdmProject();
+  const source = serializeProjectJson(project);
+  const file = JSON.parse(source);
+  const withLegacySides = (ports: readonly PortDefinition[]) =>
+    ports.map(port => ({ ...port, side: port.direction === 'bidirectional' ? 'left' : 'top' }));
+  for (const definition of [...file.project.componentDefinitions, ...file.project.moduleDefinitions]) {
+    definition.ports = withLegacySides(definition.ports);
+  }
+  const imported = parseProjectJson(JSON.stringify(file));
+  assert.equal(serializeProjectJson(imported), source);
+  assert.deepEqual(parseProjectJson(serializeProjectJson(imported)), imported);
+  const wdm = project.componentDefinitions[0];
+  const config = saveDefinition(factoryLibrary(), { ...wdm, ports: withLegacySides(wdm.ports) });
+  const template = parseLibrary(JSON.stringify(config)).overrides[0];
+  assert.deepEqual(template, wdm);
+  assert.deepEqual(template.ports.map(boundaryPortSide), ['top', 'left', 'left', 'right', 'right']);
 });

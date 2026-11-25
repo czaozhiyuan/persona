@@ -6,7 +6,6 @@ import { editModule, editModuleWiring } from './topology-edits';
 
 export function boundaryPort(inner: PortDefinition, id: string, name: string): PortDefinition {
   const port: PortDefinition = { id, type: inner.type, direction: inner.direction };
-  if (inner.side) port.side = inner.side;
   if (!isPowerPort(inner.type)) port.name = name.trim();
   if (inner.channelIds) port.channelIds = inner.channelIds;
   return port;

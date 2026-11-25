@@ -69,7 +69,7 @@ test('rendered multiline rows set the minimum projected and resized height per o
 });
 
 test('top ports reserve their measured band above the title, children and side pins', () => {
-  const port = { id: 'COM', type: 'OPTICAL', direction: 'bidirectional', side: 'top' } as const;
+  const port = { id: 'COM', type: 'OPTICAL', direction: 'bidirectional' } as const;
   const ordinary = frameInsets([]);
   const insets = frameInsets([port], { top: 64, side: 120 });
   assert.deepEqual([insets.left, insets.right], [ordinary.left, ordinary.right]);
