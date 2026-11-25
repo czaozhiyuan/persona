@@ -182,7 +182,7 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
     const value = source.kind === 'switchRoute' || source.kind === 'transfer'
       ? !previous.channelId && (wavelengthPorts.from.has(edge.from) || wavelengthPorts.to.has(edge.to))
         ? unavailable('dB', '该器件按波长选路，请选择光通道。') : resolveEmpiricalValue('dB', declared, query, instance)
-      : budgetValue('dB', 0);
+      : budgetValue('dB', (source.kind === 'connection' || source.kind === 'cableCore') && source.lossDb ? -source.lossDb : 0);
     const gain = value.availability === 'unavailable'
       ? unavailable('dB', `${showPath(edge.from.ref.instancePath)} 光增益：${value.reason}`) : value;
     const nextChannel = edge.channels.kind === 'convert' ? edge.channels.toChannelId : previous.channelId;
