@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { frameInsets } from '../../src/editors/topology/v1/module-frame';
 import { groupDragBounds, groupDragExtent, groupDropDelta, placeDropGroup } from '../../src/editors/topology/v1/reparent-drop';
 
 test('a group drop translates the whole box and grows the saved destination without shifting its origin', () => {
@@ -7,7 +8,7 @@ test('a group drop translates the whole box and grows the saved destination with
   const anchor = { x: 300, y: 150 };
   const drop = { x: 450, y: 50 };
   const frame = { modulePath: ['target'], x: 0, y: 0, width: 360, height: 120 };
-  const insets = { left: 28, right: 28, height: 108 };
+  const insets = frameInsets([]);
   assert.deepEqual(placeDropGroup(box, anchor, drop, frame, insets), {
     delta: { x: 150, y: -48 },
     frame: { ...frame, width: 678, height: 210 },

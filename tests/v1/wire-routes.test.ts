@@ -37,6 +37,15 @@ test('two cubics pass through an outside waypoint with horizontal endpoint contr
   assert.deepEqual(numbers.slice(-2), [70, 35]);
 });
 
+test('a route through a waypoint follows the top and bottom handle tangents', () => {
+  const edge = { sourceX: 10, sourceY: 25, targetX: 70, targetY: 35, sourcePosition: Position.Top, targetPosition: Position.Bottom };
+  const [path] = curveThroughPoint(edge, point);
+  const numbers = path.match(/-?[\d.]+/g)!.map(Number);
+  assert.ok(numbers[2] === edge.sourceX && numbers[3] < edge.sourceY);
+  assert.ok(numbers[8] === edge.targetX && numbers[9] > edge.targetY);
+  assert.deepEqual(numbers.slice(6, 8), [point.x, point.y]);
+});
+
 test('scoped project layout survives JSON and undo; rewiring, deletion and copy affect only the correct routes', () => {
   let project = setWireRoute(example, ['TX_A'], rf, point);
   project = setWireRoute(project, ['TX_B'], rf, { x: 23, y: -12 });
