@@ -60,7 +60,7 @@ export function PortFields({ port, occurrence, save, remove }: {
 function PortControls({ port, occurrence, remove }: { port: PortDefinition; occurrence: ResolvedInstance; remove: () => void }) {
   const { type, direction } = port;
   return <>
-    {!isPowerPort(type) && <label>显示名称<input name="name" defaultValue={editablePortName(port)} placeholder={portDisplayName(port)} /></label>}
+    {!isPowerPort(type) && <label>显示名称<textarea rows={2} name="name" defaultValue={editablePortName(port)} placeholder={portDisplayName(port)} /></label>}
     <label>端口类型<select name="type" value={type} onChange={() => { /* Saved by the form's change handler. */ }}>
       {Object.entries(portTypeLabels).map(([type, label]) => <option key={type} value={type}>{label}</option>)}
     </select></label>

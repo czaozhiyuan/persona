@@ -36,12 +36,13 @@ const projectView = (project: Project) =>
   projectTopology(project, [...resolveHierarchy(project).walkInstances()], [], expanded, measured);
 const item = (view: ReturnType<typeof projectView>, path: InstancePath) => view.nodeByKey.get(hierarchyKey(path))!;
 
-test('dragging children and shrinking frame edges reserve 45 on port sides and 28 on empty sides', () => {
+test('dragging children and shrinking frame edges reserve compact label columns, wider supply sides and empty padding', () => {
   const input = { id: 'OPT_IN', type: 'OPTICAL', direction: 'in' } as const;
   const output = { id: 'RF_OUT', type: 'RF', direction: 'out' } as const;
   const frame = { x: 10, y: 20, width: 900, height: 300 };
   const child = { x: 250, y: 120, width: 400, height: 80 };
-  for (const [ports, left, right] of [[[], 28, 28], [[input], 45, 28], [[output], 28, 45], [[input, output], 45, 45]] as const) {
+  for (const [ports, left, right] of [[[], 28, 28], [[input], 64, 28], [[output], 28, 64], [[input, output], 64, 64],
+    [[{ ...input, type: 'DC_POWER' }], 86, 28]] as const) {
     const insets = frameInsets(ports);
     const extent = moduleExtent(frame, insets);
     assert.equal(keepNodeInside({ ...child, x: -1000 }, extent).x - frame.x, left);
@@ -51,6 +52,20 @@ test('dragging children and shrinking frame edges reserve 45 on port sides and 2
     assert.equal(child.x - west.x, left);
     assert.equal(east.x + east.width - child.x - child.width, right);
   }
+});
+
+test('rendered multiline rows set the minimum projected and resized height per occurrence', () => {
+  const key = hierarchyKey(['a', 'inner']);
+  const ports = [{ id: 'IN', direction: 'in', type: 'RF', name: '监测\n'.repeat(50).trim() }] as const;
+  const project = { ...fixture, moduleDefinitions: fixture.moduleDefinitions.map(d => d.id === 'inner' ? { ...d, ports } : d) };
+  const instances = [...resolveHierarchy(project).walkInstances()];
+  const view = projectTopology(project, instances, [], expanded, measured, undefined, new Map([[key, 900]]));
+  const frame = view.nodeByKey.get(key)!.frame!.display;
+  const insets = frameInsets(ports, 900);
+  assert.equal(frame.height, insets.height);
+  assert.equal(dragFrame(frame, 's', { x: 0, y: -2000 }, [], insets).height, frame.height);
+  assert.ok(item(view, ['b', 'inner']).frame!.display.height < frame.height);
+  assert.deepEqual(item(view, ['a', 'inner', 'device']).bounds, item(projectView(project), ['a', 'inner', 'device']).bounds);
 });
 
 test('deletion preserves affected visible frames per occurrence and surviving default slots in one edit', () => {

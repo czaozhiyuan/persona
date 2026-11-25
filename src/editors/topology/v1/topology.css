@@ -56,6 +56,7 @@
 }
 .v1-topology-port .v1-port-label:hover { text-decoration: underline; }
 .v1-port-actions label { display: block; margin-block: .45rem; }
+.v1-port-actions textarea { display: block; width: 100%; resize: vertical; }
 .v1-port-actions form + form { border-top: 1px solid #ccdad5; margin-top: .8rem; padding-top: .6rem; }
 .v1-block-column .v1-topology-port span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .v1-module-frame { box-sizing: border-box; width: 100%; height: 100%; border: 2px solid transparent; border-radius: .5rem; }
@@ -98,11 +99,13 @@
 .v1-module-pins { position: absolute; top: 52px; }
 .v1-module-pins.left { left: 0; }
 .v1-module-pins.right { right: 0; text-align: right; }
-.v1-module-pins .v1-topology-port { box-sizing: border-box; height: 28px; }
-.v1-module-pins.left .v1-topology-port { padding-left: .5rem; }
-.v1-module-pins.right .v1-topology-port { padding-right: .5rem; justify-content: end; }
+.v1-module-pins .v1-topology-port { box-sizing: border-box; min-height: 28px; padding-block: 2px; font-size: min(.78rem, 13px); line-height: 17px; }
+.v1-module-pins.left .v1-topology-port { padding-left: 8px; }
+.v1-module-pins.right .v1-topology-port { padding-right: 8px; justify-content: end; }
 .v1-module-pins .v1-topology-port:not(.is-on-path):not(.is-new-port) .v1-port-label { background: var(--v1-frame-fill); }
-.v1-module-pins .v1-topology-port span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.v1-module-pins .v1-topology-port :is(.v1-port-label, span) {
+  min-width: 0; max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; overflow: visible; text-overflow: clip;
+}
 .v1-module-pins .v1-topology-port .react-flow__handle { transform: translate(-50%, -50%); right: auto; }
 .v1-module-pins.left .v1-frame-inner-handle { left: 3px; }
 .v1-module-pins.left .v1-frame-outer-handle { left: -3px; }

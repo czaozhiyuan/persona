@@ -23,7 +23,7 @@
 .v1-port-manager .error { overflow: auto; max-height: 12vh; }
 .v1-add-port-dialog h3, .v1-add-port-dialog p { overflow-wrap: anywhere; }
 .v1-add-port-dialog form label { display: grid; min-width: 0; gap: .25rem; margin: .6rem 0; }
-.v1-add-port-dialog input:not([type="radio"]), .v1-add-port-dialog select { width: 100%; min-width: 0; }
+.v1-add-port-dialog input:not([type="radio"]), .v1-add-port-dialog select, .v1-add-port-dialog textarea { width: 100%; min-width: 0; }
 .v1-port-choices {
   display: grid; grid-template-columns: max-content max-content minmax(0, 1fr);
   align-items: start; gap: .75rem; margin: .6rem 0;

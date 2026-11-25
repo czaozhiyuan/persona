@@ -28,7 +28,8 @@ export const toLocalPosition = (position: XYPosition, offset: XYPosition): XYPos
   ({ x: position.x + offset.x, y: position.y + offset.y });
 
 export function projectTopology(project: Project, instances: readonly ResolvedInstance[], scope: InstancePath,
-  expanded: ReadonlySet<string>, measured: ReadonlyMap<string, Size>, resizePreview?: FrameResizePreview) {
+  expanded: ReadonlySet<string>, measured: ReadonlyMap<string, Size>, resizePreview?: FrameResizePreview,
+  portHeights?: ReadonlyMap<string, number>) {
   const rootKey = hierarchyKey(scope);
   const root = instances.find(item => hierarchyKey(item.instancePath) === rootKey)!;
   const children = hierarchyChildren(instances);
@@ -47,7 +48,7 @@ export function projectTopology(project: Project, instances: readonly ResolvedIn
     if (item.definition.kind !== 'module' || (!isRoot && !expanded.has(key))) continue;
 
     const ports = item.definition.ports;
-    const insets = frameInsets(ports);
+    const insets = frameInsets(ports, portHeights?.get(key));
     const saved = frames.get(key);
     const ownChildren = (children.get(key) ?? []).map((child, index): TopologyItem => {
       const childKey = hierarchyKey(child.instancePath);
@@ -108,5 +109,5 @@ export function projectTopology(project: Project, instances: readonly ResolvedIn
     display.height = Math.max(display.height, node.position.y + node.frame.display.height + framePadding);
   }
 
-  return { rootKey, nodes, nodeByKey, scopes };
+  return { rootKey, nodes, nodeByKey, scopes, portHeights };
 }
