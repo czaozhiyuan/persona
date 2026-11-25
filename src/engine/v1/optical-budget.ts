@@ -79,10 +79,10 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
   }
 
   function stage(port: SignalPort, channelId: OpticalChannelId | undefined, powerDbm: BudgetMetric<'dBm'>,
-    incoming?: OpticalStage['incoming']): OpticalStage {
+    incoming?: OpticalStage['incoming'], initialFlow = opticalSourceFlow(port)): OpticalStage {
     const endpoint = port.ref;
     const flow = port.definition.direction !== 'bidirectional' ? port.definition.direction
-      : incoming ? portFlowAt(incoming.edge, port) : opticalSourceFlow(port);
+      : incoming ? portFlowAt(incoming.edge, port) : initialFlow;
     return { endpoint, flow, channelId, powerDbm, incoming,
       rating: flow === 'in' ? checkInputRating(endpoint, port.definition.inputRating, powerDbm) : undefined };
   }
@@ -204,20 +204,22 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
     }
   }
 
-  function start(port: SignalPort, source: OpticalSource) {
+  function start(port: SignalPort, source: OpticalSource, flow?: PortFlow) {
     const power = source.powerDbm === undefined
       ? resolveEmpiricalValue('dBm', port.definition.opticalEmitter?.powerDbm, { channelId: source.channelId }, instanceAt(port.ref))
       : budgetValue('dBm', source.powerDbm);
     return [stage(port, source.channelId, power.availability === 'available' ? power
-      : unavailable('dBm', `${showPath(port.ref.instancePath)} · ${portDisplayName(port.definition)} 光源功率：${power.reason}`))];
+      : unavailable('dBm', `${showPath(port.ref.instancePath)} · ${portDisplayName(port.definition)} 光源功率：${power.reason}`), undefined, flow)];
   }
 
   function calculateOpticalPath(path: SignalPath, source: OpticalSource, receiverEdge?: SignalEdge) {
     const first = path.steps[0].port;
-    if (first.definition.direction === 'bidirectional' && path.edges.length && portFlowAt(path.edges[0], first) !== opticalSourceFlow(first)) {
+    const departure = path.edges.length ? portFlowAt(path.edges[0], first) : opticalSourceFlow(first);
+    const hasSource = first.definition.opticalEmitter !== undefined || source.powerDbm !== undefined;
+    if (hasSource && first.definition.direction === 'bidirectional' && departure !== opticalSourceFlow(first)) {
       return fail('unreachable', first.ref, '该路径不经过此双向光口的供光方向。');
     }
-    const stages = start(first, source);
+    const stages = start(first, source, departure);
     return finish(stages, propagate(stages, path.edges, budgetValue('dB', 0)), undefined, receiverEdge);
   }
 

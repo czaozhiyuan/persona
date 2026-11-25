@@ -166,7 +166,7 @@ export function createPathResolver(project: Project) {
     const carrier: Carrier = request.channelId === undefined ? undefined : [request.channelId];
     const query = {
       starts: [from], target: to, adjacent: outgoing, carrier, required, allRequired: (1n << BigInt(requiredRefs.size)) - 1n,
-      startFlow: link || from.definition.opticalEmitter || sources.has(from) ? opticalSourceFlow : undefined,
+      startFlow: from.definition.opticalEmitter || sources.has(from) ? opticalSourceFlow : undefined,
       startCarriers: from.definition.type === 'OPTICAL' ? sources : undefined,
     };
     let result = searchSignalPath(query);

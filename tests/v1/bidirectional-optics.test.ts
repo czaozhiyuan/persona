@@ -71,6 +71,19 @@ test('one MPO fibre or connection carries both directions through public COM map
       assert.deepEqual(result.stages.filter(s => s.endpoint.portId === 'COM').map(s => s.flow), ['out', 'out', 'in', 'in']);
       const other = link.channelId === 'DWDM_CH28' ? 'DWDM_CH30' : 'DWDM_CH28';
       assert.equal(resolveNamedLink({ ...link, channelId: other }).status, 'unreachable');
+      const boundary = {
+        ...link, from: { instancePath: link.from!.instancePath.slice(0, 1), portId: 'COM' },
+        to: { instancePath: link.to!.instancePath.slice(0, 1), portId: 'COM' },
+      };
+      const observed = resolveNamedLink(boundary);
+      assert.equal(observed.status, 'resolved');
+      assert.equal(observed.trace.edges.length, 1);
+      assert.ok(physical.includes(observed.trace.edges[0]));
+      const observation = calculateSourcePath(observed.trace);
+      assert.equal(observation.pathIssue, undefined);
+      assert.deepEqual(observation.stages.map(s => s.flow), ['out', 'in']);
+      assert.equal(observation.powerDbm.availability, 'unavailable');
+      assert.equal(resolveNamedLink(boundary, { opticalSources: [boundary.from] }).status, 'unreachable');
     }
   }
   const withSpare = { ...fixture, moduleDefinitions: [{ ...root,
