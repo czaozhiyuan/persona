@@ -751,7 +751,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
                 {(Object.keys(budgetTitles) as BudgetPage[]).map(k => <option key={k} value={k}>{budgetTitles[k]}</option>)}
               </select></label>
               <div hidden={category !== 'links'}>
-                <LinkEditor key={JSON.stringify([projectSession, selectedLink?.id, !savedLink && draftLink?.from, !savedLink && draftLink?.to])} store={store}
+                <LinkEditor key={JSON.stringify([projectSession, selectedLink?.id, selectedLink?.from, selectedLink?.to, savedLink?.channelId, !!savedLink])} store={store}
                   options={linkOptions} opticalLink={opticalLink} draft={!savedLink && !!draftLink} selected={selectedLink} result={pathResult} point={point} budget={budget}
                   conditions={conditions} opticalResult={linkedOpticalResult} trialSaved={sameTrial(savedLink?.trial, conditions)}
                   saveTrial={saveTrial} choose={chooseLink} locate={locateBudgetPort}

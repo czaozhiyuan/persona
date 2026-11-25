@@ -1,5 +1,6 @@
 import { supportsDirection } from '../../../model/v1/types';
 import { numberedNames, wireArrow } from '../../../model/v1/display-names';
+import { createEndpointChoices } from './link-endpoints';
 import { createPathNames } from '../structure-scope';
 import { portDisplayName } from '../labels';
 import { createPathResolver } from '../../../engine/v1/path-resolver';
@@ -16,7 +17,8 @@ export const requiredEdgeKey = (ref: RequiredEdge): string => JSON.stringify('bu
 export const conversionKey = ({ instancePath, fromPortId, toPortId }: ConversionBoundary): string =>
   JSON.stringify([instancePath, fromPortId, toPortId]);
 export function createLinkOptions(project: Project) {
-  const { graph, resolveNamedLink } = createPathResolver(project);
+  const resolver = createPathResolver(project);
+  const { graph, resolveNamedLink } = resolver;
   const { showPath, showName } = createPathNames(graph.instances);
   const instances = new Map(graph.instances.map(item => [JSON.stringify(item.instancePath), item]));
   const showPort = (ref: EndpointRef) => {
@@ -75,7 +77,8 @@ export function createLinkOptions(project: Project) {
   const links = project.namedLinks ?? [];
   const labels = numberedNames(links.map(link => link.name));
   const namedLinks = links.map((link, index) => ({ value: link.id, label: labels[index] }));
-  return { graph, showName, showPath, namedLinks, endpoints, opticalEndpoints, opticalSources, via, eo, oe, resolveNamedLink, showEndpoint, showPort };
+  const endpointChoices = createEndpointChoices(resolver, endpoints);
+  return { endpointChoices, graph, showName, showPath, namedLinks, endpoints, opticalEndpoints, opticalSources, via, eo, oe, resolveNamedLink, showEndpoint, showPort };
 }
 
 export type LinkOptions = ReturnType<typeof createLinkOptions>;

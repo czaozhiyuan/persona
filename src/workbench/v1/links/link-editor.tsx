@@ -5,6 +5,7 @@ import type { PathResult } from '../../../engine/v1/path-resolver';
 import { signalPortKey } from '../../../engine/v1/signal-graph';
 import { resolveOpticalChannel } from '../../../model/v1/channels';
 import type { LinkTrial, NamedLink } from '../../../model/v1/topology';
+import { isPowerPort } from '../../../model/v1/types';
 import type { EndpointRef } from '../../../model/v1/types';
 import type { ProjectStore } from '../../../state/v1/project-store';
 import { EndpointLocation } from '../budgets/budget-location';
@@ -35,12 +36,15 @@ type Props = {
   locate: (endpoint: EndpointRef) => void;
 };
 
-function Choice<T>({ name, title, options, value, required }: {
-  name: string; title: string; options: readonly Option<T>[]; value?: string; required?: boolean;
+function EndpointChoice({ name, title, options, current, retainedLabel, power, onChange }: {
+  name: string; title: string; options: Option<EndpointRef>[]; current?: Option<EndpointRef>;
+  retainedLabel: string; power: boolean; onChange: (key: string) => void;
 }) {
-  return <label>{title}<select name={name} required={required} defaultValue={value ?? ''}>
-    <option value="">{required ? '请选择' : '未设置'}</option>
+  const retained = current && !options.some(item => item.key === current.key);
+  return <label>{title}<select name={name} value={current?.key ?? ''} onChange={event => onChange(event.target.value)}>
+    <option value="">未设置</option>
     {options.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}
+    {retained && <option value={current.key} disabled={power}>{current.label}（当前端点 · {retainedLabel}）</option>}
   </select></label>;
 }
 
@@ -77,6 +81,11 @@ export function LinkEditor({ store, options, selected, result, budget, point, co
   const [error, setError] = useState('');
   const [fromKey, setFromKey] = useState(selected?.from ? signalPortKey(selected.from) : '');
   const [toKey, setToKey] = useState(selected?.to ? signalPortKey(selected.to) : '');
+  const [local, setLocal] = useState(false);
+  const [channel, setChannel] = useState(selected?.channelId);
+  const choices = useMemo(() => options.endpointChoices(fromKey, channel, local), [options, fromKey, channel, local]);
+  const currentFrom = options.endpoints.find(item => item.key === fromKey);
+  const currentTo = options.endpoints.find(item => item.key === toKey);
   const domain = (key: string) => options.graph.ports.get(key)?.definition.type;
   const fromDomain = selected?.from && domain(signalPortKey(selected.from));
   const conversions = result?.trace?.conversions ?? [];
@@ -91,7 +100,7 @@ export function LinkEditor({ store, options, selected, result, budget, point, co
       to: options.graph.ports.get(toKey)?.ref });
     return !!path.trace?.edges.some(edge => edge.channels.kind === 'enter' || edge.channels.kind === 'exit') || (path.status === 'ambiguous' && options.eo.length > 0);
   }, [budget, options, selected, fromKey, toKey, result]);
-  const showOptical = selected?.channelId || crossesOptical || domain(fromKey) === 'OPTICAL' || domain(toKey) === 'OPTICAL' || conversions.length > 0;
+  const showOptical = channel || crossesOptical || domain(fromKey) === 'OPTICAL' || domain(toKey) === 'OPTICAL' || conversions.length > 0;
 
   function commitLink(link: NamedLink) {
     const edit = store.commit(draft => ({
@@ -132,30 +141,35 @@ export function LinkEditor({ store, options, selected, result, budget, point, co
         const fields = new FormData(event.currentTarget);
         const name = String(fields.get('name') ?? '').trim();
         if (!name) { setError('链路名称不能为空。'); return; }
-        const endpoint = (key: string) => options.endpoints.find(item => item.key === fields.get(key))?.value;
         const via = fields.getAll('via').map(key => options.via.find(item => item.key === key)?.value);
         const rawChannel = String(fields.get('channel') ?? '');
         const channel = rawChannel ? resolveOpticalChannel(rawChannel) : undefined;
-        if ((fields.get('from') && !endpoint('from')) || (fields.get('to') && !endpoint('to'))
-          || via.some(item => !item) || (rawChannel && !channel)) {
+        if (via.some(item => !item) || (rawChannel && !channel)) {
           setError('端口、必经边或通道已失效，请重新选择。');
           return;
         }
         const required = via.filter(item => item !== undefined);
-        commitLink({ ...selected, id: selected?.id ?? crypto.randomUUID(), name, from: endpoint('from'), to: endpoint('to'),
+        commitLink({ ...selected, id: selected?.id ?? crypto.randomUUID(), name, from: currentFrom?.value, to: currentTo?.value,
           channelId: channel?.id, via: required.length ? required : undefined });
       }} onChange={event => {
         const field = event.target;
-        if (!(field instanceof HTMLSelectElement)) return;
-        if (field.name === 'from') setFromKey(field.value);
-        if (field.name === 'to') setToKey(field.value);
-        if (draft && field.name === 'channel') setDraftChannel(resolveOpticalChannel(field.value)?.id);
+        if (field instanceof HTMLSelectElement && field.name === 'channel') {
+          const next = resolveOpticalChannel(field.value)?.id;
+          setChannel(next);
+          if (draft) setDraftChannel(next);
+        }
       }}>
         <label>链路名称<input name="name" required defaultValue={selected?.name} /></label>
         <div className="v1-link-fields">
-          <Choice title="起点" name="from" options={options.endpoints} value={selected?.from && signalPortKey(selected.from)} />
-          <Choice title="终点" name="to" options={options.endpoints} value={selected?.to && signalPortKey(selected.to)} />
-          {showOptical && <ChannelField label="光通道" name="channel" value={selected?.channelId} />}
+          <EndpointChoice title="起点" name="from" options={choices.from} current={currentFrom} retainedLabel="局部"
+            power={isPowerPort(domain(fromKey))} onChange={setFromKey} />
+          <EndpointChoice title="终点" name="to" options={choices.to} current={currentTo}
+            retainedLabel={choices.systemEnds.has(toKey) ? '尚未接通' : '局部'} power={isPowerPort(domain(toKey))} onChange={setToKey} />
+          <label className="v1-local-endpoints"><input type="checkbox" checked={local}
+            onChange={event => setLocal(event.target.checked)} />显示局部及未接通端点</label>
+          {choices.limited && <p role="status">可达性搜索达到上限，已保留系统级终点。</p>}
+          {!local && (!choices.from.length || !choices.to.length) && <p role="status">请检查接线，或开启「显示局部及未接通端点」。</p>}
+          {showOptical && <ChannelField label="光通道" name="channel" value={channel} />}
           {options.via.length > 0 && <details>
             <summary>必经连接{options.via.some(item => 'bundleId' in item.value) && '与 MPO 纤芯'}</summary>
             <label>约束路径（可多选）<select name="via" multiple size={4} defaultValue={selected?.via?.map(requiredEdgeKey) ?? []}>
