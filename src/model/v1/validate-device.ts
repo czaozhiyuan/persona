@@ -135,6 +135,10 @@ export function validateDevice(
     }
     const kinds = route.kind === 'rf' ? ['fixed', 'rfCurve'] as const : ['fixed', 'channelTable'] as const;
     if ('gainDb' in route && route.gainDb !== undefined) validateQuantity(parameters, 'dB', route.gainDb, kinds, context);
+    if (route.kind === 'optical' && route.insertionLossDb) {
+      requireValid(!route.gainDb, `${context}: 光传输不能同时设置增益和插损`);
+      validateQuantity(parameters, 'dB', route.insertionLossDb, kinds, `${context} 光插损`, 0);
+    }
     if (route.kind === 'rf' && route.nfDb !== undefined) validateQuantity(parameters, 'dB', route.nfDb, kinds, `${context} NF`);
     if (route.kind === 'dml' && route.modulationSlope) {
       validateQuantity(parameters, 'W/V', route.modulationSlope, ['fixed', 'rfCurve'], `${context} K(f)`, 0);

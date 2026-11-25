@@ -124,7 +124,7 @@ const portPair = { fromPortId: text, toPortId: text };
 const opticalOptions = { channelIds: channels, gainDb: opticalQuantity };
 const transfer = byKind({
   rf: shape({ ...portPair, kind: oneOf('rf') }, { gainDb: rfQuantity, nfDb: rfQuantity }),
-  optical: shape({ ...portPair, kind: oneOf('optical') }, opticalOptions),
+  optical: shape({ ...portPair, kind: oneOf('optical') }, { ...opticalOptions, insertionLossDb: opticalQuantity }),
   wavelengthConversion: shape({
     ...portPair, kind: oneOf('wavelengthConversion'), fromChannelId: text, toChannelId: text,
   }, { gainDb: opticalQuantity }),

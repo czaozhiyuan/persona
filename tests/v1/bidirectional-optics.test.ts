@@ -12,6 +12,24 @@ import { duplexFixture } from './fixtures/bidirectional-optics';
 
 const com = (instanceId: string) => ({ instanceId, portId: 'COM' });
 
+test('positive optical insertion loss is subtracted once at each physical router', () => {
+  const original = duplexFixture();
+  const withLoss = (value: number, both = false): Project => ({ ...original,
+    componentDefinitions: original.componentDefinitions.map(d => !d.transfers ? d : { ...d,
+      transfers: d.transfers.map(t => t.kind !== 'optical' ? t : { ...t, gainDb: both ? t.gainDb : undefined,
+        insertionLossDb: { kind: 'fixed', value } }) }) });
+  const project = parseProjectJson(serializeProjectJson(withLoss(1.5)));
+  for (const link of project.namedLinks!) {
+    const path = createPathResolver(project).resolveNamedLink(link);
+    assert.equal(path.status, 'resolved');
+    const budget = createOpticalBudget(project).calculateSourcePath(path.trace);
+    assert.deepEqual(budget.powerDbm, { unit: 'dBm', availability: 'available', value: 7 });
+    assert.deepEqual(budget.gainDb, { unit: 'dB', availability: 'available', value: -3 });
+  }
+  assert.throws(() => serializeProjectJson(withLoss(-1)), /光插损/);
+  assert.throws(() => serializeProjectJson(withLoss(1, true)), /同时设置增益和插损/);
+});
+
 test('a COM source leaves on its transmitting side and only external light can feed its receive transfer', () => {
   const p = duplexFixture();
   const router = p.componentDefinitions.find(d => d.id === 'router-A')!;
