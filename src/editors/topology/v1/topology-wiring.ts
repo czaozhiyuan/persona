@@ -2,6 +2,8 @@ import type { Edge, XYPosition } from '@xyflow/react';
 import { portDisplayName } from '../../../workbench/v1/labels';
 import type { LocalEndpointRef } from '../../../model/v1/topology';
 import type { InstancePath, ModuleDefinition, PortType } from '../../../model/v1/types';
+import { canConnect } from '../../../model/v1/types';
+import { wireArrow } from '../../../model/v1/display-names';
 import type { WiringSelection } from '../../../state/v1/remove-topology-object';
 import type { projectTopology, TopologyItem } from './topology-projection';
 import { hierarchyKey } from './hierarchy-view';
@@ -85,7 +87,7 @@ export function projectWiring(projection: ReturnType<typeof projectTopology>,
     if (hasFrame) {
       for (const port of module.ports) {
         ports.set(portKey(boundary, handleId(port.id, true)), {
-          scope, module, port, direction: port.direction === 'in' ? 'out' : 'in',
+          scope, module, port, direction: port.direction === 'bidirectional' ? 'bidirectional' : port.direction === 'in' ? 'out' : 'in',
         });
       }
     }
@@ -100,7 +102,7 @@ export function projectWiring(projection: ReturnType<typeof projectTopology>,
       edge(canvasEdgeKey('connection', item.id), { kind: 'connection', id: item.id }, childPort(item.from).type, {
         source: child(item.from.instanceId), target: child(item.to.instanceId),
         sourceHandle: handleId(item.from.portId), targetHandle: handleId(item.to.portId),
-        ariaLabel: `连线：${childLabel(item.from)} → ${childLabel(item.to)}`,
+        ariaLabel: `连线：${childLabel(item.from)} ${wireArrow(childPort(item.from), childPort(item.to))} ${childLabel(item.to)}`,
       });
     }
     for (const mapping of module.portMappings ?? []) {
@@ -118,7 +120,7 @@ export function projectWiring(projection: ReturnType<typeof projectTopology>,
       for (const core of bundle.cores) {
         if (!core.a.endpoint || !core.b.endpoint) continue;
         const a = core.a.endpoint;
-        const aOutput = childPort(a).direction === 'out';
+        const aOutput = canConnect(childPort(a).direction, childPort(core.b.endpoint).direction);
         const [from, to] = aOutput ? [a, core.b.endpoint] : [core.b.endpoint, a];
         edge(canvasEdgeKey('core', bundle.id, core.id), { kind: 'core', id: core.id, bundleId: bundle.id }, childPort(from).type, {
           source: child(from.instanceId), target: child(to.instanceId),

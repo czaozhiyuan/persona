@@ -4,11 +4,11 @@ import { portDisplayName, portTypeLabels } from '../../../workbench/v1/labels';
 import { Handle, Position } from '@xyflow/react';
 import type { PortDefinition } from '../../../model/v1/types';
 
-export const portSides = ['left', 'right'] as const;
-export const boundaryPortSide = (direction: PortDefinition['direction']) => direction === 'in' ? 'left' : 'right';
+export const portSides = ['top', 'left', 'right'] as const;
+export const boundaryPortSide = (port: PortDefinition) => port.side ?? (port.direction === 'in' ? 'left' : 'right');
 export const blockPortRows = (ports: readonly PortDefinition[]) => {
-  const left = ports.filter(port => boundaryPortSide(port.direction) === 'left').length;
-  return Math.max(left, ports.length - left);
+  const count = (side: typeof portSides[number]) => ports.filter(port => boundaryPortSide(port) === side).length;
+  return Math.max(count('left'), count('right')) + Number(count('top') > 0);
 };
 
 export function PortLabel({ port, ports, open, value, labelContext }: { labelContext?: PortLabelContext; value?: string; port: PortDefinition; ports: readonly PortDefinition[]; open?: (id: string) => void }) {
@@ -30,15 +30,19 @@ export function BlockPorts({ labelContext, portValue, ports, highlighted, newPor
   openPort?: (id: string) => void;
   wireState?: (id: string) => 'origin' | 'target' | undefined;
 }) {
-  return <div className="v1-block-columns">
-    {portSides.map(side => <div className={`v1-block-column ${side}`} key={side}>
-      {ports.filter(port => boundaryPortSide(port.direction) === side).map(port =>
+  function column(side: typeof portSides[number]) {
+    return <div className={`v1-block-column ${side}`} key={side}>
+      {ports.filter(port => boundaryPortSide(port) === side).map(port =>
         <div className={`v1-topology-port${highlighted.has(port.id) ? ' is-on-path' : ''}${port.id === newPortId ? ' is-new-port' : ''}`} key={port.id}
           title={`${portDisplayName(port, false, ports, labelContext)} · ${portTypeLabels[port.type]}`} data-port-direction={port.direction} data-wire={wireState?.(port.id)}>
           <Handle id={handleId(port.id)} type={port.direction === 'in' ? 'target' : 'source'}
-            position={side === 'left' ? Position.Left : Position.Right} className={port.type} style={{ background: signalColor(port.type) }} isConnectable={editable} />
+            position={side === 'top' ? Position.Top : side === 'left' ? Position.Left : Position.Right} className={port.type} style={{ background: signalColor(port.type) }} isConnectable={editable} />
           <PortLabel labelContext={labelContext} value={portValue?.(port.id)} port={port} ports={ports} open={openPort} />
         </div>)}
-    </div>)}
-  </div>;
+    </div>;
+  }
+  return <>
+    {ports.some(port => port.side === 'top') && column('top')}
+    <div className="v1-block-columns">{column('left')}{column('right')}</div>
+  </>;
 }

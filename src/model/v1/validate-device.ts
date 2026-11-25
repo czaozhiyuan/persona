@@ -2,7 +2,7 @@ import { parameterValueKinds } from './parameters';
 import { receiverModes } from './device';
 import type { DcCapacity, DcValue, Transfer } from './device';
 import type { EmpiricalValue, NumericUnit, ParameterDefinition } from './parameters';
-import { isPowerPort, isSupplyOutput } from './types';
+import { isPowerPort, isSupplyOutput, supportsDirection } from './types';
 import type { ComponentDefinition, PortDefinition, PortType } from './types';
 import { validateChannelIds, validateEmpirical, validateRange } from './validate-parameters';
 import { indexById, requireValid } from './validation';
@@ -41,19 +41,20 @@ function validateQuantity(
 
 export function validatePortConstraints(port: PortDefinition, parameters: ReadonlyMap<string, ParameterDefinition>, context: string): void {
   requireValid(port.name === undefined || port.name.trim(), `${context}: 端口显示名称不能为空`);
+  requireValid(port.side === undefined || port.side === 'top', `${context}: 端口位置无效`);
   if (port.channelIds !== undefined) {
     requireValid(port.type === 'OPTICAL', `${context}: 仅光端口可以设置光通道 ID`);
     validateChannelIds(port.channelIds, context);
   }
   if (port.opticalEmitter) {
-    requireValid(port.type === 'OPTICAL' && port.direction === 'out', `${context}: 光源必须声明在光输出端口`);
+    requireValid(port.type === 'OPTICAL' && supportsDirection(port.direction, 'out'), `${context}: 光源必须声明在光输出端口`);
     if (port.opticalEmitter.powerDbm) validateQuantity(parameters, 'dBm', port.opticalEmitter.powerDbm, ['fixed', 'channelTable'], context);
   }
   if (port.inputRating) {
     const { unit } = port.inputRating;
     const compatible = isPowerPort(port.type) ? ['V', 'A', 'W'].includes(unit)
       : (port.type === 'OPTICAL' || port.type === 'RF') && unit === 'dBm';
-    requireValid(port.direction === 'in' && compatible, `${context}: 额定值单位或端口方向不匹配`);
+    requireValid(supportsDirection(port.direction, 'in') && compatible, `${context}: 额定值单位或端口方向不匹配`);
     validateRange(port.inputRating, context);
   }
   if (port.inputVoltageV !== undefined) {
@@ -84,7 +85,7 @@ export function validateDevice(
     const from = ports.get(route.fromPortId);
     const to = ports.get(route.toPortId);
     const types = transferTypes[route.kind];
-    requireValid(from?.direction === 'in' && to?.direction === 'out'
+    requireValid(from && to && from.id !== to.id && supportsDirection(from.direction, 'in') && supportsDirection(to.direction, 'out')
       && from.type === types[0] && to.type === types[1], `${context}: 传输端口、类型或方向无效`);
 
     if (route.kind === 'wavelengthConversion') {
@@ -103,7 +104,7 @@ export function validateDevice(
 
     if (route.kind === 'splitter') {
       const other = ports.get(route.secondPortId);
-      requireValid(other?.type === 'OPTICAL' && other.direction === 'out' && other.id !== to.id
+      requireValid(other?.type === 'OPTICAL' && supportsDirection(other.direction, 'out') && other.id !== to.id && other.id !== from.id
         && channelSetsOverlap(from, other), `${context}: 分路器需要两个不同且支持输入通道的光输出`);
       if (route.firstPercent) {
         validateQuantity(parameters, '%', route.firstPercent, ['fixed'], context, 0);
@@ -128,7 +129,7 @@ export function validateDevice(
     }
     if (route.kind === 'eo' && route.supplyPortId !== undefined) {
       const supply = ports.get(route.supplyPortId);
-      requireValid(supply?.type === 'OPTICAL' && supply.direction === 'in', `${context}: 供光端口必须是光输入端口`);
+      requireValid(supply?.type === 'OPTICAL' && supportsDirection(supply.direction, 'in'), `${context}: 供光端口必须是光输入端口`);
       requireValid(channelSetsOverlap(supply, to) && (!route.channelIds || !supply.channelIds
         || route.channelIds.every(id => supply.channelIds?.includes(id))), `${context}: 供光通道不匹配`);
     }

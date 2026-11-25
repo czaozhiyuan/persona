@@ -1,3 +1,4 @@
+import { portDirectionLabels } from '../../../model/v1/types';
 import { moduleName } from '../../../state/v1/module-name';
 import { componentIconLabels, portDisplayName, portTypeLabels, transferLabels } from '../labels';
 import { useState } from 'react';
@@ -238,7 +239,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
         {!definition.ports.length && <p className="empty">暂无端口。</p>}
         {definition.ports.map(port => <details key={port.id} data-port-id={port.id}>
           <summary>{portDisplayName(port, false, definition.ports, occurrence)}<span className="v1-parameter-value">
-            {portTypeLabels[port.type]} · {port.direction === 'in' ? '输入' : '输出'}
+            {portTypeLabels[port.type]} · {portDirectionLabels[port.direction]}
           </span></summary>
           <PortFields port={port} occurrence={occurrence} remove={() => { setError(''); setDeletion(port.id); }}
             save={next => changeDefinition(() => ({ ...definition,

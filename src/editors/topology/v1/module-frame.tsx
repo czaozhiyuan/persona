@@ -13,19 +13,27 @@ export const frameHeader = 52;
 export const framePadding = 28;
 const framePortColumn = 64;
 
-export function frameInsets(ports: readonly PortDefinition[], measuredPortHeight = 0) {
-  const inputs = ports.filter(port => boundaryPortSide(port.direction) === 'left').length;
-  const outputs = ports.length - inputs;
+export type FramePortHeights = { side: number; top: number };
+
+export function frameInsets(ports: readonly PortDefinition[], measured?: FramePortHeights | number) {
+  const onSide = (side: typeof portSides[number]) => ports.filter(port => boundaryPortSide(port) === side);
+  const left = onSide('left'), right = onSide('right'), above = onSide('top');
+  const sideWidth = (items: readonly PortDefinition[]) =>
+    items.some(p => isPowerPort(p.type)) ? 86 : items.length ? framePortColumn : framePadding;
+  const sideHeight = typeof measured === 'number' ? measured : measured?.side ?? 0;
+  const topHeight = typeof measured === 'object' ? measured.top : 0;
+  const top = frameHeader + (above.length ? Math.max(framePortRow, topHeight) : 0);
   return {
-    left: ports.some(p => p.direction === 'in' && isPowerPort(p.type)) ? 86 : inputs ? framePortColumn : framePadding,
-    right: ports.some(p => p.direction === 'out' && isPowerPort(p.type)) ? 86 : outputs ? framePortColumn : framePadding,
-    height: frameHeader + Math.max(measuredPortHeight, Math.max(inputs, outputs, 1) * framePortRow) + framePadding,
+    left: sideWidth(left), right: sideWidth(right), top,
+    minWidth: Math.max(360, above.length * framePortColumn + 2 * framePadding),
+    height: top + Math.max(sideHeight, Math.max(left.length, right.length, 1) * framePortRow) + framePadding,
   };
 }
 
-export function ModuleFrame({ frameKey, onPortHeight, labelContext, iconKey, metricTitle, portValue, id, width, height, name, ports, highlighted, newPortId, handleId, editable = false, outerHandles = false, selected = false, wireState, controls, openPort }: {
+export function ModuleFrame({ frameKey, insets, onPortHeight, labelContext, iconKey, metricTitle, portValue, id, width, height, name, ports, highlighted, newPortId, handleId, editable = false, outerHandles = false, selected = false, wireState, controls, openPort }: {
   frameKey: string;
-  onPortHeight: (key: string, height: number) => void;
+  insets: ReturnType<typeof frameInsets>;
+  onPortHeight: (key: string, heights: FramePortHeights) => void;
   iconKey: DeviceIconKey;
   id: string;
   width?: number;
@@ -45,14 +53,15 @@ export function ModuleFrame({ frameKey, onPortHeight, labelContext, iconKey, met
   controls?: ReactNode;
   openPort?: (id: string) => void;
 }) {
-  const insets = frameInsets(ports);
   const updateInternals = useUpdateNodeInternals();
   const frame = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const columns = Array.from(frame.current!.querySelectorAll<HTMLElement>('.v1-module-pins'));
     function measure() {
       // offsetHeight is in canvas units even when the viewport is zoomed.
-      onPortHeight(frameKey, Math.max(0, ...columns.map(column => column.offsetHeight)));
+      const side = Math.max(0, ...columns.filter(column => !column.classList.contains('top')).map(column => column.offsetHeight));
+      const top = columns.find(column => column.classList.contains('top'))?.offsetHeight ?? 0;
+      onPortHeight(frameKey, { side, top });
       updateInternals(id);
     }
     measure();
@@ -64,21 +73,22 @@ export function ModuleFrame({ frameKey, onPortHeight, labelContext, iconKey, met
   }, [id, frameKey, width, height, ports, outerHandles, onPortHeight, updateInternals]);
 
   return <div ref={frame} className={`v1-module-frame${selected ? ' is-selected' : ''}`}>
-    <div className="v1-frame-title">
+    <div className="v1-frame-title" style={insets.top > frameHeader ? { top: insets.top - frameHeader } : undefined}>
       <DeviceIcon iconKey={iconKey} />
       <strong title={metricTitle ?? name}>{name}</strong>
       {controls}
     </div>
-    {portSides.map(side => <div key={side} className={`v1-module-pins ${side}`} style={{ width: insets[side] }}>
-      {ports.filter(port => boundaryPortSide(port.direction) === side).map(port => {
+    {portSides.map(side => (side !== 'top' || ports.some(p => p.side === 'top')) && <div key={side} className={`v1-module-pins ${side}`}
+      style={side === 'top' ? undefined : { width: insets[side], top: insets.top }}>
+      {ports.filter(port => boundaryPortSide(port) === side).map(port => {
         const input = port.direction === 'in';
         return <div key={port.id} className={`v1-topology-port${highlighted.has(port.id) ? ' is-on-path' : ''}${port.id === newPortId ? ' is-new-port' : ''}`}
           title={`${portDisplayName(port, false, ports, labelContext)} · ${portTypeLabels[port.type]}`} data-port-direction={port.direction}>
-          <Handle id={handleId(port.id, true)} type={input ? 'source' : 'target'}
-            position={input ? Position.Right : Position.Left} className={`${port.type} v1-frame-inner-handle`} style={{ background: signalColor(port.type) }} data-wire={wireState?.(port.id, true)}
+          <Handle id={handleId(port.id, true)} type={port.direction === 'out' ? 'target' : 'source'}
+            position={side === 'top' ? Position.Bottom : input ? Position.Right : Position.Left} className={`${port.type} v1-frame-inner-handle`} style={{ background: signalColor(port.type) }} data-wire={wireState?.(port.id, true)}
             isConnectable={editable} />
           {outerHandles && <Handle id={handleId(port.id, false)} type={input ? 'target' : 'source'}
-            position={input ? Position.Left : Position.Right} className={`${port.type} v1-frame-outer-handle`} style={{ background: signalColor(port.type) }} data-wire={wireState?.(port.id, false)}
+            position={side === 'top' ? Position.Top : input ? Position.Left : Position.Right} className={`${port.type} v1-frame-outer-handle`} style={{ background: signalColor(port.type) }} data-wire={wireState?.(port.id, false)}
             isConnectable={editable} />}
           <PortLabel labelContext={labelContext} value={portValue?.(port.id)} port={port} ports={ports} open={openPort} />
         </div>;

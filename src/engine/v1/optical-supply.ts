@@ -2,7 +2,7 @@ import type { OpticalChannelId } from '../../model/v1/channels';
 import type { OpticalSource } from '../../model/v1/topology';
 import { searchSignalPath } from './path-search';
 import type { Carrier, SignalStep } from './path-search';
-import { signalPortKey } from './signal-graph';
+import { opticalSourceFlow, signalPortKey } from './signal-graph';
 import type { SignalEdge, SignalGraph, SignalPort } from './signal-graph';
 
 export const cascadedModulation = '不支持直调激光器再接外置调制器的串联调制。';
@@ -26,8 +26,9 @@ export function selectOpticalSource(first: SignalStep, sources: readonly Optical
 /** An explicit selection applies only to the supply branch it can reach. */
 export function findOpticalSupply(graph: SignalGraph, adjacent: ReadonlyMap<SignalPort, readonly SignalEdge[]>,
   target: SignalPort, targetCarrier: Carrier, selected: ReadonlyMap<SignalPort, Carrier>) {
-  const search = (starts: readonly SignalPort[], startCarriers?: ReadonlyMap<SignalPort, Carrier>) =>
-    searchSignalPath({ starts, startCarriers, target, adjacent, carrier: undefined, targetCarrier, opticalOnly: true });
+  const search = (starts: readonly SignalPort[], startCarriers?: ReadonlyMap<SignalPort, Carrier>, ignoreChannels = false) =>
+    searchSignalPath({ starts, startCarriers, startFlow: opticalSourceFlow, target, targetFlow: 'in',
+      adjacent, carrier: undefined, targetCarrier: ignoreChannels ? undefined : targetCarrier, opticalOnly: true, ignoreChannels });
   const dmlOutputs = graph.edges.filter(edge => edge.source.kind === 'transfer' && edge.source.transfer.kind === 'dml').map(edge => edge.to);
   if (dmlOutputs.length) {
     const cascade = search(dmlOutputs);
@@ -37,13 +38,9 @@ export function findOpticalSupply(graph: SignalGraph, adjacent: ReadonlyMap<Sign
     const result = search([...selected.keys()], selected);
     if (result.status !== 'unreachable') return result;
     // Ignore wavelengths only to establish which supply branch owns the selection.
-    const connected = new Set(selected.keys());
-    for (const port of connected) {
-      if (port === target) return { status: 'incompatible_source' } as const;
-      for (const edge of adjacent.get(port) ?? []) {
-        if (edge.to.definition.type === 'OPTICAL') connected.add(edge.to);
-      }
-    }
+    const connected = search([...selected.keys()], undefined, true);
+    if (connected.status === 'search_limit') return connected;
+    if (connected.status !== 'unreachable') return { status: 'incompatible_source' } as const;
   }
   return search([...graph.ports.values()].filter(port => port.definition.opticalEmitter && !selected.has(port)));
 }

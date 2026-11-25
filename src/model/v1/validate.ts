@@ -3,6 +3,7 @@ import { isSupplyOutput } from './types';
 import type { Instance, InstancePath, ModuleDefinition, PhysicalFootprint, PortDefinition, Project } from './types';
 import type { ParameterDefinition } from './parameters';
 import { channelSetsOverlap, validateDevice, validatePortConstraints } from './validate-device';
+import { canMapDirection } from './types';
 import { parameterCanFeed, validateParameterDefinition, validateParameterValue } from './validate-parameters';
 import { validateModuleTopology, validateNamedLinks } from './validate-topology';
 import { indexById, requireValid } from './validation';
@@ -73,7 +74,8 @@ export function validateProject(project: Project): void {
     paramsByDefinition.set(definition.id, parameters);
     const ports = indexById(definition.ports, `定义「${definition.id}」的端口`);
     for (const port of ports.values()) {
-      requireValid(portTypes.has(port.type) && (port.direction === 'in' || port.direction === 'out'),
+      requireValid(portTypes.has(port.type) && (port.direction === 'in' || port.direction === 'out'
+        || (port.direction === 'bidirectional' && port.type === 'OPTICAL')),
         `定义「${definition.id}」的端口「${port.id}」类型或方向无效`);
       requireValid(!port.opticalEmitter || definition.kind === 'component', `定义「${definition.id}」：请在实际器件的光输出端口设置光源。`);
       requireValid(port.supplyCapacity === undefined || isSupplyOutput(definition, port), `定义「${definition.id}」：仅电源的直流输出端口可设置供电容量。`);
@@ -124,7 +126,7 @@ export function validateProject(project: Project): void {
       requireValid(child, `模块「${module.id}」的端口「${port.id}」须映射到直接子实例`);
       const target = portsByDefinition.get(child.definitionId)?.get(mapping.target.portId);
       requireValid(target, `模块「${module.id}」的端口「${port.id}」映射到不存在的子实例端口「${mapping.target.portId}」`);
-      requireValid(port.type === target.type && port.direction === target.direction,
+      requireValid(port.type === target.type && canMapDirection(port.direction, target.direction),
         `模块「${module.id}」的端口「${port.id}」映射前后须保持端口类型和方向一致`);
       requireValid(channelSetsOverlap(port, target), `模块「${module.id}」的端口「${port.id}」与映射端口没有共同的光通道`);
       mapped.add(port.id);

@@ -6,7 +6,7 @@ import { receiverModes } from '../../../model/v1/device';
 import { resolveEmpiricalValue } from '../../../engine/v1/empirical-value';
 import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
 import { transferTypes } from '../../../model/v1/validate-device';
-import { isPowerPort, isSupplyOutput } from '../../../model/v1/types';
+import { isPowerPort, isSupplyOutput, supportsDirection } from '../../../model/v1/types';
 import type { ComponentDefinition, PortDefinition, PortDirection, PortType } from '../../../model/v1/types';
 import type { Transfer } from '../../../model/v1/device';
 import { CapacityField, readCapacity, SupplyCapacityField, readSupplyCapacity } from './dc-fields';
@@ -18,7 +18,8 @@ import { channelId, channelList, choice, enumLabel, opticalKinds, QuantityField,
 
 export function readPort(data: FormData, port: PortDefinition): PortDefinition {
   const type = choice(data, 'type') as PortType;
-  const direction = choice(data, 'direction') as PortDirection;
+  const selected = choice(data, 'direction') as PortDirection;
+  const direction = type !== 'OPTICAL' && selected === 'bidirectional' ? 'in' : selected;
   // The form still contains the previous rating controls during a type or direction change.
   const inputRating = type === port.type && direction === port.direction
     ? readInputRating(data, ratingUnits(type, direction)) : undefined;
@@ -34,9 +35,9 @@ export function readPort(data: FormData, port: PortDefinition): PortDefinition {
   const name = isPowerPort(type) || isPowerPort(port.type) ? undefined
     : editedName === editablePortName(port) ? port.name : editedName || undefined;
   return {
-    ...port, name, type, direction, channelIds,
+    ...port, name, type, direction, channelIds, side: data.get('side') === 'top' ? 'top' : undefined,
     inputRating: sameRating ? previousRating : inputRating,
-    opticalEmitter: type === 'OPTICAL' && direction === 'out' && data.get('emitter') === 'yes'
+    opticalEmitter: type === 'OPTICAL' && supportsDirection(direction, 'out') && data.get('emitter') === 'yes'
       ? { powerDbm: readQuantity(data, 'sourcePower', opticalKinds) } : undefined,
     inputVoltageV: direction === 'in' ? voltage : undefined,
     outputVoltageV: direction === 'out' ? voltage : undefined,
@@ -66,6 +67,7 @@ function PortControls({ port, occurrence, remove }: { port: PortDefinition; occu
     </select></label>
     <label>方向<select name="direction" value={direction} onChange={() => { /* Saved by the form's change handler. */ }}>
       <option value="in">输入</option><option value="out">输出</option>
+      {type === 'OPTICAL' && <option value="bidirectional">双向</option>}
     </select></label>
     <PortParameterFields port={port} occurrence={occurrence} />
     <div className="actions">
@@ -80,8 +82,11 @@ export function PortParameterFields({ port, occurrence, draft = false }: {
   const { type, direction } = port;
   const ratings = ratingUnits(type, direction);
   return <>
+    <label>画布位置<select name="side" defaultValue={port.side ?? ''}>
+      <option value="">按方向放置</option><option value="top">上侧</option>
+    </select></label>
     {type === 'OPTICAL' && <ChannelField name="channels" label="适用通道（未选择表示不限）" value={port.channelIds} multiple />}
-    {type === 'OPTICAL' && direction === 'out' && occurrence.definition.kind === 'component' &&
+    {type === 'OPTICAL' && supportsDirection(direction, 'out') && occurrence.definition.kind === 'component' &&
       <EmitterFields port={port} occurrence={occurrence} draft={draft} />}
     {ratings.length > 0 && <InputRatingField key={draft ? ratings.join('/') : type} units={ratings} rating={port.inputRating} />}
     {isPowerPort(type) && <PortVoltage key={draft ? direction : type + direction} port={port} occurrence={occurrence} draft={draft} />}
@@ -184,8 +189,8 @@ function TransferForm({ transfer, definition, effective, occurrences = [], save,
   const [mode] = modes;
   const mixed = modes.size > 1 || (!!draft && typeof reference === 'object');
   const [inputType, outputType] = transferTypes[transfer.kind];
-  const inputPorts = definition.ports.filter(port => port.direction === 'in' && port.type === inputType);
-  const outputPorts = definition.ports.filter(port => port.direction === 'out' && port.type === outputType);
+  const inputPorts = definition.ports.filter(port => supportsDirection(port.direction, 'in') && port.type === inputType);
+  const outputPorts = definition.ports.filter(port => supportsDirection(port.direction, 'out') && port.type === outputType);
   const parameters = definition.parameters ?? [];
   return <form onSubmit={event => {
     event.preventDefault();
@@ -214,7 +219,7 @@ function TransferForm({ transfer, definition, effective, occurrences = [], save,
     </>}
     {transfer.kind === 'eo' && <label>供光输入<select name="supply" defaultValue={transfer.supplyPortId ?? ''}>
       <option value="">未设置</option>
-      {definition.ports.filter(port => port.direction === 'in' && port.type === 'OPTICAL').map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true, definition.ports)}</option>)}
+      {definition.ports.filter(port => supportsDirection(port.direction, 'in') && port.type === 'OPTICAL').map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true, definition.ports)}</option>)}
     </select></label>}
     {transfer.kind === 'wavelengthConversion' && <div className="v1-property-pair">
       <ChannelField name="fromChannel" label="输入通道" value={transfer.fromChannelId} required />

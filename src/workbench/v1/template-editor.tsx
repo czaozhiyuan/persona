@@ -1,3 +1,4 @@
+import { supportsDirection } from '../../model/v1/types';
 import { transferTypes } from '../../model/v1/validate-device';
 import { readParameters, withMappedVoltages } from '../../engine/v1/hierarchy';
 import { useRef, useState } from 'react';
@@ -27,8 +28,8 @@ export function TemplateEditor({ initial, definitions, hidden, save, cancel, rep
   const digitalPairs = draft.kind === 'component' ? conversionCandidates({ ...draft, transfers: rows.map(row => ({ ...row.transfer, ...row.pair })) })
     .flatMap(({ input, outputs }) => outputs.filter(out => input.type === 'CONTROL' || out.type === 'CONTROL')
       .map(out => ({ kind: input.type === 'CONTROL' ? 'digitalTx' : 'digitalRx', fromPortId: input.id, toPortId: out.id }))) : [];
-  const splitOutputs = draft.ports.filter(p => p.direction === 'out' && p.type === 'OPTICAL');
-  const splitInput = draft.ports.find(p => p.direction === 'in' && p.type === 'OPTICAL');
+  const splitOutputs = draft.ports.filter(p => supportsDirection(p.direction, 'out') && p.type === 'OPTICAL');
+  const splitInput = draft.ports.find(p => supportsDirection(p.direction, 'in') && p.type === 'OPTICAL');
   const availableKinds = Object.entries(transferLabels).filter(([k]) => {
     if (k === 'splitter') return splitInput && splitOutputs.length >= 2;
     return (k !== 'digitalTx' && k !== 'digitalRx') || digitalPairs.some(pair => pair.kind === k);
@@ -112,8 +113,8 @@ export function TemplateEditor({ initial, definitions, hidden, save, cancel, rep
         const kind = activeKind;
         const pair = digitalPairs.find(pair => pair.kind === kind);
         const ports = pair ? { fromPortId: pair.fromPortId, toPortId: pair.toPortId } : {
-          fromPortId: draft.ports.find(p => p.direction === 'in' && p.type === transferTypes[kind][0])?.id ?? '',
-          toPortId: draft.ports.find(p => p.direction === 'out' && p.type === transferTypes[kind][1])?.id ?? '',
+          fromPortId: draft.ports.find(p => supportsDirection(p.direction, 'in') && p.type === transferTypes[kind][0])?.id ?? '',
+          toPortId: draft.ports.find(p => supportsDirection(p.direction, 'out') && p.type === transferTypes[kind][1])?.id ?? '',
         };
         const transfer: Transfer = kind === 'wavelengthConversion' ? { kind, ...ports, fromChannelId: 'CWDM_1511', toChannelId: 'CWDM_1531' }
           : kind === 'splitter' ? { kind, ...ports, secondPortId: splitOutputs[1].id }

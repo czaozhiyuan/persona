@@ -4,7 +4,7 @@ import type { PortDirection, PortType } from '../../../model/v1/types';
 import { choice, numberField } from './value-fields';
 
 export function ratingUnits(type: PortType, direction: PortDirection): readonly InputRating['unit'][] {
-  if (direction !== 'in' || type === 'CONTROL') return [];
+  if (direction === 'out' || type === 'CONTROL') return [];
   return isPowerPort(type) ? ['V', 'A', 'W'] : ['dBm'];
 }
 

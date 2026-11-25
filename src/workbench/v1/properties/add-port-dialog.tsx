@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import { PortDeletionDialog } from '../../../editors/topology/v1/port-deletion-dialog';
 import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
-import { isPowerPort, isSupplyOutput } from '../../../model/v1/types';
+import { isPowerPort, isSupplyOutput, portDirectionLabels, supportsDirection } from '../../../model/v1/types';
 import type { PortDefinition, PortDirection, PortType } from '../../../model/v1/types';
 import { addDefinitionPort, updateDefinitionPort } from '../../../state/v1/module-ports';
 import type { ProjectStore } from '../../../state/v1/project-store';
@@ -74,7 +74,7 @@ export function PortManagerDialog({ name, owner, locations, store, added, close 
               ref={item.id === selected ? selectedRow : undefined}
               onClick={() => { if (item.id !== selected) select(item.id); }}>
               <strong>{portDisplayName(item, false, ports, owner)}</strong>
-              <span>{portTypeLabels[item.type]}</span><span>{item.direction === 'in' ? '输入' : '输出'}</span>
+              <span>{portTypeLabels[item.type]}</span><span>{portDirectionLabels[item.direction]}</span>
             </button>)}
             {!ports.length && <p className="empty">暂无端口</p>}
           </div>
@@ -105,12 +105,13 @@ function PortDetail({ form, port, owner, save, remove, close }: {
   const [error, setError] = useState('');
   const { type, direction } = seed;
   function change(nextType: PortType, nextDirection: PortDirection) {
+    if (nextType !== 'OPTICAL' && nextDirection === 'bidirectional') nextDirection = 'in';
     const power = isPowerPort(nextType);
     const ratings = ratingUnits(nextType, nextDirection);
     setSeed({ ...seed, type: nextType, direction: nextDirection,
       name: power ? undefined : seed.name,
       channelIds: nextType === 'OPTICAL' ? seed.channelIds : undefined,
-      opticalEmitter: nextType === 'OPTICAL' && nextDirection === 'out' ? seed.opticalEmitter : undefined,
+      opticalEmitter: nextType === 'OPTICAL' && supportsDirection(nextDirection, 'out') ? seed.opticalEmitter : undefined,
       inputRating: seed.inputRating && ratings.includes(seed.inputRating.unit) ? seed.inputRating : undefined,
       inputVoltageV: power && nextDirection === 'in' ? seed.inputVoltageV : undefined,
       outputVoltageV: power && nextDirection === 'out' ? seed.outputVoltageV : undefined,
@@ -135,9 +136,9 @@ function PortDetail({ form, port, owner, save, remove, close }: {
         </fieldset>
         <fieldset className="v1-port-radio-group">
           <legend>方向</legend>
-          {(['in', 'out'] as const).map(value => <label key={value}>
+          {(['in', 'out', 'bidirectional'] as const).filter(value => type === 'OPTICAL' || value !== 'bidirectional').map(value => <label key={value}>
             <input type="radio" name="direction" value={value} checked={direction === value}
-              onChange={() => change(type, value)} />{value === 'in' ? '输入' : '输出'}
+              onChange={() => change(type, value)} />{portDirectionLabels[value]}
           </label>)}
         </fieldset>
         <fieldset className="v1-port-parameters">
