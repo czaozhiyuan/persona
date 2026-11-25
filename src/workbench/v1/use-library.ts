@@ -17,7 +17,8 @@ function load(): LibraryState {
     const source = localStorage.getItem(key);
     if (source !== null) {
       try { return { source, config: parseLibrary(source), status: '已从当前浏览器恢复器件库。' }; }
-      catch { return { source, config: factoryLibrary(), damaged: true, status: '浏览器中的库记录已损坏。请导入备份或恢复全部默认库。' }; }
+      catch (error) { return { source, config: factoryLibrary(), damaged: true,
+        status: `无法读取原有器件库，浏览器记录已保留。${error instanceof Error ? error.message : '请检查器件库格式。'}` }; }
     }
     return { source, config: factoryLibrary(), status: '此浏览器尚无本地库记录。更换文件、浏览器或清理存储后，请导入库备份。' };
   } catch {
@@ -38,7 +39,7 @@ export function useLibrary() {
         return;
       }
       if (state.damaged && !replaceCache) {
-        setState({ ...state, config, status: '原有浏览器记录已损坏。本次修改仅在页面中有效，请导出库 JSON。' });
+        setState({ ...state, config, status: '原有浏览器记录未被替换。本次修改仅在页面中有效，请导出库 JSON。' });
         return;
       }
       const source = JSON.stringify(config);

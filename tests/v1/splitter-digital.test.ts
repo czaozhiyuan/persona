@@ -130,7 +130,9 @@ test('an optional DC heater loads its supply without changing MZM signal budgets
   const ids = ['library-laser','library-mzm','library-pd','library-dc-supply'];
   const definitions = ids.map(id => builtInDefinitions.find(d => d.id === id)! as ComponentDefinition);
   const [laser, mzm, pd, supply] = definitions;
-  const project: Project = { id: 'heater', name: 'Heater', rootModuleDefinitionId: 'root', componentDefinitions: definitions,
+  const configured = definitions.map(d => d.id !== supply.id ? d : { ...d, ports: d.ports.map(p => p.id === 'DC_OUT'
+    ? { ...p, outputVoltageV: fixed(5), supplyCapacity: { unit: 'W' as const, value: fixed(10) } } : p) });
+  const project: Project = { id: 'heater', name: 'Heater', rootModuleDefinitionId: 'root', componentDefinitions: configured,
     moduleDefinitions: [{ kind: 'module', id: 'root', name: 'System', ports: [],
       instances: definitions.map(d => ({ id: d.id, name: d.name, definitionId: d.id })),
       connections: [wire('supply',laser.id,'OPT_OUT',mzm.id,'LASER_IN'),wire('output',mzm.id,'OPT_OUT',pd.id,'OPT_IN')] }],
@@ -138,10 +140,9 @@ test('an optional DC heater loads its supply without changing MZM signal budgets
       { instancePath: [laser.id], parameterOverrides: { power: fixed(8) } },
       { instancePath: [mzm.id], parameterOverrides: { vPi: fixed(5), intrinsicLoss: fixed(3) } },
       { instancePath: [pd.id], parameterOverrides: { receiver: 'external50', responsivity: fixed(0.8) } },
-      { instancePath: [supply.id], parameterOverrides: { voltage: fixed(5), capacity: fixed(10) } },
     ] };
   const root = project.moduleDefinitions[0];
-  const heated: Project = { ...project, componentDefinitions: definitions.map(d => d.id === mzm.id ? {
+  const heated: Project = { ...project, componentDefinitions: configured.map(d => d.id === mzm.id ? {
     ...d, ports: [...d.ports,{ id: 'heater', type: 'DC_POWER', direction: 'in' }], dcLoad: { portId: 'heater', powerW: fixed(1.25) },
   } : d), moduleDefinitions: [{ ...root, connections: [...root.connections!,wire('heater',supply.id,'DC_OUT',mzm.id,'heater')] }] };
   const link = { id: 'rf', name: 'RF', from: endpoint(mzm.id,'RF_IN'), to: endpoint(pd.id,'RF_OUT'), channelId: channel };

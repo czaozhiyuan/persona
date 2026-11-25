@@ -1,4 +1,5 @@
 import type { DcCapacity, DcValue } from '../../model/v1/device';
+import { isSupplyOutput } from '../../model/v1/types';
 import type { EndpointRef, Project } from '../../model/v1/types';
 import { budgetValue, checkInputRating, unavailable } from './budget-metric';
 import type { BudgetMetric, InputRatingCheck } from './budget-metric';
@@ -86,9 +87,9 @@ export function calculateDcBudget(project: Project): DcBudget {
       voltageV: unavailable('V', noFeed), demand: { knownW: 0 } };
     nodes.set(port, node);
     if (instance.definition.kind !== 'component') continue;
-    const { dcSupply, dcLoad } = instance.definition;
-    if (dcSupply?.portId === port.ref.portId) {
-      node.supply = { voltageV: evaluate(node, 'V', port.definition.outputVoltageV, '供电电压'), capacity: dcSupply.capacity };
+    const { dcLoad } = instance.definition;
+    if (isSupplyOutput(instance.definition, port.definition)) {
+      node.supply = { voltageV: evaluate(node, 'V', port.definition.outputVoltageV, '供电电压'), capacity: port.definition.supplyCapacity };
     }
     if (dcLoad?.portId === port.ref.portId) {
       node.load = evaluate(node, 'W', dcLoad.powerW, '负载需求');

@@ -120,7 +120,14 @@ export function TemplateEditor({ initial, definitions, hidden, save, cancel, rep
           : { kind, ...ports };
         setRows([...rows, { key: crypto.randomUUID(), transfer, pair: ports }]);
       }}>添加传输</button></section>}
-    {draft.kind === 'component' && <><TemplatePower definition={draft} /><TemplateSwitch definition={draft} /></>}
+    {draft.kind === 'component' && <><TemplatePower definition={draft} setSupply={enabled => {
+      if (enabled && draft.ports.some(port => port.type === 'DC_POWER' && port.direction === 'out' && port.outputVoltageV?.kind === 'parameter')) {
+        report('请先将直流输出端口的电压改为固定值或留空。');
+        return;
+      }
+      edit({ ...draft, dcSupply: enabled || undefined,
+        ports: enabled ? draft.ports : draft.ports.map(port => ({ ...port, supplyCapacity: undefined })) });
+    }} /><TemplateSwitch definition={draft} /></>}
     <div className="actions"><button onClick={finish}>保存到器件库</button><button onClick={cancel}>取消草稿</button></div>
   </div>;
 }

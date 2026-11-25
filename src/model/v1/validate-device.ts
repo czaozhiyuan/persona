@@ -2,7 +2,7 @@ import { parameterValueKinds } from './parameters';
 import { receiverModes } from './device';
 import type { DcCapacity, DcValue, Transfer } from './device';
 import type { EmpiricalValue, NumericUnit, ParameterDefinition } from './parameters';
-import { isPowerPort } from './types';
+import { isPowerPort, isSupplyOutput } from './types';
 import type { ComponentDefinition, PortDefinition, PortType } from './types';
 import { validateChannelIds, validateEmpirical, validateRange } from './validate-parameters';
 import { indexById, requireValid } from './validation';
@@ -155,7 +155,7 @@ export function validateDevice(
     if (route.kind === 'dc') {
       validateDcValue(route.efficiency, 'ratio', parameters, `${context}的转换效率`);
       validateDcCapacity(route.capacity, `${context}的额定输出容量`);
-      requireValid(route.toPortId !== definition.dcSupply?.portId, `${context}: 直流电源输出端口不能同时作为变换器输出`);
+      requireValid(!definition.dcSupply, `${context}: 直流电源输出端口不能同时作为变换器输出`);
     }
   }
 
@@ -165,12 +165,13 @@ export function validateDevice(
     validateDcValue(capacity.value, capacity.unit, parameters, context);
   }
 
-  if (definition.dcSupply) {
-    const { portId, capacity } = definition.dcSupply;
-    const port = ports.get(portId);
-    const context = `定义「${definition.id}」的直流电源`;
-    requireValid(port?.type === 'DC_POWER' && port.direction === 'out', `${context}: 应为直流供电输出端口`);
-    validateDcCapacity(capacity, `${context}的额定输出容量`);
+  requireValid(definition.dcSupply === undefined || typeof definition.dcSupply === 'boolean', `定义「${definition.id}」: 直流电源角色必须为布尔值`);
+  for (const port of ports.values()) {
+    if (!isSupplyOutput(definition, port)) continue;
+    const context = `定义「${definition.id}」的供电输出端口「${port.id}」`;
+    requireValid(!port.outputVoltageV || port.outputVoltageV.kind === 'fixed', `${context}: 请在端口直接设置输出电压`);
+    requireValid(!port.supplyCapacity || port.supplyCapacity.value.kind === 'fixed', `${context}: 请在端口直接设置额定容量`);
+    validateDcCapacity(port.supplyCapacity, `${context}的额定容量`);
   }
   if (definition.dcLoad) {
     const { portId, powerW } = definition.dcLoad;

@@ -1,6 +1,7 @@
 import { portDisplayName } from '../../model/v1/display-names';
 import { resolveHierarchy } from '../../engine/v1/hierarchy';
 import type { CableCoreRef, CableCore, LocalEndpointRef } from '../../model/v1/topology';
+import { isSupplyOutput } from '../../model/v1/types';
 import type { ConnectionRef, EndpointRef, InstancePath, ModuleDefinition, Project, TopologyFrame } from '../../model/v1/types';
 
 type Via = ConnectionRef | CableCoreRef;
@@ -105,14 +106,13 @@ export function planPortDeletion(project: Project, definitionId: string, portId:
     if (component.id !== definitionId) return component;
     const portName = (id: string, path?: InstancePath) => portDisplayName(component.ports.find(p => p.id === id)!, false, component.ports,
       path && hierarchy.resolveInstance(path));
-    const clearSupply = component.dcSupply?.portId === portId;
+    const clearSupply = isSupplyOutput(component, removedPort);
     const clearLoad = component.dcLoad?.portId === portId;
     if (clearSupply) reportEndpoints('直流电源', component.id, removedLabel);
     if (clearLoad) reportEndpoints('直流负载', component.id, removedLabel);
     return {
       ...component,
       ports: component.ports.filter(port => port.id !== portId),
-      ...(clearSupply && { dcSupply: undefined }),
       ...(clearLoad && { dcLoad: undefined }),
       transfers: component.transfers?.filter(transfer => {
         const removed = transfer.fromPortId === portId || transfer.toPortId === portId

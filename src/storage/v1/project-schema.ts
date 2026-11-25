@@ -116,7 +116,8 @@ const parameter = byKind({
   enum: shape({ ...identity, kind: oneOf('enum'), options: list(text) }, { overridable: boolean, defaultValue: text }),
 });
 const port = shape({ id: text, type: oneOf('RF', 'OPTICAL', 'DC_POWER', 'AC_POWER', 'CONTROL'), direction: oneOf('in', 'out') }, {
-  name: text, channelIds: channels, opticalEmitter: shape({}, { powerDbm: opticalQuantity }), inputVoltageV: dcQuantity, outputVoltageV: dcQuantity, inputRating: shape({ unit: oneOf('dBm', 'V', 'A', 'W') }, limits),
+  name: text, channelIds: channels, opticalEmitter: shape({}, { powerDbm: opticalQuantity }), inputVoltageV: dcQuantity, outputVoltageV: dcQuantity,
+  supplyCapacity: shape({ unit: oneOf('W', 'A'), value: fixed }), inputRating: shape({ unit: oneOf('dBm', 'V', 'A', 'W') }, limits),
 });
 const portPair = { fromPortId: text, toPortId: text };
 const opticalOptions = { channelIds: channels, gainDb: opticalQuantity };
@@ -146,7 +147,10 @@ const component = shape({ ...definition, kind: oneOf('component') }, {
   physicalFootprint: shape(footprint),
   parameters: list(parameter), transfers: list(transfer),
   switchStates: list(shape({ ...identity, routes: list(shape(portPair, opticalOptions)) })),
-  dcSupply: shape({ portId: text }, { capacity: dcCapacity }),
+  dcSupply: (value, path) => {
+    if (value && typeof value === 'object') fail(path, '旧单路电源结构：请将各路电压和容量写入对应直流输出端口，并将 dcSupply 设为 true。');
+    boolean(value, path);
+  },
   dcLoad: shape({ portId: text }, { powerW: dcQuantity }),
 });
 const instance = shape({ ...identity, definitionId: text }, {

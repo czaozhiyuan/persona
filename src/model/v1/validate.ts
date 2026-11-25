@@ -1,3 +1,4 @@
+import { isSupplyOutput } from './types';
 import type { Instance, InstancePath, ModuleDefinition, PhysicalFootprint, PortDefinition, Project } from './types';
 import type { ParameterDefinition } from './parameters';
 import { channelSetsOverlap, validateDevice, validatePortConstraints } from './validate-device';
@@ -74,6 +75,7 @@ export function validateProject(project: Project): void {
       requireValid(portTypes.has(port.type) && (port.direction === 'in' || port.direction === 'out'),
         `定义「${definition.id}」的端口「${port.id}」类型或方向无效`);
       requireValid(!port.opticalEmitter || definition.kind === 'component', `定义「${definition.id}」：请在实际器件的光输出端口设置光源。`);
+      requireValid(port.supplyCapacity === undefined || isSupplyOutput(definition, port), `定义「${definition.id}」：仅电源的直流输出端口可设置供电容量。`);
       validatePortConstraints(port, parameters, `定义「${definition.id}」的端口「${port.id}」`);
     }
     portsByDefinition.set(definition.id, ports);
