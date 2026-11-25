@@ -5,9 +5,9 @@ import type { CableCoreRef, NamedLink } from '../../model/v1/topology';
 import type { ConnectionRef, EndpointRef, InstancePath, PortFlow, Project } from '../../model/v1/types';
 import { supportsDirection } from '../../model/v1/types';
 import { validateNamedLinks } from '../../model/v1/validate-topology';
-import { chooseRouteChannel, intersectCarrier, reachableSignalPorts, searchSignalPath } from './path-search';
+import { chooseRouteChannel, intersectCarrier, reachableSignalPorts, searchSignalPath, uniqueRoutePrefix } from './path-search';
 import type { Carrier, SignalPath } from './path-search';
-import { buildSignalGraph, isDigitalEdge, opticalSourceFlow, signalPortKey } from './signal-graph';
+import { buildSignalGraph, isDigitalEdge, opticalSourceFlow, portFlowAt, signalPortKey } from './signal-graph';
 import type { SignalEdge, SignalPort } from './signal-graph';
 
 export type LocalPathRequest = { from: EndpointRef; to: EndpointRef; channelId?: OpticalChannelId };
@@ -110,6 +110,29 @@ export function createPathResolver(project: Project) {
       startFlow: from.definition.opticalEmitter ? opticalSourceFlow : startFlow ? () => startFlow : undefined,
       ...routeConstraints(mappings),
     });
+  }
+
+  function partialDigitalSpan(link: NamedLink, access: readonly SignalEdge[], transmit: boolean, options: PathOptions) {
+    const boundary = access.find(isDigitalEdge);
+    if (!boundary) return [];
+    const port = transmit ? boundary.to : boundary.from;
+    const remaining: SignalEdge[] = [];
+    for (const ref of link.via ?? []) {
+      const edge = edgeRefs.get(requiredKey(ref));
+      if (!edge) return [];
+      if (!access.some(known => known.source === edge.source)) remaining.push(edge);
+    }
+    const sources = new Map<SignalPort, Carrier>();
+    for (const source of options.opticalSources ?? []) {
+      const emitter = getPort(source);
+      if (emitter) addSourceCarrier(sources, emitter, source.channelId);
+    }
+    const allowed = 'channelIds' in boundary.channels ? boundary.channels.channelIds : undefined;
+    return uniqueRoutePrefix({ starts: [port], adjacent: transmit ? outgoing : incoming, reverse: !transmit,
+      carrier: intersectCarrier(link.channelId && [link.channelId], allowed), startCarriers: sources,
+      startFlow: () => portFlowAt(boundary, port), ...routeConstraints(remaining),
+    }, edge => !(edge.from.definition.type === 'OPTICAL' && edge.to.definition.type === 'OPTICAL'
+      || isDigitalEdge(edge) || edge.source.kind === 'portMapping' && edge.from.definition.type === 'CONTROL'));
   }
 
   function traceSupplies(path: SignalPath, sources: ReadonlyMap<SignalPort, Carrier>): PathResult {
@@ -281,7 +304,15 @@ export function createPathResolver(project: Project) {
       : { status: 'incomplete', reason: '尚未连接：请设置链路起点和终点。' };
     if (result.status !== 'resolved' && digitalEdges.length) {
       const tx = link.from && digitalAccess(link.from, true), rx = link.to && digitalAccess(link.to, false);
-      if (tx || rx) return { ...result, digitalAccess: [...(tx ?? []), ...(rx ?? [])] };
+      if (tx || rx) {
+        const access = [...(tx ?? []), ...(rx ?? [])];
+        const opposite = tx ? link.to : link.from;
+        if ((result.status === 'unreachable' || result.status === 'incomplete') && !(tx && rx)
+          && opposite && getPort(opposite)?.definition.type === 'CONTROL') {
+          access.push(...partialDigitalSpan(link, access, !!tx, options));
+        }
+        return { ...result, digitalAccess: access };
+      }
     }
     return result;
   }

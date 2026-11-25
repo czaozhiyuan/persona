@@ -157,7 +157,7 @@ function darkParallelPath(start: State, target: State, relevant: ReadonlySet<Sta
   return toPath([...head, ...tail.reverse()], [...headEdges, edge, ...tailEdges.reverse()], false, targetCarrier);
 }
 
-function scanRoutes(query: Search, skip?: (edge: SignalEdge) => boolean) {
+function scanRoutes(query: Search, skip?: (edge: SignalEdge) => boolean, retainArcs = !!query.target) {
   const reverse = query.reverse ?? false;
   const allRequired = query.allRequired ?? 0n;
   const index = new Map<SignalPort, Map<string, State>>();
@@ -205,17 +205,38 @@ function scanRoutes(query: Search, skip?: (edge: SignalEdge) => boolean) {
       if (query.portType && port.definition.type !== query.portType) continue;
       const emitted = edge.channels.kind === 'enter' && !edge.supply ? query.startCarriers?.get(edge.to) : undefined;
       const requested = intersectCarrier(query.carrier, edge.supply && query.supplyCarrier ? query.supplyCarrier(edge) : emitted);
-      const carrier = query.ignoreChannels ? undefined : transition(edge, current.carrier, requested, reverse);
+      const active = reverse ? intersectCarrier(current.carrier, emitted) : current.carrier;
+      const carrier = query.ignoreChannels ? undefined : transition(edge, active, requested, reverse);
       if (carrier === false || carrier?.length === 0) continue;
       const next = stateAt(port, carrier, current.required | (query.required?.get(edge) ?? 0n), portFlowAt(edge, port));
       if (pending.length > MAX_STATES || ++arcCount > MAX_ARCS) return;
-      if (query.target) {
+      if (retainArcs) {
         current.next.push({ state: next, edge });
         next.previous.push(current);
       }
     }
   }
   return { starts, targets, pending };
+}
+
+/** Follow a broken route from its connected end until the next edge can no longer be determined. */
+export function uniqueRoutePrefix(query: Search, skip: (edge: SignalEdge) => boolean): SignalEdge[] {
+  const scan = scanRoutes(query, skip, true);
+  if (!scan || scan.starts.size !== 1) return [];
+  const viable = query.allRequired ? new Set(scan.pending.filter(state => state.required === query.allRequired)) : undefined;
+  if (viable) for (const state of viable) {
+    for (const before of state.previous) viable.add(before);
+  }
+  const edges: SignalEdge[] = [];
+  const visited = new Set<SignalPort>();
+  let current = [...scan.starts][0];
+  for (;;) {
+    visited.add(current.port);
+    const next = current.next.filter(arc => !viable || viable.has(arc.state));
+    if (next.length !== 1 || visited.has(next[0].state.port)) return edges;
+    edges.push(next[0].edge);
+    current = next[0].state;
+  }
 }
 
 /** Visit physical paths once, retaining arrival direction at bidirectional boundaries. */
