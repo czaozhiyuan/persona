@@ -41,6 +41,10 @@ export type SignalGraph = Readonly<{
   edges: readonly SignalEdge[];
 }>;
 
+export function opticalSourceFlow(port: SignalPort): PortFlow {
+  return port.modulePort ? 'in' : 'out';
+}
+
 /** A wire leaves an output face and arrives at an input face; a mapping preserves that face. */
 export function portFlowAt(edge: SignalEdge, port: SignalPort): PortFlow {
   if (edge.source.kind === 'portMapping') return edge.from.ref === edge.source.publicPort ? 'in' : 'out';

@@ -2,7 +2,7 @@ import type { OpticalChannelId } from '../../model/v1/channels';
 import type { OpticalSource } from '../../model/v1/topology';
 import { searchSignalPath } from './path-search';
 import type { Carrier, SignalStep } from './path-search';
-import { signalPortKey } from './signal-graph';
+import { opticalSourceFlow, signalPortKey } from './signal-graph';
 import type { SignalEdge, SignalGraph, SignalPort } from './signal-graph';
 
 export const cascadedModulation = '不支持直调激光器再接外置调制器的串联调制。';
@@ -27,7 +27,7 @@ export function selectOpticalSource(first: SignalStep, sources: readonly Optical
 export function findOpticalSupply(graph: SignalGraph, adjacent: ReadonlyMap<SignalPort, readonly SignalEdge[]>,
   target: SignalPort, targetCarrier: Carrier, selected: ReadonlyMap<SignalPort, Carrier>) {
   const search = (starts: readonly SignalPort[], startCarriers?: ReadonlyMap<SignalPort, Carrier>, ignoreChannels = false) =>
-    searchSignalPath({ starts, startCarriers, startFlow: port => port.modulePort ? 'in' : 'out', target, targetFlow: 'in',
+    searchSignalPath({ starts, startCarriers, startFlow: opticalSourceFlow, target, targetFlow: 'in',
       adjacent, carrier: undefined, targetCarrier: ignoreChannels ? undefined : targetCarrier, opticalOnly: true, ignoreChannels });
   const dmlOutputs = graph.edges.filter(edge => edge.source.kind === 'transfer' && edge.source.transfer.kind === 'dml').map(edge => edge.to);
   if (dmlOutputs.length) {

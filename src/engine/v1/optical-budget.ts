@@ -12,7 +12,7 @@ import type { BudgetMetric, InputRatingCheck } from './budget-metric';
 import { resolveEmpiricalValue } from './empirical-value';
 import { chooseRouteChannel, intersectCarrier, searchSignalPath } from './path-search';
 import type { SearchResult, SignalPath } from './path-search';
-import { buildSignalGraph, channelRoutingPorts, portFlowAt, signalPortKey } from './signal-graph';
+import { buildSignalGraph, channelRoutingPorts, opticalSourceFlow, portFlowAt, signalPortKey } from './signal-graph';
 import type { SignalEdge, SignalGraph, SignalPort } from './signal-graph';
 
 export type { OpticalSource } from '../../model/v1/topology';
@@ -75,14 +75,14 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
   const portAt = (ref: EndpointRef) => graph.ports.get(signalPortKey(ref));
 
   function search(start: SignalPort, target: SignalPort, carrier: Carrier) {
-    return searchSignalPath({ starts: [start], startFlow: port => port.modulePort ? 'in' : 'out', target, adjacent: outgoing, carrier, opticalOnly: true });
+    return searchSignalPath({ starts: [start], startFlow: opticalSourceFlow, target, adjacent: outgoing, carrier, opticalOnly: true });
   }
 
   function stage(port: SignalPort, channelId: OpticalChannelId | undefined, powerDbm: BudgetMetric<'dBm'>,
     incoming?: OpticalStage['incoming']): OpticalStage {
     const endpoint = port.ref;
     const flow = port.definition.direction !== 'bidirectional' ? port.definition.direction
-      : incoming ? portFlowAt(incoming.edge, port) : port.modulePort ? 'in' : 'out';
+      : incoming ? portFlowAt(incoming.edge, port) : opticalSourceFlow(port);
     return { endpoint, flow, channelId, powerDbm, incoming,
       rating: flow === 'in' ? checkInputRating(endpoint, port.definition.inputRating, powerDbm) : undefined };
   }
@@ -213,7 +213,11 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
   }
 
   function calculateOpticalPath(path: SignalPath, source: OpticalSource, receiverEdge?: SignalEdge) {
-    const stages = start(path.steps[0].port, source);
+    const first = path.steps[0].port;
+    if (first.definition.direction === 'bidirectional' && path.edges.length && portFlowAt(path.edges[0], first) !== opticalSourceFlow(first)) {
+      return fail('unreachable', first.ref, '该路径不经过此双向光口的供光方向。');
+    }
+    const stages = start(first, source);
     return finish(stages, propagate(stages, path.edges, budgetValue('dB', 0)), undefined, receiverEdge);
   }
 

@@ -12,6 +12,41 @@ import { duplexFixture } from './fixtures/bidirectional-optics';
 
 const com = (instanceId: string) => ({ instanceId, portId: 'COM' });
 
+test('a COM source leaves on its transmitting side and only external light can feed its receive transfer', () => {
+  const p = duplexFixture();
+  const router = p.componentDefinitions.find(d => d.id === 'router-A')!;
+  router.ports = router.ports.map(port => port.id === 'COM'
+    ? { ...port, opticalEmitter: { powerDbm: { kind: 'fixed', value: 10 } } } : port);
+  const localSource = { instancePath: ['A', 'router'], portId: 'COM' };
+  const remoteSource = { instancePath: ['B', 'laser'], portId: 'OUT' };
+  const pd = (box: string) => ({ instancePath: [box, 'pd'], portId: 'IN' });
+  const verify = (project: Project, from: typeof localSource, to: typeof localSource, channelId: 'DWDM_CH28' | 'DWDM_CH30', expected?: number) => {
+    const resolver = createPathResolver(project), budget = createOpticalBudget(project);
+    const named = resolver.resolveNamedLink({ id: 'check', name: 'Check', from, to, channelId });
+    const local = budget.calculateLocal({ source: { endpoint: from, channelId }, to });
+    if (expected === undefined) {
+      assert.equal(named.status, 'unreachable');
+      assert.equal(local.pathIssue?.status, 'unreachable');
+      assert.equal(local.powerDbm.availability, 'unavailable');
+    } else {
+      assert.equal(named.status, 'resolved');
+      const received = { unit: 'dBm', availability: 'available', value: expected };
+      assert.deepEqual(budget.calculateSourcePath(named.trace).powerDbm, received);
+      assert.deepEqual(local.powerDbm, received);
+    }
+  };
+  verify(p, localSource, pd('B'), 'DWDM_CH28', 8);
+  verify(p, remoteSource, pd('A'), 'DWDM_CH30', 7);
+  p.moduleDefinitions[0].cableBundles = [];
+  verify(parseProjectJson(serializeProjectJson({ ...p, namedLinks: [] })), localSource, pd('A'), 'DWDM_CH30');
+  const passive = duplexFixture();
+  const request = { from: localSource, to: pd('A'), channelId: 'DWDM_CH30' as const };
+  const trace = createPathResolver(passive).resolveLocalPath(request);
+  assert.equal(trace.status, 'resolved');
+  const trial = { endpoint: localSource, channelId: request.channelId, powerDbm: 10 };
+  assert.equal(createOpticalBudget(passive).calculateSourcePath(trace.trace, trial).pathIssue?.status, 'unreachable');
+});
+
 test('one MPO fibre or connection carries both directions through public COM mappings, once per budget', () => {
   const fixture = duplexFixture();
   const [root, ...boxes] = fixture.moduleDefinitions;

@@ -7,7 +7,7 @@ import { supportsDirection } from '../../model/v1/types';
 import { validateNamedLinks } from '../../model/v1/validate-topology';
 import { chooseRouteChannel, intersectCarrier, searchSignalPath } from './path-search';
 import type { Carrier, SignalPath } from './path-search';
-import { buildSignalGraph, signalPortKey } from './signal-graph';
+import { buildSignalGraph, opticalSourceFlow, signalPortKey } from './signal-graph';
 import type { SignalEdge, SignalPort } from './signal-graph';
 
 export type LocalPathRequest = { from: EndpointRef; to: EndpointRef; channelId?: OpticalChannelId };
@@ -166,6 +166,7 @@ export function createPathResolver(project: Project) {
     const carrier: Carrier = request.channelId === undefined ? undefined : [request.channelId];
     const query = {
       starts: [from], target: to, adjacent: outgoing, carrier, required, allRequired: (1n << BigInt(requiredRefs.size)) - 1n,
+      startFlow: link || from.definition.opticalEmitter || sources.has(from) ? opticalSourceFlow : undefined,
       startCarriers: from.definition.type === 'OPTICAL' ? sources : undefined,
     };
     let result = searchSignalPath(query);
