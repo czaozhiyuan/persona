@@ -5,6 +5,7 @@ import type { BudgetMetric } from '../../src/engine/v1/budget-metric';
 import type { OpticalSource } from '../../src/engine/v1/optical-budget';
 import type { Connection, NamedLink } from '../../src/model/v1/topology';
 import type { ComponentDefinition, EndpointRef, Instance, PortDefinition, Project } from '../../src/model/v1/types';
+import { parseProjectJson, serializeProjectJson } from '../../src/storage/v1/project-json';
 
 const ch28 = 'DWDM_CH28', ch30 = 'DWDM_CH30';
 const fixed = (value: number) => ({ kind: 'fixed' as const, value });
@@ -202,6 +203,58 @@ test('two reachable emitters require selection and clearing the selection restor
   const selected = calc(link, { frequencyGHz: 2, opticalSources: [source('backup')] });
   near(numeric(selected.segments[0].pdPowerDbm), 0);
   assert.equal(calc(link, { frequencyGHz: 2, opticalSources: [] }).gainDb.availability, 'unavailable');
+  const blank = { ...link, channelId: undefined };
+  const trial = { frequencyGHz: 15, inputPowerDbm: -20, opticalSources: [{ endpoint: ref('laser1', 'OUT') }] };
+  const saved = parseProjectJson(serializeProjectJson({ ...project, namedLinks: [{ ...blank, trial }] })).namedLinks![0];
+  assert.deepEqual(saved.trial, trial);
+  const ambiguous = calc(blank, { frequencyGHz: 15 });
+  assert.match(ambiguous.diagnostics[0].reason, /选择供光来源/);
+  near(numeric(calc(saved, saved.trial!).gainDb), numeric(selected.gainDb));
+});
+
+test('flat optical values work without choosing a carrier; channel tables identify the parameter that needs it', () => {
+  const { project, link } = fixture();
+  const blank = { ...link, channelId: undefined };
+  const trial = { frequencyGHz: 15, inputPowerDbm: -20 };
+  const calc = createConversionBudget(project).calculateNamedLink;
+  const result = calc(blank, trial);
+  assert.ok(result.segments[0].optical?.stages.every(stage => stage.channelId === undefined));
+  for (const channelId of [ch28, ch30] as const) {
+    const explicit = calc({ ...link, channelId }, trial);
+    assert.deepEqual(result.powerDbm, explicit.powerDbm);
+    assert.deepEqual(result.gainDb, explicit.gainDb);
+    near(numeric(result.segments[0].pdPowerDbm), 0);
+  }
+  const { project: table } = fixture(false, { responsivity: { kind: 'channelTable', values: { [ch28]: 0.8, [ch30]: 0.4 } } });
+  const byChannel = createConversionBudget(table).calculateNamedLink;
+  const missing = byChannel(blank, trial);
+  assert.equal(missing.gainDb.availability, 'unavailable');
+  assert.match(missing.gainDb.reason, /oe1.*响应度.*光通道/);
+  near(numeric(byChannel({ ...link, channelId: ch30 }, trial).gainDb), numeric(result.gainDb) - 20 * Math.log10(2));
+  const root = project.moduleDefinitions[0];
+  const disconnected = createConversionBudget({ ...project, moduleDefinitions: [{ ...root,
+    connections: root.connections!.filter(c => c.id !== 'supply1') }] }).calculateNamedLink(blank, trial);
+  assert.deepEqual(disconnected.diagnostics[0].endpoint, ref('eo1', 'SUPPLY'));
+  assert.equal(disconnected.diagnostics[0].code, 'unreachable');
+});
+
+test('a wavelength-routed device identifies the ambiguous port and accepts an explicit or inferred carrier', () => {
+  const { project, link } = fixture();
+  const blank = { ...link, channelId: undefined };
+  const trial = { frequencyGHz: 15, inputPowerDbm: -20 };
+  const componentDefinitions: ComponentDefinition[] = project.componentDefinitions.map(def => def.id !== 'attenuator' ? def : {
+    ...def, transfers: ([ch28, ch30] as const).map((channel, i) => ({ kind: 'optical', fromPortId: 'IN', toPortId: 'OUT',
+      channelIds: [channel], gainDb: fixed(-2 - i) })),
+  });
+  const calc = createConversionBudget({ ...project, componentDefinitions }).calculateNamedLink;
+  const unresolved = calc(blank, trial);
+  assert.equal(unresolved.gainDb.availability, 'unavailable');
+  assert.match(unresolved.diagnostics[0].reason, /选择光通道/);
+  assert.deepEqual(unresolved.diagnostics[0].endpoint?.instancePath, ['atten']);
+  const ch28Result = calc(link, trial);
+  const ch30Result = calc({ ...link, channelId: ch30 }, trial);
+  near(numeric(ch30Result.gainDb), numeric(ch28Result.gainDb) - 2);
+  assert.deepEqual(calc(blank, { ...trial, opticalSources: [source('laser1')] }).gainDb, ch28Result.gainDb);
 });
 
 test('loaded receiver curve coverage governs RF only, including the low-frequency reference', () => {

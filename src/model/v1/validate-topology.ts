@@ -85,7 +85,7 @@ export function validateNamedLinks(
         const port = owner?.ports.find(port => port.id === endpoint.portId);
         requireValid(port?.type === 'OPTICAL' && port.direction === (owner?.kind === 'module' ? 'in' : 'out'),
           `${context}：试算光源端口无效`);
-        validateChannelIds([channelId], context);
+        if (channelId !== undefined) validateChannelIds([channelId], context);
         const key = JSON.stringify([endpoint.instancePath, endpoint.portId, channelId]);
         requireValid(!sourceKeys.has(key) && (powerDbm === undefined || Number.isFinite(powerDbm)),
           `${context}：试算光源重复或功率无效`);

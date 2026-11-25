@@ -153,8 +153,7 @@ export function LinkEditor({ store, options, selected, result, budget, point, co
         <div className="v1-link-fields">
           <Choice title="起点" name="from" options={options.endpoints} value={selected?.from && signalPortKey(selected.from)} />
           <Choice title="终点" name="to" options={options.endpoints} value={selected?.to && signalPortKey(selected.to)} />
-          {showOptical && <ChannelField label="光通道" name="channel" value={selected?.channelId}
-            required={domain(fromKey) === 'OPTICAL' && domain(toKey) === 'OPTICAL'} />}
+          {showOptical && <ChannelField label="光通道" name="channel" value={selected?.channelId} />}
           {options.via.length > 0 && <details>
             <summary>必经连接{options.via.some(item => 'bundleId' in item.value) && '与 MPO 纤芯'}</summary>
             <label>约束路径（可多选）<select name="via" multiple size={4} defaultValue={selected?.via?.map(requiredEdgeKey) ?? []}>
@@ -173,7 +172,7 @@ export function LinkEditor({ store, options, selected, result, budget, point, co
 
       {opticalLink ? <>{trialControls}{opticalResult && selected.to
         ? <OpticalResult result={opticalResult} target={opticalResult.stages.at(-1)?.endpoint ?? selected.to} showEndpoint={options.showEndpoint} locate={locate} />
-        : <p role="status">请选择有效的光路和光通道。</p>}{diagnostics}</>
+        : <p role="status">请检查光路。</p>}{diagnostics}</>
         : point && <LinkBudgetPanel trialControls={trialControls} diagnostics={diagnostics} single={point} link={selected} budget={budget} conditions={conditions} labels={options} locate={locate}
           frequency={conditions.frequencyGHz} setFrequency={frequencyGHz => setConditions({ ...conditions, frequencyGHz })}
           setInputPower={inputPowerDbm => setConditions({ ...conditions, inputPowerDbm })} />}

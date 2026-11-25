@@ -1,10 +1,10 @@
-import { cascadedModulation, findOpticalSupply } from './optical-supply';
+import { addSourceCarrier, cascadedModulation, findOpticalSupply } from './optical-supply';
 import { resolveOpticalChannel } from '../../model/v1/channels';
 import type { OpticalChannelId } from '../../model/v1/channels';
 import type { CableCoreRef, NamedLink } from '../../model/v1/topology';
 import type { ConnectionRef, EndpointRef, InstancePath, Project } from '../../model/v1/types';
 import { validateNamedLinks } from '../../model/v1/validate-topology';
-import { intersectCarrier, searchSignalPath } from './path-search';
+import { chooseRouteChannel, intersectCarrier, searchSignalPath } from './path-search';
 import type { Carrier, SignalPath } from './path-search';
 import { buildSignalGraph, signalPortKey } from './signal-graph';
 import type { SignalEdge, SignalPort } from './signal-graph';
@@ -18,7 +18,7 @@ export type PathOptions = {
 type ConversionStep = { kind: 'eo' | 'dml' | 'oe'; edgeIndex: number };
 type SupplyBranch = { edgeIndex: number; endpoint: EndpointRef } & (
   | { status: 'resolved'; path: SignalPath }
-  | { status: 'missing' | 'ambiguous' | 'feedback_loop' | 'search_limit' }
+  | { status: 'missing' | 'ambiguous' | 'feedback_loop' | 'search_limit'; channelPort?: EndpointRef }
 );
 
 export type PathTrace = SignalPath & {
@@ -90,7 +90,8 @@ export function createPathResolver(project: Project) {
       const endpoint = edge.supply.ref;
       if (supply.status === 'cascaded_modulation') return { status: 'unreachable', endpoint, reason: cascadedModulation };
       if (supply.status !== 'resolved') {
-        supplies.push({ edgeIndex, endpoint, status: supply.status === 'unreachable' ? 'missing' : supply.status });
+        supplies.push({ edgeIndex, endpoint, status: supply.status === 'unreachable' ? 'missing' : supply.status,
+          channelPort: supply.status === 'ambiguous' ? supply.channelPort?.ref : undefined });
         continue;
       }
       supplies.push({ edgeIndex, endpoint, status: 'resolved', path: supply.path });
@@ -104,11 +105,11 @@ export function createPathResolver(project: Project) {
     const failure = supplies.find(supply => supply.status !== 'resolved');
     if (failure) {
       const status = failure.status === 'missing' ? 'unreachable' : failure.status;
-      const reason = failure.status === 'missing' ? '没有供光路径经兼容通道到达调制器的输入端口。'
-        : failure.status === 'ambiguous' ? '有多条供光路径到达调制器的输入端口。'
+      const reason = failure.channelPort ? chooseRouteChannel : failure.status === 'missing' ? '没有供光路径经兼容通道到达调制器的输入端口。'
+        : failure.status === 'ambiguous' ? '有多条供光路径到达调制器的输入端口，请选择供光来源。'
         : failure.status === 'feedback_loop' ? '不支持供光路径中的反馈回路。'
         : '供光路径搜索超出资源上限。';
-      return { status, reason, endpoint: failure.endpoint, trace };
+      return { status, reason, endpoint: failure.channelPort ?? failure.endpoint, trace };
     }
     return { status: 'resolved', trace };
   }
@@ -135,8 +136,7 @@ export function createPathResolver(project: Project) {
       if (ref.channelId !== undefined && !resolveOpticalChannel(ref.channelId)) {
         return { status: 'invalid_reference', endpoint: ref, reason: `未知光源通道「${ref.channelId}」。` };
       }
-      if (ref.channelId === undefined || (sources.has(port) && sources.get(port) === undefined)) sources.set(port, undefined);
-      else sources.set(port, [...new Set([...(sources.get(port) ?? []), ref.channelId])]);
+      addSourceCarrier(sources, port, ref.channelId);
     }
     const requiredEdges: SignalEdge[] = [];
     if (link) {
@@ -153,13 +153,26 @@ export function createPathResolver(project: Project) {
     }
     const required = new Map([...new Set(requiredEdges)].map((edge, index) => [edge, 1n << BigInt(index)]));
     const carrier: Carrier = request.channelId === undefined ? undefined : [request.channelId];
-    const result = searchSignalPath({
+    const query = {
       starts: [from], target: to, adjacent: outgoing, carrier, required, allRequired: (1n << BigInt(required.size)) - 1n,
-      startCarriers: from.definition.type === 'OPTICAL' && to.definition.type === 'RF' ? sources : undefined,
-    });
+      startCarriers: from.definition.type === 'OPTICAL' ? sources : undefined,
+    };
+    let result = searchSignalPath(query);
+    if (result.status === 'ambiguous' && result.channelPort && !request.channelId) {
+      // A uniquely supplied wavelength can select a route beyond the EO boundary.
+      const carriers = new Map<SignalEdge, Carrier>();
+      result = searchSignalPath({ ...query, supplyCarrier: edge => {
+        if (!carriers.has(edge)) {
+          const supply = findOpticalSupply(graph, outgoing, edge.supply!, undefined, sources);
+          carriers.set(edge, supply.status === 'resolved' ? supply.path.steps.at(-1)?.channelIds : undefined);
+        }
+        return carriers.get(edge);
+      } });
+    }
     switch (result.status) {
       case 'resolved': return traceSupplies(result.path, sources);
-      case 'ambiguous': return { status: 'ambiguous', reason: '有多条路径满足端点与路由约束。' };
+      case 'ambiguous': return { status: 'ambiguous', reason: result.channelPort ? chooseRouteChannel : '有多条路径满足端点与路由约束。',
+        endpoint: result.channelPort?.ref };
       case 'feedback_loop': return { status: 'feedback_loop', endpoint: result.endpoint.ref, reason: '不支持所选路径中的反馈回路。' };
       case 'search_limit': return { status: 'search_limit', reason: '路径搜索超出资源上限。' };
       case 'unreachable': {

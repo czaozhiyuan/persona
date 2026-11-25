@@ -11,10 +11,10 @@ import { createOpticalBudgetForGraph, photocurrent } from './optical-budget';
 import type { OpticalBudget, OpticalSource } from './optical-budget';
 import { createPathResolver } from './path-resolver';
 import type { PathResult, PathTrace } from './path-resolver';
-import type { SignalStep } from './path-search';
+import { selectOpticalSource } from './optical-supply';
+import { chooseRouteChannel } from './path-search';
 import { isRfFrequency, resolveRfStage } from './rf-budget';
 import type { RfBudgetInput } from './rf-budget';
-import { signalPortKey } from './signal-graph';
 import type { SignalGraph, SignalPort } from './signal-graph';
 
 export type ConversionBudgetInput = RfBudgetInput & { opticalSources?: readonly OpticalSource[] };
@@ -74,23 +74,13 @@ export type ConversionBudget = {
 
 const supplyFailure = {
   missing: '缺少到达调制器的供光路径。',
-  ambiguous: '有多条供光路径到达调制器。',
+  ambiguous: '有多条供光路径到达调制器，请选择供光来源。',
   feedback_loop: '供光路径中存在反馈回路。',
   search_limit: '供光路径搜索超出资源上限。',
 };
 
 const noNf = () => unavailable('dB', '跨域链路未建模噪声系数。');
 const beyondSmallSignal = (depth: BudgetMetric<'ratio'>) => depth.availability === 'available' && depth.value > 0.3;
-
-function selectOpticalSource(first: SignalStep, sources: readonly OpticalSource[]): OpticalSource | undefined {
-  const key = signalPortKey(first.port.ref);
-  const candidates = sources.filter(source => signalPortKey(source.endpoint) === key
-    && (first.channelIds === undefined || first.channelIds.includes(source.channelId)));
-  if (candidates.length === 1) return candidates[0];
-  if (!candidates.length && first.channelIds?.length === 1) {
-    return { endpoint: first.port.ref, channelId: first.channelIds[0] };
-  }
-}
 
 export function createConversionPathBudget(graph: SignalGraph) {
   const { showPath } = createPathNames(graph.instances);
@@ -102,7 +92,6 @@ export function createConversionPathBudget(graph: SignalGraph) {
     if (eo.source.kind === 'transfer' && eo.source.transfer.kind === 'dml') {
       const first = trace.steps[eoIndex + 1];
       const channelId = first.channelIds?.length === 1 ? first.channelIds[0] : undefined;
-      if (!channelId) return { problem: { code: 'optical_supply', endpoint: eo.to.ref, reason: '请选择直调激光器的输出光通道。' } } as const;
       const path = { steps: trace.steps.slice(eoIndex + 1, oeIndex + 1), edges: trace.edges.slice(eoIndex + 1, oeIndex) };
       const optical = opticalBudget.calculateOpticalPath(path, { endpoint: eo.to.ref, channelId });
       return { optical, channelId: optical.stages.at(-1)!.channelId };
@@ -110,12 +99,12 @@ export function createConversionPathBudget(graph: SignalGraph) {
     const terminal = eo.supply?.ref ?? eo.to.ref;
     const supply = trace.supplies.find(item => item.edgeIndex === eoIndex);
     if (supply?.status !== 'resolved') {
-      return { problem: { code: 'optical_supply', endpoint: terminal,
-        reason: supply ? supplyFailure[supply.status] : '未设置调制器供光。' } } as const;
+      return { problem: { code: 'optical_supply', endpoint: supply?.channelPort ?? terminal,
+        reason: supply?.channelPort ? chooseRouteChannel : supply ? supplyFailure[supply.status] : '未设置调制器供光。' } } as const;
     }
     const first = supply.path.steps[0];
     const source = selectOpticalSource(first, sources);
-    if (!source) return { problem: { code: 'optical_supply', endpoint: first.port.ref, reason: '请选择唯一的供光端口和通道。' } } as const;
+    if (!source) return { problem: { code: 'optical_supply', endpoint: first.port.ref, reason: '该光源有多项供光设置，请选择唯一的光通道。' } } as const;
     const optical = opticalBudget.calculateEoPath(supply.path, source, eo, trace.edges.slice(eoIndex + 1, oeIndex));
     return { optical, channelId: optical.stages.at(-1)!.channelId };
   }
@@ -150,7 +139,7 @@ export function createConversionPathBudget(graph: SignalGraph) {
       const edge = trace.edges[index];
       const source = selectOpticalSource(first, opticalSources);
       if (!source) {
-        block({ code: 'optical_supply', endpoint: first.port.ref, reason: '请选择唯一的供光端口和通道。' });
+        block({ code: 'optical_supply', endpoint: first.port.ref, reason: '该光源有多项供光设置，请选择唯一的光通道。' });
       } else if (edge.source.kind === 'transfer' && edge.source.transfer.kind === 'oe') {
         const optical = opticalBudget.calculateOpticalPath({ steps: trace.steps.slice(0, index + 1), edges: trace.edges.slice(0, index) }, source);
         const rho = resolveEmpiricalValue('A/W', edge.source.transfer.responsivity, { channelId: optical.stages.at(-1)?.channelId },
@@ -231,6 +220,9 @@ export function createConversionPathBudget(graph: SignalGraph) {
             : conversion.value === 0 || pdPowerDbm.value === -Infinity ? logZero('dB')
             : budgetValue('dB', 2 * (pdPowerDbm.value - 30) + 20 * Math.log10(Math.PI * Math.abs(conversion.value) / vPi.value));
           if (vPi.availability === 'unavailable') missingAt = eoInput;
+          else if (conversion.availability === 'available' && pdPowerDbm.availability === 'unavailable') {
+            missingAt = optical?.stages.find(stage => stage.powerDbm.availability === 'unavailable')?.endpoint ?? pdInput;
+          }
         }
         if (gain.availability === 'unavailable') diagnostics.push({ code: 'missing_gain',
           endpoint: missingAt, reason: gain.reason });

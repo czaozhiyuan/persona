@@ -1,4 +1,5 @@
 import type { OpticalChannelId } from '../../model/v1/channels';
+import { channelRoutingPorts } from './signal-graph';
 import type { SignalEdge, SignalPort } from './signal-graph';
 
 /** Undefined denotes an unrestricted optical carrier, or no carrier at an electrical port. */
@@ -21,6 +22,7 @@ type Search = {
   adjacent: ReadonlyMap<SignalPort, readonly SignalEdge[]>;
   carrier: Carrier;
   startCarriers?: ReadonlyMap<SignalPort, Carrier>;
+  supplyCarrier?: (edge: SignalEdge) => Carrier;
   targetCarrier?: Carrier;
   required?: ReadonlyMap<SignalEdge, bigint>;
   allRequired?: bigint;
@@ -32,7 +34,19 @@ export type SearchResult =
   | { status: 'resolved'; path: SignalPath }
   | { status: 'unreachable'; reached: ReadonlySet<SignalPort> }
   | { status: 'feedback_loop'; endpoint: SignalPort }
-  | { status: 'ambiguous' | 'search_limit' };
+  | { status: 'ambiguous'; channelPort?: SignalPort }
+  | { status: 'search_limit' };
+
+export const chooseRouteChannel = '该器件有多条按波长选路的光路，请选择光通道。';
+
+/** Only competing routes that actually reach the target can require a wavelength choice. */
+function* viableEdges(relevant: ReadonlySet<State>) {
+  for (const state of relevant) {
+    for (const arc of state.next) {
+      if (relevant.has(arc.state)) yield arc.edge;
+    }
+  }
+}
 
 const MAX_STATES = 50_000;
 const MAX_ARCS = 250_000;
@@ -122,7 +136,8 @@ export function searchSignalPath(query: Search): SearchResult {
     for (const edge of query.adjacent.get(current.port) ?? []) {
       const port = reverse ? edge.from : edge.to;
       if (query.opticalOnly && port.definition.type !== 'OPTICAL') continue;
-      const carrier = transition(edge, current.carrier, query.carrier, reverse);
+      const requested = edge.supply && query.supplyCarrier ? intersectCarrier(query.carrier, query.supplyCarrier(edge)) : query.carrier;
+      const carrier = transition(edge, current.carrier, requested, reverse);
       if (carrier === false || carrier?.length === 0) continue;
       const next = stateAt(port, carrier, current.required | (query.required?.get(edge) ?? 0n));
       if (pending.length > MAX_STATES || ++arcCount > MAX_ARCS) return { status: 'search_limit' };
@@ -163,7 +178,12 @@ export function searchSignalPath(query: Search): SearchResult {
   }
 
   const viable = [...starts].filter(state => counts.has(state));
-  if (viable.length !== 1 || counts.get(viable[0]) !== 1) return { status: 'ambiguous' };
+  if (viable.length !== 1) return { status: 'ambiguous' };
+  if (counts.get(viable[0]) !== 1) {
+    const channelPort = query.carrier?.length === 1 || query.targetCarrier?.length === 1
+      ? undefined : channelRoutingPorts(viableEdges(relevant)).values().next().value;
+    return { status: 'ambiguous', channelPort };
+  }
   const states = [viable[0]];
   const edges: SignalEdge[] = [];
   while (states.at(-1)!.port !== query.target) {

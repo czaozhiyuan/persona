@@ -145,18 +145,14 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     const { from, to } = selectedLink ?? {};
     if (!opticalLink || pathResult?.status !== 'resolved' || !from || !to || pathResult.trace.conversions.length) return undefined;
     if (digitalLink) return opticalBudget.calculateDigitalPath(pathResult.trace, selectedLink?.channelId, opticalSources);
-    const channels = pathResult.trace.steps[0]?.channelIds;
-    const channelId = channels?.length === 1 ? channels[0] : selectedLink?.channelId;
-    if (!channelId) return undefined;
     if (linkOptions.graph.ports.get(signalPortKey(to))?.definition.type !== 'OPTICAL') return undefined;
-    const source = opticalSources?.find(item => signalPortKey(item.endpoint) === signalPortKey(from) && item.channelId === channelId);
-    return opticalBudget.calculateSourcePath(pathResult.trace, source ?? { endpoint: from, channelId });
+    return opticalBudget.calculateSourcePath(pathResult.trace, opticalSources);
   }, [selectedLink, pathResult, opticalSources, linkOptions, opticalBudget, opticalLink, digitalLink]);
   const annotations = useMemo(() => showMetrics && canvasPath
     ? linkAnnotations(linkOptions.graph, canvasPath, point, linkedOpticalResult) : undefined,
     [showMetrics, canvasPath, linkOptions, point, linkedOpticalResult]);
   const issue = pathResult && pathResult.status !== 'resolved' ? pathResult.reason
-    : opticalLink && !linkedOpticalResult ? '请选择光通道并检查光路。'
+    : opticalLink && !linkedOpticalResult ? '请检查光路。'
     : point?.kind === 'conversion' ? point.diagnostics[0]?.reason : point?.pathIssue?.reason ?? linkedOpticalResult?.pathIssue?.reason;
   const budgetHighlight = useMemo((): BudgetHighlight | undefined => {
     if (category === 'links' && selectedLink) return { annotations, endpoints: [selectedLink.from, selectedLink.to].filter(ref => ref !== undefined) };
