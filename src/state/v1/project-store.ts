@@ -12,6 +12,10 @@ type Selection = Readonly<{
   linkId?: string;
 }>;
 
+export function selectionPaths(selection: Selection): readonly InstancePath[] {
+  return selection.instancePaths ?? (selection.instancePath ? [selection.instancePath] : []);
+}
+
 export type ProjectStoreSnapshot = Readonly<{
   project: Project;
   selection: Selection;

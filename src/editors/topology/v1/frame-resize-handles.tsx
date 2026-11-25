@@ -29,6 +29,7 @@ export function FrameResizeHandles({ frame, childrenBounds, insets, originLimit,
     if (event.button !== 0 || gesture.current) return;
     event.preventDefault();
     event.stopPropagation();
+    event.currentTarget.focus({ preventScroll: true });
     event.currentTarget.setPointerCapture(event.pointerId);
     const { clientX, clientY } = event;
     const zoom = getZoom();
@@ -47,7 +48,7 @@ export function FrameResizeHandles({ frame, childrenBounds, insets, originLimit,
   }
   return (Object.keys(sides) as ResizeDirection[]).map(direction => <div key={direction}
     className={`v1-frame-resize v1-frame-resize-${direction} nodrag nopan`}
-    title={`拖动${sides[direction]}调整模块边框`} data-resize-direction={direction}
+    tabIndex={-1} title={`拖动${sides[direction]}调整模块边框`} data-resize-direction={direction}
     onPointerDown={event => start(event, direction)}
     onPointerMove={event => {
       const active = gesture.current;
@@ -62,6 +63,15 @@ export function FrameResizeHandles({ frame, childrenBounds, insets, originLimit,
       if (next.x !== before.x || next.y !== before.y || next.width !== before.width || next.height !== before.height) finish(next, before);
     }}
     onPointerCancel={cancel} onLostPointerCapture={cancel}
+    onKeyDown={event => {
+      if (!gesture.current) return;
+      event.stopPropagation();
+      if (event.key === 'Escape') {
+        gesture.current = undefined;
+        preview();
+        event.preventDefault();
+      }
+    }}
     onClick={event => event.stopPropagation()}
     onDoubleClick={event => event.stopPropagation()} />);
 }
