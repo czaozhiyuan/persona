@@ -9,6 +9,7 @@ import { topologyExample } from '../../src/model/v1/topology-example';
 import { editModule } from '../../src/state/v1/topology-edits';
 import { createEndpointChoices } from '../../src/workbench/v1/links/link-endpoints';
 import { createLinkOptions, requiredEdgeKey } from '../../src/workbench/v1/links/link-options';
+import { nestedDigitalProject } from './fixtures/nested-digital-project';
 
 test('Link choices distinguish reused scoped records, half-open cores, and EO/OE instance boundaries', () => {
   const options = createLinkOptions(topologyExample);
@@ -137,4 +138,67 @@ test('ambiguous RF routes remain eligible and an exhausted search keeps the unco
   const choices = limited(signalPortKey(from), undefined, false);
   assert.equal(choices.limited, true);
   assert.deepEqual(choices.to.map(o => o.value), [to, ref('RF_OUT', 'isolated')]);
+});
+
+test('nested digital controllers remain boundaries when the WDM span changes and only the reachable peer is offered', () => {
+  const project = nestedDigitalProject();
+  const starts = ['A', 'B'].map(box => ref('TTL OUT', box, 'card', 'ctl'));
+  const ends = ['A', 'B'].map(box => ref('TTL IN', box, 'card', 'ctl'));
+  const options = createLinkOptions(project);
+  const initial = options.endpointChoices('', undefined, false);
+  assert.deepEqual(initial.from.map(o => o.value), starts);
+  assert.deepEqual(initial.to.map(o => o.value), ends);
+  for (const [i, start] of starts.entries()) {
+    const peer = ends[1 - i];
+    assert.deepEqual(options.endpointChoices(signalPortKey(start), undefined, false).to.map(o => o.value), [peer]);
+    assert.equal(options.resolveNamedLink({ id: 'route', name: '离散线', from: start, to: peer }).status, 'resolved');
+  }
+  const key = signalPortKey(starts[0]);
+  assert.deepEqual(options.endpointChoices(key, 'CWDM_1371', false).to, []);
+  assert.deepEqual(options.endpointChoices(key, 'CWDM_1311', false).to.map(o => o.value), [ends[1]]);
+  const cut = createLinkOptions(editModule(project, 'root', m => ({ ...m, connections: [] })));
+  assert.deepEqual(cut.endpointChoices('', undefined, false).to.filter(o => o.value.portId === 'TTL IN').map(o => o.value), ends);
+  assert.ok(cut.endpointChoices(key, undefined, false).from.some(o => o.key === key));
+  assert.ok(!cut.endpointChoices(key, undefined, false).to.some(o => o.key === signalPortKey(ends[1])));
+  assert.equal(cut.resolveNamedLink({ id: 'cut', name: '断路', from: starts[0], to: ends[1] }).status, 'unreachable');
+  const localPorts = options.endpointChoices(key, undefined, true).to.map(o => o.value);
+  assert.ok(localPorts.some(o => o.portId === 'a' && o.instancePath.length === 4));
+  assert.ok(localPorts.some(o => o.portId === 'aux'));
+  assert.ok(localPorts.every(o => o.portId !== 'dc' && o.portId !== 'ac'));
+});
+
+test('external CONTROL mappings take precedence only for the digital transfer and instance they expose', () => {
+  let project = nestedDigitalProject();
+  for (const [id, pin, direction] of [['A', 'a', 'in'], ['B', 'd', 'out']] as const) {
+    project = editModule(project, id, m => ({ ...m, ports: [...m.ports, port(pin, 'CONTROL', direction)],
+      portMappings: [...m.portMappings!, { portId: pin, target: local('card', pin) }] }));
+  }
+  const start = ref('a', 'A'), end = ref('d', 'B'), otherStart = ref('TTL OUT', 'B', 'card', 'ctl');
+  const otherEnd = ref('TTL IN', 'A', 'card', 'ctl');
+  const options = createLinkOptions(project);
+  const initial = options.endpointChoices('', undefined, false);
+  assert.deepEqual(initial.from.map(o => o.value), [start, otherStart]);
+  assert.deepEqual(initial.to.map(o => o.value), [otherEnd, end]);
+  assert.deepEqual(options.endpointChoices(signalPortKey(start), undefined, false).to.map(o => o.value), [end]);
+  const root = createLinkOptions(editModule(project, 'root', m => ({ ...m, ports: [port('i', 'CONTROL', 'in'), port('o', 'CONTROL', 'out')],
+    portMappings: [{ portId: 'i', target: local('A', 'a') }, { portId: 'o', target: local('B', 'd') }] })));
+  assert.deepEqual(root.endpointChoices('', undefined, false).from.map(o => o.value), [ref('i'), otherStart]);
+  assert.deepEqual(root.endpointChoices('', undefined, false).to.map(o => o.value), [ref('o'), otherEnd]);
+  assert.deepEqual(root.endpointChoices(signalPortKey(ref('i')), undefined, false).to.map(o => o.value), [ref('o')]);
+});
+
+test('connected CONTROL aliases route through the hierarchy without becoming source or terminal choices', () => {
+  const base = nestedDigitalProject();
+  const logicPorts = [port('TTL OUT', 'CONTROL', 'out'), port('TTL IN', 'CONTROL', 'in')];
+  const board: ModuleDefinition = { kind: 'module', id: 'board', name: '控制板', ports: logicPorts, instances: [slot('logic', 'logic')],
+    portMappings: logicPorts.map(p => ({ portId: p.id, target: local('logic', p.id) })) };
+  const project = editModule({ ...base, moduleDefinitions: [...base.moduleDefinitions, board] }, 'card', m => ({ ...m,
+    instances: [slot('ctl', board.id), slot('io', 'adapter'), slot('relay', 'adapter')],
+    connections: [...m.connections!, wire('cascade', local('io', 'd'), local('relay', 'a'))] }));
+  const options = createLinkOptions(project), initial = options.endpointChoices('', undefined, false);
+  const sends = ['A', 'B'].map(id => ref('TTL OUT', id, 'card', 'ctl', 'logic'));
+  const receives = ['A', 'B'].map(id => ref('TTL IN', id, 'card', 'ctl', 'logic'));
+  assert.deepEqual(initial.from.map(o => o.value), sends);
+  assert.deepEqual(initial.to.map(o => o.value), receives);
+  assert.deepEqual(options.endpointChoices(signalPortKey(sends[1]), undefined, false).to.map(o => o.value), [receives[0]]);
 });
