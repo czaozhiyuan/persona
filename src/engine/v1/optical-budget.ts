@@ -9,7 +9,7 @@ import type { EndpointRef, PortFlow, Project } from '../../model/v1/types';
 import { supportsDirection } from '../../model/v1/types';
 import { addGain, budgetValue, checkInputRating, logZero, unavailable } from './budget-metric';
 import type { BudgetMetric, InputRatingCheck } from './budget-metric';
-import { resolveEmpiricalValue } from './empirical-value';
+import { resolveEmpiricalValue, splitterBranchPercent } from './empirical-value';
 import { cochannelConflict, createOpticalOrigins } from './optical-origins';
 import { chooseRouteChannel, intersectCarrier, searchSignalPath } from './path-search';
 import type { SearchResult, SignalPath } from './path-search';
@@ -187,13 +187,12 @@ export function createOpticalBudgetForGraph(graph: SignalGraph, sharedOrigins?: 
     }
     if (source.kind === 'transfer' && source.transfer.kind === 'splitter') {
       const split = source.transfer;
-      const percent = resolveEmpiricalValue('%', split.firstPercent, {}, instance);
+      const percent = splitterBranchPercent(edge, split, instance);
       const loss = split.excessLossDb ? resolveEmpiricalValue('dB', split.excessLossDb, {}, instance) : budgetValue('dB', 0);
       let gain: BudgetMetric<'dB'>;
       if (percent.availability === 'unavailable') gain = unavailable('dB', percent.reason);
       else {
-        const firstBranch = edge.to.ref.portId === split.toPortId || edge.from.ref.portId === split.toPortId;
-        const outputPercent = firstBranch ? percent.value : 100 - percent.value;
+        const outputPercent = percent.value;
         if (outputPercent === 0) {
           const zeroGain = logZero('dB');
           stages.push(stage(edge.to, previous.channelId, logZero('dBm'), { edge, gainDb: zeroGain }));
@@ -201,7 +200,7 @@ export function createOpticalBudgetForGraph(graph: SignalGraph, sharedOrigins?: 
         }
         gain = loss.availability === 'unavailable' ? loss : budgetValue('dB', 10 * (Math.log10(outputPercent) - 2) - loss.value);
         if (origins && edge.to.ref.portId === split.fromPortId && outputPercent < 100) {
-          const otherId = firstBranch ? split.secondPortId : split.toPortId;
+          const otherId = edge.from.ref.portId === split.toPortId ? split.secondPortId : split.toPortId;
           const other = portAt({ instancePath: edge.from.ref.instancePath, portId: otherId })!;
           const channels = previous.channelId ? [previous.channelId] : stages.reduce<Carrier>((carrier, stage) => {
             const rule = stage.incoming?.edge.channels;

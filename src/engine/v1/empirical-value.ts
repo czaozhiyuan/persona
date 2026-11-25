@@ -1,11 +1,19 @@
 import type { OpticalChannelId } from '../../model/v1/channels';
+import type { Transfer } from '../../model/v1/device';
 import type { EmpiricalValue, NumericUnit } from '../../model/v1/parameters';
 import { budgetValue, unavailable } from './budget-metric';
 import type { BudgetMetric } from './budget-metric';
 import type { ResolvedInstance } from './hierarchy';
+import type { SignalEdge } from './signal-graph';
 
 type ValueReference = EmpiricalValue | { kind: 'parameter'; parameterId: string };
 type ValueQuery = { frequencyGHz?: number; channelId?: OpticalChannelId };
+
+export function splitterBranchPercent(edge: SignalEdge, split: Extract<Transfer, { kind: 'splitter' }>, instance?: ResolvedInstance) {
+  const first = resolveEmpiricalValue('%', split.firstPercent, {}, instance);
+  if (first.availability === 'unavailable' || edge.from.ref.portId === split.toPortId || edge.to.ref.portId === split.toPortId) return first;
+  return budgetValue('%', 100 - first.value);
+}
 
 export function resolveEmpiricalValue<Unit extends NumericUnit>(unit: Unit, declaration: ValueReference | undefined,
   query: ValueQuery = {}, instance?: ResolvedInstance): BudgetMetric<Unit> {

@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { createLinkBudget } from '../../src/engine/v1/link-budget';
 import type { BudgetMetric } from '../../src/engine/v1/budget-metric';
 import { createMultiplexPower } from '../../src/engine/v1/multiplex-power';
+import { createOpticalBudget } from '../../src/engine/v1/optical-budget';
 import { buildSignalGraph } from '../../src/engine/v1/signal-graph';
 import { builtInDefinitions } from '../../src/library/v1/built-in';
 import type { ComponentDefinition } from '../../src/model/v1/types';
@@ -65,5 +66,77 @@ test('public bidirectional attenuation and splitting change MZM and DML PD power
       s.incoming?.edge.source.kind === 'transfer' && ['atten','split'].includes(s.endpoint.instancePath[0]));
     assert.deepEqual(travelled.map(s => s.endpoint.instancePath[0]), i === 0 ? ['atten','split'] : ['split','atten']);
     assert.ok(travelled.every(s => s.channelId === link.channelId));
+  }
+});
+
+function combiner(firstPercent: number, mainBranch: number, connectSpare: boolean) {
+  const p = wdmProject(true), root = p.moduleDefinitions[0];
+  const splitter = builtInDefinitions.find(d => d.id === 'library-splitter')! as ComponentDefinition;
+  const laser = p.componentDefinitions.find(d => d.id === 'library-laser')!;
+  p.componentDefinitions = [...p.componentDefinitions, splitter, { ...laser, id: 'spare1311',
+    ports: laser.ports.map(port => port.opticalEmitter
+      ? { ...port, channelIds: ['CWDM_1311'], opticalEmitter: { powerDbm: fixed(0) } } : port) }];
+  root.instances = [...root.instances, { id: 'split', name: 'Combiner', definitionId: splitter.id,
+    parameterOverrides: { firstPercent: fixed(firstPercent) } }, { id: 'spare', name: 'Spare', definitionId: 'spare1311' }];
+  root.connections = [{ id: 'main', from: local('A','COM'), to: local('split','OPT_OUT_' + mainBranch) },
+    { ...root.connections![0], from: local('split','OPT_IN') }];
+  if (connectSpare) root.connections = [...root.connections, {
+    id: 'spare', from: local('spare','OPT_OUT'), to: local('split','OPT_OUT_' + (3 - mainBranch)),
+  }];
+  return p;
+}
+
+test('a cochannel source on a dark combiner branch does not block WDM, PD or RF in either direction', () => {
+  const trial = { frequencyGHz: 15, inputPowerDbm: -20 };
+  for (const [ratio, branch] of [[100,1], [0,2], [50,1], [50,2]]) {
+    for (const spare of [true, false]) {
+      const p = combiner(ratio, branch, spare);
+      const mux = createMultiplexPower(buildSignalGraph(p)), budget = createLinkBudget(p);
+      const splitDb = ratio === 50 ? -10 * Math.log10(2) : 0;
+      for (const [i, rx, comDbm, pdDbm, rfDbm] of [
+        [0, 'B', -3 - 10 * Math.log10(2), -4 - 10 * Math.log10(2), -66.01580271955808],
+        [2, 'A', -3, -4, -29.938200260161125],
+      ] as const) {
+        const link = p.namedLinks![i], point = mux.at(endpoint(rx,'wdm','COM'))!;
+        const recv = point.waves.find(w => w.flow === 'in' && w.channelId === link.channelId)!;
+        const rf = budget.calculateNamedLink(link, trial);
+        assert.equal(rf.kind, 'conversion');
+        if (i === 0 && ratio === 50 && spare) {
+          assert.equal(recv.sources.length, 2);
+          assert.equal(point.in.partial, true);
+          for (const metric of [recv.power, rf.segments[0].pdPowerDbm, rf.powerDbm]) {
+            assert.equal(metric.availability, 'unavailable');
+            assert.match(metric.reason, /同方向、同波长/);
+          }
+        } else {
+          assert.equal(recv.sources.length, 1);
+          assert.equal(point.in.partial, false);
+          near(recv.power, comDbm + splitDb);
+          near(rf.segments[0].pdPowerDbm, pdDbm + splitDb);
+          near(rf.powerDbm, rfDbm + 2 * splitDb);
+        }
+      }
+    }
+  }
+});
+
+test('a dark splitter branch has zero power even with unknown launch power; a transmitting branch stays unknown', () => {
+  for (const ratio of [100, 50]) {
+    const p = combiner(ratio, 1, true), root = p.moduleDefinitions[0];
+    root.connections = root.connections!.filter(c => c.id !== 'main');
+    const spare = p.componentDefinitions.find(d => d.id === 'spare1311')!;
+    spare.ports = spare.ports.map(port => port.opticalEmitter ? { ...port, opticalEmitter: {} } : port);
+    const result = createOpticalBudget(p).calculateLocal({ source: { endpoint: { instancePath: ['spare'], portId: 'OPT_OUT' },
+      channelId: 'CWDM_1311' }, to: endpoint('B','wave0','OPT_IN') });
+    const wave = createMultiplexPower(buildSignalGraph(p)).readWave(endpoint('B','wdm','COM'), 'CWDM_1311', 'in');
+    if (ratio === 100) {
+      assert.equal(numeric(result.powerDbm), -Infinity);
+      assert.deepEqual(wave?.sources, []);
+      assert.equal(numeric(wave!.power), -Infinity);
+    } else {
+      assert.equal(wave?.sources.length, 1);
+      assert.equal(wave?.power.availability, 'unavailable');
+      assert.equal(result.powerDbm.availability, 'unavailable');
+    }
   }
 });
