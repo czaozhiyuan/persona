@@ -11,7 +11,8 @@ import { DeviceIcon, type DeviceIconKey } from './device-icon';
 export const framePortRow = 28;
 export const frameHeader = 52;
 export const framePadding = 28;
-const framePortColumn = 64;
+const frameSidePortColumn = 86;
+const frameTopPortColumn = 64;
 
 export type FramePortHeights = { side: number; top: number };
 
@@ -26,14 +27,14 @@ export function measureFramePorts(columns: readonly HTMLElement[]): FramePortHei
 export function frameInsets(ports: readonly PortDefinition[], measured?: FramePortHeights | number) {
   const onSide = (side: typeof portSides[number]) => ports.filter(port => boundaryPortSide(port) === side);
   const left = onSide('left'), right = onSide('right'), above = onSide('top');
-  const sideWidth = (items: readonly PortDefinition[]) =>
-    items.some(p => isPowerPort(p.type)) ? 86 : items.length ? framePortColumn : framePadding;
   const sideHeight = typeof measured === 'number' ? measured : measured?.side ?? 0;
   const topHeight = typeof measured === 'object' ? measured.top : 0;
   const top = frameHeader + (above.length ? Math.max(framePortRow, topHeight) : 0);
   return {
-    left: sideWidth(left), right: sideWidth(right), top,
-    minWidth: Math.max(360, above.length * framePortColumn + 2 * framePadding),
+    left: left.length ? frameSidePortColumn : framePadding,
+    right: right.length ? frameSidePortColumn : framePadding,
+    top,
+    minWidth: Math.max(360, above.length * frameTopPortColumn + 2 * framePadding),
     height: top + Math.max(sideHeight, Math.max(left.length, right.length, 1) * framePortRow) + framePadding,
   };
 }
