@@ -13,7 +13,7 @@ import { MultiplexDetails } from './budgets/multiplex-details';
 import { isRfFrequency } from '../../engine/v1/rf-budget';
 import { createLinkBudget } from '../../engine/v1/link-budget';
 import { createOpticalBudgetForGraph } from '../../engine/v1/optical-budget';
-import type { LinkTrial, NamedLink } from '../../model/v1/topology';
+import type { LinkTrial } from '../../model/v1/topology';
 import { isDigitalEdge, signalPortKey } from '../../engine/v1/signal-graph';
 import type { EndpointRef, InstancePath, Project } from '../../model/v1/types';
 import { pasteModule } from '../../state/v1/instantiate-module';
@@ -31,6 +31,8 @@ import { LocalOpticalPanel } from './budgets/local-optical-panel';
 import type { LocalOpticalSettings } from './budgets/local-optical-panel';
 import { useLibrary } from './use-library';
 import { LibraryPanel } from './library-panel';
+import { cleanLinkDraft, previewLinkDraft, stageLinkFields } from './links/link-draft';
+import type { LinkDraft, LinkFields } from './links/link-draft';
 import { LinkEditor } from './links/link-editor';
 import { createLinkOptions } from './links/link-options';
 import { PortManagerDialog } from './properties/add-port-dialog';
@@ -88,7 +90,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const modified = project !== savedProject;
   const [category, setCategory] = useState<BudgetPage>('links');
   const [showMetrics, setShowMetrics] = useState(true);
-  const [draftLink, setDraftLink] = useState<NamedLink>();
+  const [draftLink, setDraftLink] = useState<LinkDraft>();
+  const [linkFormSession, setLinkFormSession] = useState(0);
   const [opticalTarget, setOpticalTarget] = useState<EndpointRef>();
   const [dcScope, setDcScope] = useState<InstancePath>();
   const [leftTab, setLeftTab] = useState<SideTab | undefined>(() =>
@@ -119,7 +122,13 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const linkOptions = useMemo(() => createLinkOptions(project), [project]);
   const budget = useMemo(() => createLinkBudget(project), [project]);
   const savedLink = project.namedLinks?.find(link => link.id === selection.linkId);
-  const selectedLink = savedLink ?? draftLink;
+  const activeDraft = draftLink?.editing && draftLink.id !== savedLink?.id ? undefined : draftLink;
+  const cleanDraft = activeDraft && cleanLinkDraft(activeDraft, linkOptions.graph);
+  if (cleanDraft !== draftLink) setDraftLink(cleanDraft);
+  const formLink = useMemo(() => cleanDraft ? previewLinkDraft(cleanDraft, savedLink, linkOptions.graph) : savedLink,
+    [cleanDraft, savedLink, linkOptions]);
+  const selectedLink = cleanDraft?.canvas ? formLink : savedLink;
+  const canvasDraft = cleanDraft?.canvas ? (savedLink ? 'edit' : 'new') : undefined;
   const pureOptical = [selectedLink?.from, selectedLink?.to].every(endpoint =>
     endpoint && linkOptions.graph.ports.get(signalPortKey(endpoint))?.definition.type === 'OPTICAL');
   const activeTrial = selectedLink ? linkInputs.get(selectedLink.id) ?? selectedLink.trial ?? defaultTrial : defaultTrial;
@@ -492,6 +501,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   }
 
   function chooseLink(id?: string) {
+    setLinkFormSession(current => current + 1);
     setCategory('links');
     setDraftLink(undefined);
     store.selectLink(id);
@@ -502,21 +512,25 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     openBudget('dc');
   }
 
-  function selectBudgetPort(action: 'optical' | 'from' | 'to', ref: EndpointRef) {
+  function changeLinkFields(fields: LinkFields) {
+    setDraftLink(current => stageLinkFields(current, savedLink, fields, false, () => crypto.randomUUID()));
+  }
+
+  function selectBudgetPort(action: 'optical' | 'from' | 'to', ref: EndpointRef, editCurrent = false) {
     if (action === 'optical') {
       setOpticalTarget(ref);
       setLocalOptical(current => ({ ...current, query: current.query && { ...current.query, to: ref } }));
       openBudget('optical');
     } else {
-      setDraftLink({ ...(savedLink ? { id: crypto.randomUUID(), name: '新链路' } : draftLink ??
-        { id: crypto.randomUUID(), name: '新链路' }), [action]: ref });
-      store.selectLink(undefined);
+      const target = editCurrent ? savedLink : undefined;
+      setDraftLink(current => stageLinkFields(current, target, { [action]: signalPortKey(ref) }, true, () => crypto.randomUUID()));
+      if (!editCurrent) store.selectLink(undefined);
       openBudget('links');
     }
   }
 
   function saveTrial() {
-    if (!savedLink || sameTrial(savedLink.trial, conditions)) return;
+    if (!savedLink || canvasDraft || sameTrial(savedLink.trial, conditions)) return;
     const result = store.commit(draft => ({
       ...draft, namedLinks: draft.namedLinks?.map(link => link.id === savedLink.id ? { ...link, trial: conditions } : link),
     }));
@@ -680,7 +694,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
               <TopologyEditor multiplex={multiplex} centerPlacement={centerPlacement} library={library.config} key={JSON.stringify(['topology', projectSession, selection.modulePath])}
                 linkControls={<div className="v1-canvas-link">
                   <label>当前链路<select aria-label="框图当前链路" value={category === 'links' ? savedLink?.id ?? '' : ''} onChange={e => chooseLink(e.target.value || undefined)}>
-                    <option value="">{category !== 'links' ? budgetTitles[category] : draftLink ? '画布临时链路' : '未选择链路'}</option>
+                    <option value="">{category !== 'links' ? budgetTitles[category] : canvasDraft === 'new' ? '画布临时链路' : '未选择链路'}</option>
                     {linkOptions.namedLinks.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
                   </select></label>
                   {category === 'links' && selectedLink && <><label><input type="checkbox" checked={showMetrics} onChange={e => setShowMetrics(e.target.checked)} />显示指标</label>
@@ -689,7 +703,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
                 </div>}
                 store={store} state={state} module={active} pathResult={canvasPath} graph={linkOptions.graph} rename={renameSelection}
                 expanded={expandedCanvas} persistExpansion={expandedCanvas !== treeExpansion.current} setExpanded={setExpandedCanvas} budgetHighlight={budgetHighlight}
-                onPortBudget={selectBudgetPort} onDcBudget={showDc} onAddPort={setPortTarget} newPort={newPort}
+                canEditLink={category === 'links' && !!savedLink} onPortBudget={selectBudgetPort} onDcBudget={showDc} onAddPort={setPortTarget} newPort={newPort}
                 onSelectObject={selectObject} onSelectObjects={selectObjects}
                 copyObjects={copySelectedObjects} pasteObjects={pasteSelectedObjects} copyNotice={copyNotice}
                 fullPage={!!presentation} toggleFullPage={toggleFullPage}
@@ -773,11 +787,11 @@ export function Workbench({ store, loadExample, newProject }: Props) {
                 {(Object.keys(budgetTitles) as BudgetPage[]).map(k => <option key={k} value={k}>{budgetTitles[k]}</option>)}
               </select></label>
               <div hidden={category !== 'links'}>
-                <LinkEditor key={JSON.stringify([projectSession, selectedLink?.id, !savedLink && draftLink?.from, !savedLink && draftLink?.to])} store={store}
-                  options={linkOptions} opticalLink={!!opticalLink} signalNotice={signalNotice} draft={!savedLink && !!draftLink} selected={selectedLink} result={pathResult} point={point} budget={budget}
+                <LinkEditor key={JSON.stringify([projectSession, savedLink?.id, linkFormSession])} store={store}
+                  options={linkOptions} opticalLink={!!opticalLink} signalNotice={signalNotice} draft={canvasDraft} formLink={formLink} selected={selectedLink} result={pathResult} point={point} budget={budget}
                   conditions={conditions} opticalResult={linkedOpticalResult} trialSaved={sameTrial(savedLink?.trial, conditions)}
                   saveTrial={saveTrial} choose={chooseLink} locate={locateBudgetPort}
-                  setDraftChannel={channelId => setDraftLink(current => current && { ...current, channelId })}
+                  changeFields={changeLinkFields}
                   setConditions={next => {
                     if (selectedLink) setLinkInputs(previous => new Map(previous).set(selectedLink.id, next));
                   }} />

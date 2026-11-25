@@ -13,6 +13,7 @@ import { OpticalResult } from '../budgets/local-optical-panel';
 import { ChannelField } from '../properties/channel-field';
 import { LinkBudgetPanel } from './link-budget-panel';
 import { LinkSupplyFields } from './link-supply-fields';
+import type { LinkFields } from './link-draft';
 import { requiredEdgeKey } from './link-options';
 import type { LinkOptions, Option } from './link-options';
 import './link-editor.css';
@@ -28,23 +29,15 @@ type Props = {
   budget: ReturnType<typeof createLinkBudget>;
   conditions: LinkTrial;
   setConditions: (conditions: LinkTrial) => void;
-  draft?: boolean;
+  draft?: 'edit' | 'new';
+  formLink?: NamedLink;
   opticalResult?: OpticalBudget;
   saveTrial: () => void;
   trialSaved: boolean;
   choose: (id?: string) => void;
-  setDraftChannel: (channel: NamedLink['channelId']) => void;
+  changeFields: (fields: LinkFields) => void;
   locate: (endpoint: EndpointRef) => void;
 };
-
-function useEndpointDraft(saved: EndpointRef | undefined, options: LinkOptions) {
-  const [edited, setEdited] = useState<string>();
-  const savedKey = saved ? signalPortKey(saved) : '';
-  // A removed draft port follows the current model and must not reappear on undo.
-  if (edited && !options.graph.ports.has(edited)) setEdited(undefined);
-  const change = (key?: string) => setEdited(key === savedKey ? undefined : key);
-  return [edited ?? savedKey, change] as const;
-}
 
 function EndpointChoice({ name, title, options, current, retainedLabel, power, onChange }: {
   name: string; title: string; options: Option<EndpointRef>[]; current?: Option<EndpointRef>;
@@ -92,13 +85,12 @@ function Diagnostics({ result, showEndpoint, locate }: {
 }
 
 export function LinkEditor({ store, options, selected, result, budget, point, conditions, setConditions,
-  draft, opticalLink, signalNotice, opticalResult, saveTrial, trialSaved, choose, locate, setDraftChannel }: Props) {
+  draft, formLink, opticalLink, signalNotice, opticalResult, saveTrial, trialSaved, choose, locate, changeFields }: Props) {
   const [error, setError] = useState('');
-  const [fromKey, setFromKey] = useEndpointDraft(selected?.from, options);
-  const [toKey, setToKey] = useEndpointDraft(selected?.to, options);
+  const fromKey = formLink?.from ? signalPortKey(formLink.from) : '';
+  const toKey = formLink?.to ? signalPortKey(formLink.to) : '';
   const [local, setLocal] = useState(false);
-  const [editedChannel, setEditedChannel] = useState<NamedLink['channelId'] | ''>();
-  const channel = (editedChannel ?? selected?.channelId) || undefined;
+  const channel = formLink?.channelId;
   const choices = useMemo(() => options.endpointChoices(fromKey, channel, local), [options, fromKey, channel, local]);
   const currentFrom = options.endpoints.find(item => item.key === fromKey);
   const currentTo = options.endpoints.find(item => item.key === toKey);
@@ -126,18 +118,13 @@ export function LinkEditor({ store, options, selected, result, budget, point, co
         : [...(draft.namedLinks ?? []), link],
     }));
     setError(edit.ok ? '' : edit.message);
-    if (edit.ok) {
-      setFromKey(undefined);
-      setToKey(undefined);
-      setEditedChannel(undefined);
-      choose(link.id);
-    }
+    if (edit.ok) choose(link.id);
     return edit.ok;
   }
 
   const trialControls = <div className="v1-trial-controls">
     <span role="status">{trialSaved ? '已存入工程' : '仅本次试算'}</span>
-    <button type="button" onClick={saveTrial} disabled={draft || trialSaved
+    <button type="button" onClick={saveTrial} disabled={!!draft || trialSaved
       || !Number.isFinite(conditions.frequencyGHz) || conditions.frequencyGHz < 0 || conditions.frequencyGHz > 67}>保存试算条件</button>
     {draft && <span>先保存链路，再保存试算条件。</span>}
   </div>;
@@ -146,16 +133,17 @@ export function LinkEditor({ store, options, selected, result, budget, point, co
     <div className="v1-links-header">
       <h2 id="v1-links-title">链路</h2>
       <label htmlFor="link-selection">当前链路</label>
-      <select id="link-selection" value={draft ? '' : selected?.id ?? ''} onChange={event => {
+      <select id="link-selection" value={draft === 'new' ? '' : selected?.id ?? ''} onChange={event => {
         choose(event.target.value || undefined);
         setError('');
       }}>
-        <option value="">{draft ? '画布临时链路' : '新建链路'}</option>
+        <option value="">{draft === 'new' ? '画布临时链路' : '新建链路'}</option>
         {options.namedLinks.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
       </select>
     </div>
+    {draft === 'edit' && <p role="status">正在修改「{selected?.name}」的端点，保存后生效。</p>}
     {error && <p className="error" role="alert">{error}</p>}
-    <details open={!selected || draft || undefined}>
+    <details open={!selected || !!draft || undefined}>
       <summary>链路设置</summary>
       <form onSubmit={event => {
         event.preventDefault();
@@ -176,16 +164,15 @@ export function LinkEditor({ store, options, selected, result, budget, point, co
         const field = event.target;
         if (field instanceof HTMLSelectElement && field.name === 'channel') {
           const next = resolveOpticalChannel(field.value)?.id;
-          setEditedChannel(next === selected?.channelId ? undefined : next ?? '');
-          if (draft) setDraftChannel(next);
+          changeFields({ channelId: next ?? '' });
         }
       }}>
-        <label>链路名称<input key={selected?.name} name="name" required defaultValue={selected?.name} /></label>
+        <label>链路名称<input key={draft === 'new' ? undefined : selected?.name} name="name" required defaultValue={selected?.name} /></label>
         <div className="v1-link-fields">
           <EndpointChoice title="起点" name="from" options={choices.from} current={currentFrom} retainedLabel="局部"
-            power={isPowerPort(domain(fromKey))} onChange={setFromKey} />
+            power={isPowerPort(domain(fromKey))} onChange={from => changeFields({ from })} />
           <EndpointChoice title="终点" name="to" options={choices.to} current={currentTo}
-            retainedLabel={choices.systemEnds.has(toKey) ? '尚未接通' : '局部'} power={isPowerPort(domain(toKey))} onChange={setToKey} />
+            retainedLabel={choices.systemEnds.has(toKey) ? '尚未接通' : '局部'} power={isPowerPort(domain(toKey))} onChange={to => changeFields({ to })} />
           <label className="v1-local-endpoints"><input type="checkbox" checked={local}
             onChange={event => setLocal(event.target.checked)} />显示局部及未接通端点</label>
           {choices.limited && <p role="status">可达性搜索达到上限，已保留系统级终点。</p>}
@@ -198,7 +185,8 @@ export function LinkEditor({ store, options, selected, result, budget, point, co
             </select></label>
           </details>}
         </div>
-        <button type="submit">{selected && !draft ? '保存链路' : '保存为链路'}</button>
+        <button type="submit">{draft === 'edit' ? '保存当前链路修改' : selected && !draft ? '保存链路' : '保存为链路'}</button>
+        {draft && <button type="button" onClick={() => choose(draft === 'edit' ? selected?.id : undefined)}>取消{draft === 'edit' ? '修改' : '新建'}</button>}
       </form>
     </details>
     {selected && <>
