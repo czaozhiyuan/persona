@@ -235,6 +235,8 @@ export function TopologyEditor({ centerPlacement, linkControls, library, store, 
         })}
         resize={(frame, adjustments) => commit(draft =>
           resizeTopologyFrame(moveTopologyNodes(draft, adjustments), frame))}
+        saveExpansion={({ moves, frames }) => commit(draft =>
+          frames.reduce(resizeTopologyFrame, moveTopologyNodes(draft, moves)))}
         connect={(path, connection) => editScope(path, current => ({
           ...current, connections: [...(current.connections ?? []), { ...connection, id: crypto.randomUUID() }],
         }))}
