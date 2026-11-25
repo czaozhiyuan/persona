@@ -16,7 +16,7 @@ export function PortLabel({ port, ports, open, value, labelContext }: { labelCon
   return open ? <button type="button" className="v1-port-label nodrag nopan" title={value ? label + ' · ' + value : label}
     aria-label={`操作端口 ${label}`} aria-haspopup="dialog"
     onClick={event => { event.stopPropagation(); open(port.id); }}
-    onDoubleClick={event => event.stopPropagation()}>{label}</button> : <span>{label}</span>;
+    onDoubleClick={event => event.stopPropagation()}>{label}{value?.startsWith('复用光 ') && <small className="v1-port-multiplex">{value}</small>}</button> : <span>{label}</span>;
 }
 
 export function BlockPorts({ labelContext, portValue, ports, highlighted, newPortId, handleId, editable = false, wireState, openPort }: {

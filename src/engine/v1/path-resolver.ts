@@ -167,7 +167,7 @@ export function createPathResolver(project: Project) {
     const query = {
       starts: [from], target: to, adjacent: outgoing, carrier, required, allRequired: (1n << BigInt(requiredRefs.size)) - 1n,
       startFlow: from.definition.opticalEmitter || sources.has(from) ? opticalSourceFlow : undefined,
-      startCarriers: from.definition.type === 'OPTICAL' ? sources : undefined,
+      startCarriers: sources,
     };
     let result = searchSignalPath(query);
     if (result.status === 'ambiguous' && result.channelPort && !request.channelId) {
@@ -217,7 +217,7 @@ export function createPathResolver(project: Project) {
               visited.add(last);
             }
           }
-          const prefix = searchSignalPath({ starts: [from], target: last, adjacent: outgoing, carrier });
+          const prefix = searchSignalPath({ starts: [from], target: last, adjacent: outgoing, carrier, startCarriers: sources });
           const trace = prefix.status === 'resolved' ? traceSupplies(prefix.path, sources).trace : undefined;
           const cascaded = graph.edges.some(edge => edge.supply && visited.has(edge.supply));
           const rejected = !emitted ? dml : outgoing.get(last)?.find(edge => !result.reached.has(edge.to));

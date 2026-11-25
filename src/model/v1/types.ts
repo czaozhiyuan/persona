@@ -68,6 +68,7 @@ export type ComponentIconKey = typeof componentIconKeys[number];
 
 export type ComponentDefinition = DefinitionIdentity & {
   kind: 'component';
+  wdm?: boolean;
   iconKey?: ComponentIconKey;
   physicalFootprint?: PhysicalFootprint;
   transfers?: readonly Transfer[];

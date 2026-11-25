@@ -143,7 +143,8 @@ export function searchSignalPath(query: Search): SearchResult {
       if (current.flow && current.flow !== portFlowAt(edge, current.port)) continue;
       const port = reverse ? edge.from : edge.to;
       if (query.opticalOnly && port.definition.type !== 'OPTICAL') continue;
-      const requested = edge.supply && query.supplyCarrier ? intersectCarrier(query.carrier, query.supplyCarrier(edge)) : query.carrier;
+      const emitted = edge.channels.kind === 'enter' && !edge.supply ? query.startCarriers?.get(edge.to) : undefined;
+      const requested = intersectCarrier(query.carrier, edge.supply && query.supplyCarrier ? query.supplyCarrier(edge) : emitted);
       const carrier = query.ignoreChannels ? undefined : transition(edge, current.carrier, requested, reverse);
       if (carrier === false || carrier?.length === 0) continue;
       const next = stateAt(port, carrier, current.required | (query.required?.get(edge) ?? 0n), portFlowAt(edge, port));

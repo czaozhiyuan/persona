@@ -21,8 +21,8 @@ export type SignalChannels =
 
 export type SignalEdgeSource =
   | { kind: 'portMapping'; publicPort: EndpointRef }
-  | { kind: 'connection'; ref: ConnectionRef; mediaKind?: Connection['mediaKind'] }
-  | { kind: 'cableCore'; ref: CableCoreRef; aPin: number; bPin: number }
+  | { kind: 'connection'; ref: ConnectionRef; mediaKind?: Connection['mediaKind']; lossDb?: number }
+  | { kind: 'cableCore'; ref: CableCoreRef; aPin: number; bPin: number; lossDb?: number }
   | { kind: 'transfer'; index: number; transfer: Transfer }
   | { kind: 'switchRoute'; stateId: string; index: number; route: OpticalRoute };
 
@@ -142,6 +142,7 @@ export function buildSignalGraph(project: Project): SignalGraph {
       for (const connection of definition.connections ?? []) {
         addWire(localPort(instancePath, connection.from), localPort(instancePath, connection.to), {
           kind: 'connection', ref: { scopePath: instancePath, connectionId: connection.id }, mediaKind: connection.mediaKind,
+          ...(connection.lossDb !== undefined && { lossDb: connection.lossDb }),
         });
       }
       for (const bundle of definition.cableBundles ?? []) {
@@ -152,6 +153,7 @@ export function buildSignalGraph(project: Project): SignalGraph {
           addWire(a, b, {
             kind: 'cableCore', ref: { scopePath: instancePath, bundleId: bundle.id, coreId: core.id },
             aPin: core.a.pin, bPin: core.b.pin,
+            ...(core.lossDb !== undefined && { lossDb: core.lossDb }),
           });
         }
       }

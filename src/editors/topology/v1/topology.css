@@ -61,6 +61,10 @@
   font: inherit; text-align: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; pointer-events: auto;
 }
 .v1-topology-port .v1-port-label:hover { text-decoration: underline; }
+.v1-port-multiplex { display: block; font-size: .65rem; font-weight: normal; white-space: normal; }
+.v1-wire-readings:has(details) { position: absolute; left: .5rem; bottom: .5rem; z-index: 4; max-width: min(42rem, 85%); max-height: 45%; overflow: auto; padding: .4rem .6rem; background: white; border: 1px solid #b6c7c1; border-radius: 4px; }
+.v1-multiplex-details table { border-collapse: collapse; }
+.v1-multiplex-details :is(th, td) { text-align: left; padding: .2rem .4rem; border-bottom: 1px solid #d8e2de; }
 .v1-port-actions label { display: block; margin-block: .45rem; }
 .v1-port-actions textarea { display: block; width: 100%; resize: vertical; }
 .v1-port-actions form + form { border-top: 1px solid #ccdad5; margin-top: .8rem; padding-top: .6rem; }

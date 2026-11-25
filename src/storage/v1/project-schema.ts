@@ -144,6 +144,7 @@ const transfer = byKind({
 const definition = { ...identity, ports: list(port) };
 const footprint = { widthMm: number, depthMm: number };
 const component = shape({ ...definition, kind: oneOf('component') }, {
+  wdm: boolean,
   iconKey: oneOf(...componentIconKeys),
   physicalFootprint: shape(footprint),
   parameters: list(parameter), transfers: list(transfer),
@@ -161,9 +162,9 @@ const cableSide = shape({ pin: number }, { endpoint: localPort });
 const moduleDefinition = shape({ ...definition, kind: oneOf('module'), instances: list(instance) }, {
   parameters: list(parameter),
   connections: list(shape({ id: text, from: localPort, to: localPort }, {
-    mediaKind: oneOf('OPTICAL_FIBER', 'RF_COAX', 'RJ45_CABLE'),
+    mediaKind: oneOf('OPTICAL_FIBER', 'RF_COAX', 'RJ45_CABLE'), lossDb: number,
   })),
-  cableBundles: list(shape({ id: text, coreCount: number, cores: list(shape({ id: text, a: cableSide, b: cableSide })) })),
+  cableBundles: list(shape({ id: text, coreCount: number, cores: list(shape({ id: text, a: cableSide, b: cableSide }, { lossDb: number })) })),
   portMappings: list(shape({ portId: text, target: localPort })),
   parameterMappings: list(shape({ parameterId: text, target: shape({ instanceId: text, parameterId: text }) })),
   physicalEnclosure: shape({ ...footprint, heightMm: number }),
