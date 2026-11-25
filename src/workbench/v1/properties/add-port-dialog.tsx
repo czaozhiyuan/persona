@@ -124,7 +124,7 @@ function PortDetail({ form, port, owner, save, remove, close }: {
   }}>
     <h4>{port ? '端口详情' : '新建端口'}</h4>
     <div className="v1-port-detail-fields">
-      {!isPowerPort(type) && <label>端口名称<input name="name" required={!port} defaultValue={editablePortName(seed)}
+      {!isPowerPort(type) && <label>端口名称<textarea rows={2} name="name" required={!port} defaultValue={editablePortName(seed)}
         placeholder={port ? portDisplayName(seed) : undefined} /></label>}
       <div className="v1-port-choices">
         <fieldset className="v1-port-radio-group">

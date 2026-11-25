@@ -33,7 +33,7 @@ export function PortActionsDialog({ port, name, label, rename, locations, exposu
     }}>
       <p>在「{exposure.moduleName}」边界创建对外端口，并连接到此端口。</p>
       {exposure.locations.length > 0 && <p>编辑共享结构会同时应用到 {exposure.locations.join('、')}。</p>}
-      {!isPowerPort(port.type) && <label>对外端口名称 <input name="name" defaultValue={portDisplayName(port)} required autoFocus /></label>}
+      {!isPowerPort(port.type) && <label>对外端口名称 <textarea rows={2} name="name" defaultValue={portDisplayName(port)} required autoFocus /></label>}
       <button type="submit">引出为当前模块端口</button>
     </form>}
     {!isPowerPort(port.type) && <form onSubmit={event => {
@@ -41,7 +41,7 @@ export function PortActionsDialog({ port, name, label, rename, locations, exposu
       rename(field(new FormData(event.currentTarget), 'name'));
     }}>
       {locations.length > 0 && <p>显示名称会更新到 {locations.join('、')}。</p>}
-      <label>显示名称 <input name="name" defaultValue={editablePortName(port)} placeholder={portDisplayName(port)} autoFocus={!exposure} /></label>
+      <label>显示名称 <textarea rows={2} name="name" defaultValue={editablePortName(port)} placeholder={portDisplayName(port)} autoFocus={!exposure} /></label>
       <button type="submit">保存显示名称</button>
     </form>}
     {error && <p className="error" role="alert">{error}</p>}

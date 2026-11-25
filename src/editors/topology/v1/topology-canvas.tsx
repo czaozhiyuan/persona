@@ -59,6 +59,7 @@ type NodeData = {
 };
 type DeviceNode = Node<NodeData, 'device'>;
 type FrameNode = Node<NodeData & {
+  onPortHeight: (key: string, height: number) => void;
   outerHandles: boolean;
   locations: readonly string[];
   resize?: Parameters<typeof FrameResizeHandles>[0];
@@ -112,7 +113,7 @@ function Device({ id, data, selected }: NodeProps<DeviceNode>) {
 
 function Frame({ id, data, selected, width, height }: NodeProps<FrameNode>) {
   return <>
-    <ModuleFrame labelContext={data.labelContext} iconKey={data.iconKey} metricTitle={data.notes?.map(n => n.detail).join('\n')} portValue={data.portValue} id={id} width={width} height={height} name={data.name} ports={data.ports} highlighted={data.pathPorts} newPortId={data.newPortId} handleId={handleId}
+    <ModuleFrame frameKey={data.key} onPortHeight={data.onPortHeight} labelContext={data.labelContext} iconKey={data.iconKey} metricTitle={data.notes?.map(n => n.detail).join('\n')} portValue={data.portValue} id={id} width={width} height={height} name={data.name} ports={data.ports} highlighted={data.pathPorts} newPortId={data.newPortId} handleId={handleId}
       editable outerHandles={data.outerHandles} selected={selected} wireState={data.wireState} openPort={data.openPort}
       controls={<>
         {data.locations.length > 0 && <span className="v1-inline-shared" title={data.locations.join('、')}
@@ -192,6 +193,10 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
   const appliedView = useRef<CanvasView>(undefined);
   const [resizePreview, setResizePreview] = useState<FrameResizePreview>();
   const [measured, setMeasured] = useState<ReadonlyMap<string, { width: number; height: number }>>(new Map());
+  const [portHeights, setPortHeights] = useState<ReadonlyMap<string, number>>(new Map());
+  const onPortHeight = useCallback((key: string, height: number) => {
+    setPortHeights(previous => previous.get(key) === height ? previous : new Map(previous).set(key, height));
+  }, []);
   const dragSession = useRef<DragSession | undefined>(undefined);
   const [dropPreview, setDropPreview] = useState<DropPreview>();
   const renderedPreview = useRef<DropPreview | undefined>(undefined);
@@ -201,8 +206,8 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
   const canvas = useRef<HTMLDivElement>(null);
   const flow = useRef<ReactFlowInstance<CanvasNode, WiringEdge>>(null);
 
-  const projection = useMemo(() => projectTopology(project, instances, modulePath, expanded, measured, resizePreview),
-    [project, instances, modulePath, expanded, measured, resizePreview]);
+  const projection = useMemo(() => projectTopology(project, instances, modulePath, expanded, measured, resizePreview, portHeights),
+    [project, instances, modulePath, expanded, measured, resizePreview, portHeights]);
   const { nodes: items, rootKey, nodeByKey, scopes } = projection;
   // An empty scope has nothing to fit. A queued fit would zoom to its first insertion.
   const [fitInitialNodes] = useState(() => !initialViewport && items.length > 0);
@@ -342,9 +347,9 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
       selectable: !boundary, focusable: !boundary, zIndex: 2 + path.length - modulePath.length,
       measured: { width: frame.display.width, height: frame.display.height },
       style: { width: frame.display.width, height: frame.display.height, pointerEvents: 'none' },
-      data: { ...data, outerHandles: !boundary, locations: boundary ? [] : structureScope(instances, definition.id),
+      data: { ...data, onPortHeight, outerHandles: !boundary, locations: boundary ? [] : structureScope(instances, definition.id),
         resize: {
-          frame: frame.display, insets: frameInsets(definition.ports), originLimit,
+          frame: frame.display, insets: frameInsets(definition.ports, portHeights.get(key)), originLimit,
           preview: next => setResizePreview(next && { key, frame: next }),
           childrenBounds: direct.map(child => child.frame ? { ...child.bounds,
             width: child.frame.display.width, height: child.frame.display.height } : child.bounds),

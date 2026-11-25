@@ -25,7 +25,7 @@ export function preserveDeletionLayout(project: Project, parentIds: ReadonlySet<
   if (!affected.size) return project;
 
   const instances = [...resolveHierarchy(project).walkInstances()];
-  const after = projectTopology(project, instances, scope, expanded, measured);
+  const after = projectTopology(project, instances, scope, expanded, measured, undefined, before.portHeights);
   let preserved = project;
   for (const key of affected) {
     const node = before.nodeByKey.get(key);
@@ -37,7 +37,7 @@ export function preserveDeletionLayout(project: Project, parentIds: ReadonlySet<
   }
 
   // New frame bounds may expose a previously clamped position. Deleting an earlier child can also shift default slots.
-  const final = preserved === project ? after : projectTopology(preserved, instances, scope, expanded, measured);
+  const final = preserved === project ? after : projectTopology(preserved, instances, scope, expanded, measured, undefined, before.portHeights);
   const moves: TopologyPlacement[] = [];
   for (const key of affected) {
     for (const child of before.scopes.get(key)?.members ?? []) {
