@@ -82,7 +82,8 @@ type DragSession = {
   preview?: DropPreview;
   anchor: TopologyItem;
   members: readonly TopologyItem[];
-  keys: ReadonlySet<string>;
+  moduleBounds: ReadonlyMap<string, Rect>;
+  leftAnchor: boolean;
   bounds: Rect;
   extent?: CoordinateExtent;
   frame?: TopologyFrame;
@@ -428,7 +429,13 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
     const bounds = groupDragBounds(ordered);
     const extent = parent && frame ? groupDragExtent(bounds, moduleExtent(frame.base, frame.insets)) : undefined;
     cancelExpansion();
-    dragSession.current = { base: project, displayed, anchor, members: ordered, keys: new Set(ordered.map(item => item.key)),
+    // Moving modules and their descendants follow the pointer. Hit-test their original canvas positions.
+    const moduleBounds = new Map<string, Rect>();
+    for (const item of items) {
+      const rect = item.item.definition.kind === 'module' && boundsOf(item);
+      if (rect) moduleBounds.set(item.key, rect);
+    }
+    dragSession.current = { base: project, displayed, anchor, members: ordered, moduleBounds, leftAnchor: false,
       bounds, extent,
       frame: frame && !frame.saved ? { modulePath: parentPath, ...frame.base } : undefined };
     if (!selectedKeys.has(anchor.key)) selectObject(anchor.item.instancePath, false);
@@ -468,7 +475,11 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
   }
 
   function targetAt(session: DragSession, point: XYPosition) {
-    return reparentDropTarget(session.anchor, items, modulePath, boundsOf, point, 6 / (flow.current?.getZoom() ?? 1), session.keys);
+    const target = reparentDropTarget(session.anchor, items, modulePath, session.moduleBounds, point);
+    // A small drag inside the grabbed module just repositions it. Returning to it is a self-drop.
+    if (target?.node?.key !== session.anchor.key) session.leftAnchor = true;
+    else if (!session.leftAnchor) return;
+    return target;
   }
 
   function previewDrag(event: MouseEvent | TouchEvent, node: CanvasNode) {
@@ -486,7 +497,7 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
       const name = owner?.instance?.name ?? owner?.definition.name ?? '当前模块';
       session.preview = { ...target, selectedCount: session.members.length, plan: checked?.ok ? checked : undefined,
         error: target.problem ?? (checked?.ok === false ? checked.message : undefined),
-        label: `${target.kind === 'in' ? '移入' : '移到上一级'}：${name}` };
+        label: `移入：${name}` };
       setDropPreview(session.preview);
     }
     const { x, y } = dragDelta(session, node.position);
@@ -520,7 +531,7 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
         return;
       }
       const frame = target.node?.frame;
-      const bounds = target.node && boundsOf(target.node);
+      const bounds = target.node && session.moduleBounds.get(target.node.key);
       const definition = target.node?.item.definition;
       const position = frame && bounds ? {
         x: point.x - bounds.x + frame.display.x - session.anchor.bounds.width / 2,

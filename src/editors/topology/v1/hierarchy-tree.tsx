@@ -61,9 +61,8 @@ export function HierarchyTree({ project, focusMoved, move, instances, modulePath
     if (session.hover?.key !== key) {
       const plan = item.definition.kind === 'module' ? planInstanceMove(session.base, session.source, item.instancePath) : undefined;
       const name = showName(item.instancePath);
-      const up = item.instancePath.length === session.source.length - 2;
       session.hover = {
-        key, label: `${up ? '移到上一级' : '移入'}：${name}`,
+        key, label: `移入：${name}`,
         plan: plan?.ok ? plan : undefined,
         error: plan ? (plan.ok ? undefined : plan.message) : '请选择一个模块条目。',
         locations: plan?.ok && plan.affected.length > 1 ? structureLocations(instances, plan.affected.map(item => item.from)) : [],

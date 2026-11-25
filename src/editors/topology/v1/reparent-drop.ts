@@ -18,50 +18,31 @@ type DropTarget = {
   problem?: string;
 };
 
-function contains(rect: Rect, point: XYPosition, margin = 0) {
-  return point.x >= rect.x - margin && point.x <= rect.x + rect.width + margin
-    && point.y >= rect.y - margin && point.y <= rect.y + rect.height + margin;
-}
-
-function moduleBody(node: TopologyItem, bounds: Rect): Rect {
-  if (!node.frame) return bounds;
-  const insets = node.frame.insets;
-  return { x: bounds.x + insets.left, y: bounds.y + insets.top,
-    width: bounds.width - insets.left - insets.right, height: bounds.height - insets.top - framePadding };
+function contains(rect: Rect, point: XYPosition) {
+  return point.x >= rect.x && point.x <= rect.x + rect.width
+    && point.y >= rect.y && point.y <= rect.y + rect.height;
 }
 
 export function reparentDropTarget(source: TopologyItem, nodes: readonly TopologyItem[], rootPath: readonly string[],
-  boundsOf: (node: TopologyItem) => Rect | undefined, point: XYPosition, edgeMargin: number, movingKeys: ReadonlySet<string>): DropTarget | undefined {
-  const path = source.item.instancePath;
-  const parentPath = path.slice(0, -1);
-  const parentKey = hierarchyKey(parentPath);
-  const parent = nodes.find(node => node.key === parentKey);
-  const parentBounds = parent && boundsOf(parent);
-  if (!parentBounds || contains(parentBounds, point, edgeMargin)) {
-    const siblings = nodes.filter(node => !movingKeys.has(node.key) && node.item.definition.kind === 'module'
-      && node.item.instancePath.length === path.length && inHierarchy(parentPath, node.item.instancePath));
-    let nearby: DropTarget | undefined;
-    // Collapsed blocks sit above expanded frames. Prefer exact hits before the edge margin.
-    for (const node of siblings.reverse().sort((a, b) => Number(!!a.frame) - Number(!!b.frame))) {
-      const bounds = boundsOf(node);
-      if (!bounds) continue;
-      const target = { kind: 'in' as const, node, destination: node.item.instancePath };
-      if (contains(bounds, point)) return target;
-      if (!nearby && contains(bounds, point, edgeMargin)) nearby = target;
-    }
-    return nearby;
-  }
-  if (parentPath.length <= rootPath.length) {
-    return { kind: 'up', node: parent, destination: parentPath, problem: parentPath.length ? '请使用「移到上一级」，或在上一级展开模块后拖出。' : '请在顶层模块边框内放置。' };
+  bounds: ReadonlyMap<string, Rect>, point: XYPosition): DropTarget | undefined {
+  const parentPath = source.item.instancePath.slice(0, -1);
+  let hit: TopologyItem | undefined;
+  for (const node of nodes) {
+    const rect = bounds.get(node.key);
+    if (!rect || !contains(rect, point)) continue;
+    const depth = node.item.instancePath.length;
+    // On the same level compact cards are drawn above frames, then later siblings above earlier ones.
+    if (!hit || depth > hit.item.instancePath.length
+      || (depth === hit.item.instancePath.length && (!node.frame || hit.frame))) hit = node;
   }
 
-  const destination = parentPath.slice(0, -1);
-  const grandparent = nodes.find(node => node.key === hierarchyKey(destination));
-  const outer = grandparent && boundsOf(grandparent);
-  if (outer && !contains(moduleBody(grandparent, outer), point)) {
-    return { kind: 'up', node: grandparent, destination, problem: '请拖到直接上一级模块的可用区域。' };
+  const destination = hit?.item.instancePath ?? rootPath;
+  if (!hit && bounds.has(hierarchyKey(rootPath))) {
+    return { kind: 'up', node: nodes.find(node => node.key === hierarchyKey(rootPath)), destination,
+      problem: rootPath.length ? '请在当前模块边框内放置，或在上一级展开模块后拖出。' : '请在顶层模块边框内放置。' };
   }
-  return { kind: 'up', node: grandparent, destination };
+  if (hierarchyKey(destination) === hierarchyKey(parentPath)) return;
+  return { kind: inHierarchy(destination, parentPath) ? 'up' : 'in', node: hit, destination };
 }
 
 export function groupDragBounds(items: readonly { key: string; bounds: Rect; frame?: { display: Rect } }[]): Rect {

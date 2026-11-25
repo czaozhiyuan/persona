@@ -217,7 +217,7 @@ test('an unsupported structural move reports its cause and leaves the snapshot a
     { project: localCollision, source: modulator, destination: target, reason: /已有实例「已有调制器」.*内部引用冲突/ },
     { project: initial, source: [], destination: target, reason: /根模块不能移动/ },
     { project: initial, source: ['TX_A'], destination: target, reason: /自身或其后代/ },
-    { project: initial, source: modulator, destination: ['RX_A'], reason: /同层.*直接上一级/ },
+    { project: initial, source: modulator, destination: ['RX_A'], reason: /模块定义「发射机箱」另被.*发射机箱 B/ },
     { project: localParameter, source: nested, destination: ['TX_A'], reason: /模块参数.*本层来源/ },
   ];
   for (const { project, source, destination, reason } of scenarios) {
@@ -240,4 +240,41 @@ test('an unsupported structural move reports its cause and leaves the snapshot a
   assert.equal(store.getSnapshot(), before);
   assert.equal(planInstanceMoves(initial, [modulator, ['TX_B', 'laser']], target).ok, false);
   assert.equal(planInstanceMoves(initial, [modulator, modulator], target).ok, false);
+});
+
+test('multi-level and cross-branch moves transfer only the selected wiring and preserve each occurrence', () => {
+  const base = addContainer(sample(), 'tx');
+  const slots = ['left', 'right'].map(id => ({ id, definitionId: id, name: id }));
+  const withSlots = editModule(base, 'mod-def', module => ({ ...module, instances: slots }));
+  const fixture: Project = { ...withSlots, moduleDefinitions: [...withSlots.moduleDefinitions,
+    ...slots.map(({ id, name }): ModuleDefinition => ({ kind: 'module', id, name, ports: [], instances: [] }))] };
+  const store = createProjectStore(fixture);
+  const sources = [modulator, ['TX_A', 'laser']];
+  const initial = store.getSnapshot().project;
+  const left = [...target, 'left'], right = [...target, 'right'];
+  let objects = sources;
+  for (const [step, destination] of [left, right, ['TX_A']].entries()) {
+    const before = store.getSnapshot().project;
+    const plan = planInstanceMoves(before, objects, destination);
+    assert.ok(plan.ok, !plan.ok ? plan.message : undefined);
+    assert.deepEqual(plan.wiring, { retained: 1, disconnected: step ? 0 : 2 });
+    assert.equal(store.commit(() => plan.project).ok, true);
+    const moved = store.getSnapshot().project;
+    const owner = store.resolveInstance(destination)?.definition;
+    assert.ok(owner?.kind === 'module');
+    assert.ok(owner.connections?.some(wire => wire.id === 'laser-feed'));
+    for (const branch of ['TX_A', 'TX_B']) {
+      const path = [branch, ...destination.slice(1), 'mzm'];
+      assert.deepEqual(store.resolveInstance(path)?.parameters.get('insertionLoss')?.value,
+        createProjectStore(initial).resolveInstance([branch, 'mzm'])?.parameters.get('insertionLoss')?.value);
+      const original = initial.layout?.physical?.find(item => item.instancePath.join('/') === [branch, 'mzm'].join('/'));
+      assert.deepEqual(moved.layout?.physical?.find(item => item.instancePath.join('/') === path.join('/')),
+        original && { ...original, instancePath: path });
+    }
+    assert.deepEqual(roundTrip(moved), roundTrip(plan.project));
+    store.undo();
+    assert.equal(store.getSnapshot().project, before);
+    store.redo();
+    objects = plan.instancePaths.map(path => [...path]);
+  }
 });
