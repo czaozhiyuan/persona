@@ -115,7 +115,8 @@ const parameter = byKind({
   }, { overridable: boolean, range: shape({}, limits), defaultValue: empirical }),
   enum: shape({ ...identity, kind: oneOf('enum'), options: list(text) }, { overridable: boolean, defaultValue: text }),
 });
-const port = shape({ id: text, type: oneOf('RF', 'OPTICAL', 'DC_POWER', 'AC_POWER', 'CONTROL'), direction: oneOf('in', 'out') }, {
+const port = shape({ id: text, type: oneOf('RF', 'OPTICAL', 'DC_POWER', 'AC_POWER', 'CONTROL'), direction: oneOf('in', 'out', 'bidirectional') }, {
+  side: oneOf('top'),
   name: text, channelIds: channels, opticalEmitter: shape({}, { powerDbm: opticalQuantity }), inputVoltageV: dcQuantity, outputVoltageV: dcQuantity,
   supplyCapacity: shape({ unit: oneOf('W', 'A'), value: fixed }), inputRating: shape({ unit: oneOf('dBm', 'V', 'A', 'W') }, limits),
 });
@@ -123,7 +124,7 @@ const portPair = { fromPortId: text, toPortId: text };
 const opticalOptions = { channelIds: channels, gainDb: opticalQuantity };
 const transfer = byKind({
   rf: shape({ ...portPair, kind: oneOf('rf') }, { gainDb: rfQuantity, nfDb: rfQuantity }),
-  optical: shape({ ...portPair, kind: oneOf('optical') }, opticalOptions),
+  optical: shape({ ...portPair, kind: oneOf('optical') }, { ...opticalOptions, insertionLossDb: opticalQuantity }),
   wavelengthConversion: shape({
     ...portPair, kind: oneOf('wavelengthConversion'), fromChannelId: text, toChannelId: text,
   }, { gainDb: opticalQuantity }),
@@ -143,6 +144,7 @@ const transfer = byKind({
 const definition = { ...identity, ports: list(port) };
 const footprint = { widthMm: number, depthMm: number };
 const component = shape({ ...definition, kind: oneOf('component') }, {
+  wdm: boolean,
   iconKey: oneOf(...componentIconKeys),
   physicalFootprint: shape(footprint),
   parameters: list(parameter), transfers: list(transfer),
@@ -160,9 +162,9 @@ const cableSide = shape({ pin: number }, { endpoint: localPort });
 const moduleDefinition = shape({ ...definition, kind: oneOf('module'), instances: list(instance) }, {
   parameters: list(parameter),
   connections: list(shape({ id: text, from: localPort, to: localPort }, {
-    mediaKind: oneOf('OPTICAL_FIBER', 'RF_COAX', 'RJ45_CABLE'),
+    mediaKind: oneOf('OPTICAL_FIBER', 'RF_COAX', 'RJ45_CABLE'), lossDb: number,
   })),
-  cableBundles: list(shape({ id: text, coreCount: number, cores: list(shape({ id: text, a: cableSide, b: cableSide })) })),
+  cableBundles: list(shape({ id: text, coreCount: number, cores: list(shape({ id: text, a: cableSide, b: cableSide }, { lossDb: number })) })),
   portMappings: list(shape({ portId: text, target: localPort })),
   parameterMappings: list(shape({ parameterId: text, target: shape({ instanceId: text, parameterId: text }) })),
   physicalEnclosure: shape({ ...footprint, heightMm: number }),

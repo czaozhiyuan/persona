@@ -1,5 +1,6 @@
 import type { OpticalChannelId } from '../../model/v1/channels';
-import { channelRoutingPorts } from './signal-graph';
+import type { PortFlow } from '../../model/v1/types';
+import { channelRoutingPorts, portFlowAt } from './signal-graph';
 import type { SignalEdge, SignalPort } from './signal-graph';
 
 /** Undefined denotes an unrestricted optical carrier, or no carrier at an electrical port. */
@@ -11,6 +12,7 @@ type State = {
   port: SignalPort;
   carrier: Carrier;
   required: bigint;
+  flow?: PortFlow;
   next: Arc[];
   previous: State[];
 };
@@ -22,8 +24,11 @@ type Search = {
   adjacent: ReadonlyMap<SignalPort, readonly SignalEdge[]>;
   carrier: Carrier;
   startCarriers?: ReadonlyMap<SignalPort, Carrier>;
+  startFlow?: (port: SignalPort) => PortFlow;
+  ignoreChannels?: boolean;
   supplyCarrier?: (edge: SignalEdge) => Carrier;
   targetCarrier?: Carrier;
+  targetFlow?: PortFlow;
   required?: ReadonlyMap<SignalEdge, bigint>;
   allRequired?: bigint;
   opticalOnly?: boolean;
@@ -100,8 +105,9 @@ export function searchSignalPath(query: Search): SearchResult {
   const pending: State[] = [];
   const targets: State[] = [];
 
-  function stateAt(port: SignalPort, carrier: Carrier, required: bigint): State {
-    const key = JSON.stringify([carrier && [...carrier].sort(), required.toString()]);
+  function stateAt(port: SignalPort, carrier: Carrier, required: bigint, arrival?: PortFlow): State {
+    const flow = port.definition.direction === 'bidirectional' ? arrival : undefined;
+    const key = JSON.stringify([carrier && [...carrier].sort(), required.toString(), flow]);
     let atPort = index.get(port);
     if (!atPort) {
       atPort = new Map();
@@ -109,7 +115,7 @@ export function searchSignalPath(query: Search): SearchResult {
     }
     let state = atPort.get(key);
     if (!state) {
-      state = { port, carrier, required, next: [], previous: [] };
+      state = { port, carrier, required, flow, next: [], previous: [] };
       atPort.set(key, state);
       pending.push(state);
     }
@@ -118,28 +124,30 @@ export function searchSignalPath(query: Search): SearchResult {
 
   const starts = new Set<State>();
   for (const port of query.starts) {
-    const carrier = port.definition.type === 'OPTICAL'
+    const carrier = !query.ignoreChannels && port.definition.type === 'OPTICAL'
       ? intersectCarrier(intersectCarrier(query.carrier, query.startCarriers?.get(port)), port.definition.channelIds) : undefined;
-    if (carrier?.length !== 0) starts.add(stateAt(port, carrier, 0n));
+    if (carrier?.length !== 0) starts.add(stateAt(port, carrier, 0n, query.startFlow?.(port)));
   }
   if (pending.length > MAX_STATES) return { status: 'search_limit' };
 
   let arcCount = 0;
   for (let cursor = 0; cursor < pending.length; cursor++) {
     const current = pending[cursor];
-    if (current.port === query.target) {
+    if (current.port === query.target && (!query.targetFlow || !current.flow || current.flow === query.targetFlow)) {
       if (current.required === allRequired && intersectCarrier(current.carrier, query.targetCarrier)?.length !== 0) {
         targets.push(current);
       }
       continue;
     }
     for (const edge of query.adjacent.get(current.port) ?? []) {
+      if (current.flow && current.flow !== portFlowAt(edge, current.port)) continue;
       const port = reverse ? edge.from : edge.to;
       if (query.opticalOnly && port.definition.type !== 'OPTICAL') continue;
-      const requested = edge.supply && query.supplyCarrier ? intersectCarrier(query.carrier, query.supplyCarrier(edge)) : query.carrier;
-      const carrier = transition(edge, current.carrier, requested, reverse);
+      const emitted = edge.channels.kind === 'enter' && !edge.supply ? query.startCarriers?.get(edge.to) : undefined;
+      const requested = intersectCarrier(query.carrier, edge.supply && query.supplyCarrier ? query.supplyCarrier(edge) : emitted);
+      const carrier = query.ignoreChannels ? undefined : transition(edge, current.carrier, requested, reverse);
       if (carrier === false || carrier?.length === 0) continue;
-      const next = stateAt(port, carrier, current.required | (query.required?.get(edge) ?? 0n));
+      const next = stateAt(port, carrier, current.required | (query.required?.get(edge) ?? 0n), portFlowAt(edge, port));
       if (pending.length > MAX_STATES || ++arcCount > MAX_ARCS) return { status: 'search_limit' };
       current.next.push({ state: next, edge });
       next.previous.push(current);
@@ -180,13 +188,13 @@ export function searchSignalPath(query: Search): SearchResult {
   const viable = [...starts].filter(state => counts.has(state));
   if (viable.length !== 1) return { status: 'ambiguous' };
   if (counts.get(viable[0]) !== 1) {
-    const channelPort = query.carrier?.length === 1 || query.targetCarrier?.length === 1
-      ? undefined : channelRoutingPorts(viableEdges(relevant)).values().next().value;
+    const routers = query.carrier?.length === 1 || query.targetCarrier?.length === 1 ? undefined : channelRoutingPorts(viableEdges(relevant));
+    const channelPort = routers?.from.values().next().value ?? routers?.to.values().next().value;
     return { status: 'ambiguous', channelPort };
   }
   const states = [viable[0]];
   const edges: SignalEdge[] = [];
-  while (states.at(-1)!.port !== query.target) {
+  while (states.at(-1)!.next.length) {
     const next = states.at(-1)!.next.find(arc => counts.has(arc.state))!;
     states.push(next.state);
     edges.push(next.edge);

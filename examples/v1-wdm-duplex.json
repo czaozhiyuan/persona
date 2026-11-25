@@ -1,0 +1,853 @@
+{
+  "format": "persona-project",
+  "schemaVersion": 2,
+  "project": {
+    "id": "two-wdm",
+    "name": "双机箱 WDM",
+    "rootModuleDefinitionId": "root",
+    "namedLinks": [
+      {
+        "id": "wave0",
+        "name": "A → B · CWDM_1311",
+        "channelId": "CWDM_1311",
+        "from": {
+          "instancePath": [
+            "A",
+            "wave0"
+          ],
+          "portId": "OPT_OUT"
+        },
+        "to": {
+          "instancePath": [
+            "B",
+            "wave0"
+          ],
+          "portId": "OPT_IN"
+        }
+      },
+      {
+        "id": "wave1",
+        "name": "A → B · CWDM_1351",
+        "channelId": "CWDM_1351",
+        "from": {
+          "instancePath": [
+            "A",
+            "wave1"
+          ],
+          "portId": "OPT_OUT"
+        },
+        "to": {
+          "instancePath": [
+            "B",
+            "wave1"
+          ],
+          "portId": "OPT_IN"
+        }
+      },
+      {
+        "id": "wave2",
+        "name": "B → A · CWDM_1371",
+        "channelId": "CWDM_1371",
+        "from": {
+          "instancePath": [
+            "B",
+            "wave2"
+          ],
+          "portId": "OPT_OUT"
+        },
+        "to": {
+          "instancePath": [
+            "A",
+            "wave2"
+          ],
+          "portId": "OPT_IN"
+        }
+      },
+      {
+        "id": "wave3",
+        "name": "B → A · CWDM_1391",
+        "channelId": "CWDM_1391",
+        "from": {
+          "instancePath": [
+            "B",
+            "wave3"
+          ],
+          "portId": "OPT_OUT"
+        },
+        "to": {
+          "instancePath": [
+            "A",
+            "wave3"
+          ],
+          "portId": "OPT_IN"
+        }
+      }
+    ],
+    "componentDefinitions": [
+      {
+        "kind": "component",
+        "id": "library-wdm",
+        "name": "波分/解波分复用器（WDM）",
+        "ports": [
+          {
+            "id": "COM",
+            "name": "COM",
+            "type": "OPTICAL",
+            "direction": "bidirectional",
+            "side": "top"
+          },
+          {
+            "id": "CH1",
+            "name": "CWDM_1311",
+            "type": "OPTICAL",
+            "direction": "in",
+            "channelIds": [
+              "CWDM_1311"
+            ]
+          },
+          {
+            "id": "CH2",
+            "name": "CWDM_1351",
+            "type": "OPTICAL",
+            "direction": "in",
+            "channelIds": [
+              "CWDM_1351"
+            ]
+          },
+          {
+            "id": "CH3",
+            "name": "CWDM_1371",
+            "type": "OPTICAL",
+            "direction": "out",
+            "channelIds": [
+              "CWDM_1371"
+            ]
+          },
+          {
+            "id": "CH4",
+            "name": "CWDM_1391",
+            "type": "OPTICAL",
+            "direction": "out",
+            "channelIds": [
+              "CWDM_1391"
+            ]
+          }
+        ],
+        "wdm": true,
+        "parameters": [
+          {
+            "id": "insertionLoss",
+            "name": "统一通道插损",
+            "unit": "dB",
+            "range": {
+              "min": 0
+            },
+            "kind": "numeric",
+            "valueKind": "fixed",
+            "overridable": true,
+            "defaultValue": {
+              "kind": "fixed",
+              "value": 1
+            }
+          }
+        ],
+        "transfers": [
+          {
+            "kind": "optical",
+            "fromPortId": "CH1",
+            "toPortId": "COM",
+            "channelIds": [
+              "CWDM_1311"
+            ],
+            "insertionLossDb": {
+              "kind": "parameter",
+              "parameterId": "insertionLoss"
+            }
+          },
+          {
+            "kind": "optical",
+            "fromPortId": "CH2",
+            "toPortId": "COM",
+            "channelIds": [
+              "CWDM_1351"
+            ],
+            "insertionLossDb": {
+              "kind": "parameter",
+              "parameterId": "insertionLoss"
+            }
+          },
+          {
+            "kind": "optical",
+            "fromPortId": "COM",
+            "toPortId": "CH3",
+            "channelIds": [
+              "CWDM_1371"
+            ],
+            "insertionLossDb": {
+              "kind": "parameter",
+              "parameterId": "insertionLoss"
+            }
+          },
+          {
+            "kind": "optical",
+            "fromPortId": "COM",
+            "toPortId": "CH4",
+            "channelIds": [
+              "CWDM_1391"
+            ],
+            "insertionLossDb": {
+              "kind": "parameter",
+              "parameterId": "insertionLoss"
+            }
+          }
+        ]
+      },
+      {
+        "kind": "component",
+        "id": "wdm-reverse",
+        "name": "波分/解波分复用器（WDM）",
+        "ports": [
+          {
+            "id": "COM",
+            "name": "COM",
+            "type": "OPTICAL",
+            "direction": "bidirectional",
+            "side": "top"
+          },
+          {
+            "id": "CH1",
+            "name": "CWDM_1311",
+            "type": "OPTICAL",
+            "direction": "out",
+            "channelIds": [
+              "CWDM_1311"
+            ]
+          },
+          {
+            "id": "CH2",
+            "name": "CWDM_1351",
+            "type": "OPTICAL",
+            "direction": "out",
+            "channelIds": [
+              "CWDM_1351"
+            ]
+          },
+          {
+            "id": "CH3",
+            "name": "CWDM_1371",
+            "type": "OPTICAL",
+            "direction": "in",
+            "channelIds": [
+              "CWDM_1371"
+            ]
+          },
+          {
+            "id": "CH4",
+            "name": "CWDM_1391",
+            "type": "OPTICAL",
+            "direction": "in",
+            "channelIds": [
+              "CWDM_1391"
+            ]
+          }
+        ],
+        "wdm": true,
+        "parameters": [
+          {
+            "id": "insertionLoss",
+            "name": "统一通道插损",
+            "unit": "dB",
+            "range": {
+              "min": 0
+            },
+            "kind": "numeric",
+            "valueKind": "fixed",
+            "overridable": true,
+            "defaultValue": {
+              "kind": "fixed",
+              "value": 1
+            }
+          }
+        ],
+        "transfers": [
+          {
+            "kind": "optical",
+            "fromPortId": "COM",
+            "toPortId": "CH1",
+            "channelIds": [
+              "CWDM_1311"
+            ],
+            "insertionLossDb": {
+              "kind": "parameter",
+              "parameterId": "insertionLoss"
+            }
+          },
+          {
+            "kind": "optical",
+            "fromPortId": "COM",
+            "toPortId": "CH2",
+            "channelIds": [
+              "CWDM_1351"
+            ],
+            "insertionLossDb": {
+              "kind": "parameter",
+              "parameterId": "insertionLoss"
+            }
+          },
+          {
+            "kind": "optical",
+            "fromPortId": "CH3",
+            "toPortId": "COM",
+            "channelIds": [
+              "CWDM_1371"
+            ],
+            "insertionLossDb": {
+              "kind": "parameter",
+              "parameterId": "insertionLoss"
+            }
+          },
+          {
+            "kind": "optical",
+            "fromPortId": "CH4",
+            "toPortId": "COM",
+            "channelIds": [
+              "CWDM_1391"
+            ],
+            "insertionLossDb": {
+              "kind": "parameter",
+              "parameterId": "insertionLoss"
+            }
+          }
+        ]
+      },
+      {
+        "kind": "component",
+        "id": "library-laser",
+        "iconKey": "laser",
+        "name": "激光器",
+        "parameters": [
+          {
+            "id": "power",
+            "name": "信号光输出功率",
+            "unit": "dBm",
+            "kind": "numeric",
+            "valueKind": "opticalValue",
+            "overridable": true
+          }
+        ],
+        "ports": [
+          {
+            "id": "OPT_OUT",
+            "name": "光输出",
+            "type": "OPTICAL",
+            "direction": "out",
+            "opticalEmitter": {
+              "powerDbm": {
+                "kind": "parameter",
+                "parameterId": "power"
+              }
+            }
+          },
+          {
+            "id": "DC_IN",
+            "type": "DC_POWER",
+            "direction": "in",
+            "inputVoltageV": {
+              "kind": "fixed",
+              "value": 5
+            }
+          }
+        ]
+      },
+      {
+        "kind": "component",
+        "id": "library-pd",
+        "iconKey": "photodiode",
+        "name": "光电探测器（PD）",
+        "ports": [
+          {
+            "id": "OPT_IN",
+            "name": "光输入",
+            "type": "OPTICAL",
+            "direction": "in"
+          },
+          {
+            "id": "RF_OUT",
+            "name": "射频输出",
+            "type": "RF",
+            "direction": "out"
+          },
+          {
+            "id": "DC_IN",
+            "type": "DC_POWER",
+            "direction": "in",
+            "inputVoltageV": {
+              "kind": "fixed",
+              "value": 5
+            }
+          }
+        ],
+        "parameters": [
+          {
+            "id": "receiver",
+            "name": "外接 50 Ω 时的接收结构",
+            "kind": "enum",
+            "options": [
+              "external50",
+              "parallel50",
+              "active50"
+            ],
+            "overridable": true
+          },
+          {
+            "id": "responsivity",
+            "name": "响应度",
+            "unit": "A/W",
+            "range": {
+              "min": 0
+            },
+            "kind": "numeric",
+            "valueKind": "opticalValue",
+            "overridable": true
+          },
+          {
+            "id": "response",
+            "name": "无源 PD 归一化幅频响应（缺省平坦）",
+            "unit": "dB",
+            "kind": "numeric",
+            "valueKind": "rfValue",
+            "overridable": true
+          },
+          {
+            "id": "loadedGain",
+            "name": "有源接收机加载转换增益",
+            "unit": "V/W",
+            "kind": "numeric",
+            "valueKind": "rfValue",
+            "overridable": true
+          }
+        ],
+        "transfers": [
+          {
+            "kind": "oe",
+            "fromPortId": "OPT_IN",
+            "toPortId": "RF_OUT",
+            "receiver": {
+              "kind": "parameter",
+              "parameterId": "receiver"
+            },
+            "responsivity": {
+              "kind": "parameter",
+              "parameterId": "responsivity"
+            },
+            "responseDb": {
+              "kind": "parameter",
+              "parameterId": "response"
+            },
+            "loadedGain": {
+              "kind": "parameter",
+              "parameterId": "loadedGain"
+            }
+          }
+        ]
+      }
+    ],
+    "moduleDefinitions": [
+      {
+        "id": "root",
+        "kind": "module",
+        "name": "系统",
+        "ports": [],
+        "instances": [
+          {
+            "id": "A",
+            "name": "机箱 A",
+            "definitionId": "A"
+          },
+          {
+            "id": "B",
+            "name": "机箱 B",
+            "definitionId": "B"
+          }
+        ],
+        "connections": [
+          {
+            "id": "fibre",
+            "from": {
+              "instanceId": "A",
+              "portId": "COM"
+            },
+            "to": {
+              "instanceId": "B",
+              "portId": "COM"
+            },
+            "mediaKind": "OPTICAL_FIBER",
+            "lossDb": 2
+          }
+        ]
+      },
+      {
+        "id": "A",
+        "kind": "module",
+        "name": "机箱 A",
+        "ports": [
+          {
+            "id": "COM",
+            "name": "COM",
+            "direction": "bidirectional",
+            "type": "OPTICAL",
+            "side": "top"
+          }
+        ],
+        "instances": [
+          {
+            "id": "wdm",
+            "name": "WDM",
+            "definitionId": "library-wdm"
+          },
+          {
+            "id": "wave0",
+            "name": "光源 1",
+            "definitionId": "library-laser",
+            "parameterOverrides": {
+              "power": {
+                "kind": "fixed",
+                "value": 0
+              }
+            }
+          },
+          {
+            "id": "wave1",
+            "name": "光源 2",
+            "definitionId": "library-laser",
+            "parameterOverrides": {
+              "power": {
+                "kind": "fixed",
+                "value": 0
+              }
+            }
+          },
+          {
+            "id": "wave2",
+            "name": "PD 3",
+            "definitionId": "library-pd",
+            "parameterOverrides": {
+              "receiver": "external50",
+              "responsivity": {
+                "kind": "fixed",
+                "value": 0.8
+              }
+            }
+          },
+          {
+            "id": "wave3",
+            "name": "PD 4",
+            "definitionId": "library-pd",
+            "parameterOverrides": {
+              "receiver": "external50",
+              "responsivity": {
+                "kind": "fixed",
+                "value": 0.8
+              }
+            }
+          }
+        ],
+        "connections": [
+          {
+            "id": "branch0",
+            "from": {
+              "instanceId": "wave0",
+              "portId": "OPT_OUT"
+            },
+            "to": {
+              "instanceId": "wdm",
+              "portId": "CH1"
+            }
+          },
+          {
+            "id": "branch1",
+            "from": {
+              "instanceId": "wave1",
+              "portId": "OPT_OUT"
+            },
+            "to": {
+              "instanceId": "wdm",
+              "portId": "CH2"
+            }
+          },
+          {
+            "id": "branch2",
+            "from": {
+              "instanceId": "wdm",
+              "portId": "CH3"
+            },
+            "to": {
+              "instanceId": "wave2",
+              "portId": "OPT_IN"
+            }
+          },
+          {
+            "id": "branch3",
+            "from": {
+              "instanceId": "wdm",
+              "portId": "CH4"
+            },
+            "to": {
+              "instanceId": "wave3",
+              "portId": "OPT_IN"
+            }
+          }
+        ],
+        "portMappings": [
+          {
+            "portId": "COM",
+            "target": {
+              "instanceId": "wdm",
+              "portId": "COM"
+            }
+          }
+        ]
+      },
+      {
+        "id": "B",
+        "kind": "module",
+        "name": "机箱 B",
+        "ports": [
+          {
+            "id": "COM",
+            "name": "COM",
+            "direction": "bidirectional",
+            "type": "OPTICAL",
+            "side": "top"
+          }
+        ],
+        "instances": [
+          {
+            "id": "wdm",
+            "name": "WDM",
+            "definitionId": "wdm-reverse"
+          },
+          {
+            "id": "wave0",
+            "name": "PD 1",
+            "definitionId": "library-pd",
+            "parameterOverrides": {
+              "receiver": "external50",
+              "responsivity": {
+                "kind": "fixed",
+                "value": 0.8
+              }
+            }
+          },
+          {
+            "id": "wave1",
+            "name": "PD 2",
+            "definitionId": "library-pd",
+            "parameterOverrides": {
+              "receiver": "external50",
+              "responsivity": {
+                "kind": "fixed",
+                "value": 0.8
+              }
+            }
+          },
+          {
+            "id": "wave2",
+            "name": "光源 3",
+            "definitionId": "library-laser",
+            "parameterOverrides": {
+              "power": {
+                "kind": "fixed",
+                "value": 0
+              }
+            }
+          },
+          {
+            "id": "wave3",
+            "name": "光源 4",
+            "definitionId": "library-laser",
+            "parameterOverrides": {
+              "power": {
+                "kind": "fixed",
+                "value": 0
+              }
+            }
+          }
+        ],
+        "connections": [
+          {
+            "id": "branch0",
+            "from": {
+              "instanceId": "wdm",
+              "portId": "CH1"
+            },
+            "to": {
+              "instanceId": "wave0",
+              "portId": "OPT_IN"
+            }
+          },
+          {
+            "id": "branch1",
+            "from": {
+              "instanceId": "wdm",
+              "portId": "CH2"
+            },
+            "to": {
+              "instanceId": "wave1",
+              "portId": "OPT_IN"
+            }
+          },
+          {
+            "id": "branch2",
+            "from": {
+              "instanceId": "wave2",
+              "portId": "OPT_OUT"
+            },
+            "to": {
+              "instanceId": "wdm",
+              "portId": "CH3"
+            }
+          },
+          {
+            "id": "branch3",
+            "from": {
+              "instanceId": "wave3",
+              "portId": "OPT_OUT"
+            },
+            "to": {
+              "instanceId": "wdm",
+              "portId": "CH4"
+            }
+          }
+        ],
+        "portMappings": [
+          {
+            "portId": "COM",
+            "target": {
+              "instanceId": "wdm",
+              "portId": "COM"
+            }
+          }
+        ]
+      }
+    ],
+    "layout": {
+      "topology": [
+        {
+          "instancePath": [
+            "A"
+          ],
+          "x": 80,
+          "y": 140
+        },
+        {
+          "instancePath": [
+            "A",
+            "wdm"
+          ],
+          "x": 300,
+          "y": 160
+        },
+        {
+          "instancePath": [
+            "A",
+            "wave0"
+          ],
+          "x": 42,
+          "y": 110
+        },
+        {
+          "instancePath": [
+            "A",
+            "wave1"
+          ],
+          "x": 42,
+          "y": 265
+        },
+        {
+          "instancePath": [
+            "A",
+            "wave2"
+          ],
+          "x": 555,
+          "y": 110
+        },
+        {
+          "instancePath": [
+            "A",
+            "wave3"
+          ],
+          "x": 555,
+          "y": 265
+        },
+        {
+          "instancePath": [
+            "B"
+          ],
+          "x": 950,
+          "y": 140
+        },
+        {
+          "instancePath": [
+            "B",
+            "wdm"
+          ],
+          "x": 300,
+          "y": 160
+        },
+        {
+          "instancePath": [
+            "B",
+            "wave0"
+          ],
+          "x": 555,
+          "y": 110
+        },
+        {
+          "instancePath": [
+            "B",
+            "wave1"
+          ],
+          "x": 555,
+          "y": 265
+        },
+        {
+          "instancePath": [
+            "B",
+            "wave2"
+          ],
+          "x": 42,
+          "y": 110
+        },
+        {
+          "instancePath": [
+            "B",
+            "wave3"
+          ],
+          "x": 42,
+          "y": 265
+        }
+      ],
+      "topologyFrames": [
+        {
+          "modulePath": [
+            "A"
+          ],
+          "x": 0,
+          "y": 0,
+          "width": 780,
+          "height": 405
+        },
+        {
+          "modulePath": [
+            "B"
+          ],
+          "x": 0,
+          "y": 0,
+          "width": 780,
+          "height": 405
+        }
+      ]
+    }
+  }
+}

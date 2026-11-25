@@ -59,13 +59,25 @@ test('rendered multiline rows set the minimum projected and resized height per o
   const ports = [{ id: 'IN', direction: 'in', type: 'RF', name: '监测\n'.repeat(50).trim() }] as const;
   const project = { ...fixture, moduleDefinitions: fixture.moduleDefinitions.map(d => d.id === 'inner' ? { ...d, ports } : d) };
   const instances = [...resolveHierarchy(project).walkInstances()];
-  const view = projectTopology(project, instances, [], expanded, measured, undefined, new Map([[key, 900]]));
+  const view = projectTopology(project, instances, [], expanded, measured, undefined, new Map([[key, { side: 900, top: 0 }]]));
   const frame = view.nodeByKey.get(key)!.frame!.display;
   const insets = frameInsets(ports, 900);
   assert.equal(frame.height, insets.height);
   assert.equal(dragFrame(frame, 's', { x: 0, y: -2000 }, [], insets).height, frame.height);
   assert.ok(item(view, ['b', 'inner']).frame!.display.height < frame.height);
   assert.deepEqual(item(view, ['a', 'inner', 'device']).bounds, item(projectView(project), ['a', 'inner', 'device']).bounds);
+});
+
+test('top ports reserve their measured band above the title, children and side pins', () => {
+  const port = { id: 'COM', type: 'OPTICAL', direction: 'bidirectional', side: 'top' } as const;
+  const ordinary = frameInsets([]);
+  const insets = frameInsets([port], { top: 64, side: 120 });
+  assert.deepEqual([insets.left, insets.right], [ordinary.left, ordinary.right]);
+  assert.equal(insets.top, ordinary.top + 64);
+  const frame = { x: 10, y: 20, width: 500, height: 400 };
+  assert.equal(moduleExtent(frame, insets)[0][1], frame.y + insets.top);
+  assert.equal(dragFrame(frame, 's', { x: 0, y: -500 }, [], insets).height, insets.top + 120 + 28);
+  assert.ok(frameInsets(Array(8).fill(port)).minWidth >= 8 * 64);
 });
 
 test('deletion preserves affected visible frames per occurrence and surviving default slots in one edit', () => {

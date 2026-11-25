@@ -9,6 +9,7 @@ import { numberedNamesById } from '../../model/v1/display-names';
 import { createPathNames } from './structure-scope';
 import type { UserLibrary } from './use-library';
 import { TemplateEditor } from './template-editor';
+import { WdmConfiguration } from './properties/wdm-configuration';
 
 export function LibraryManager({ library, project, selected, close }: {
   library: UserLibrary; project: Project; selected?: InstancePath; close: () => void;
@@ -35,6 +36,12 @@ export function LibraryManager({ library, project, selected, close }: {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   function start(items: LibraryDefinition[]) { report(''); edit(items); }
+  function saveDraft(definition: LibraryDefinition) {
+    run(() => {
+      replace([definition, ...draft!.slice(1)].reduce(saveDefinition, config));
+      select(definition.id); edit(undefined); report('已保存到器件库。之后创建的对象将使用此模板。');
+    });
+  }
   function status(id: string) {
     if (config.hidden.includes(id)) return '内置 · 已隐藏';
     if (config.overrides.some(d => d.id === id)) return '内置 · 已修改';
@@ -43,11 +50,10 @@ export function LibraryManager({ library, project, selected, close }: {
   return <dialog className="v1-library-manager v1-properties" aria-label="管理器件库"
     ref={node => { if (node && !node.open) node.showModal(); }} onCancel={close}>
     <header><h2>{draft && labels.has(draft[0].id) ? '编辑模板 · ' + labels.get(draft[0].id) : '管理器件库'}</h2><button type="button" onClick={close}>关闭</button></header>
-    {draft ? <TemplateEditor key={draft[0].id} initial={draft[0]} hidden={config.hidden} definitions={[...definitions, ...draft.slice(1)]}
-      cancel={() => { edit(undefined); report(''); }} report={report} save={definition => run(() => {
-        replace([definition, ...draft.slice(1)].reduce(saveDefinition, config));
-        select(definition.id); edit(undefined); report('已保存到器件库。之后创建的对象将使用此模板。');
-      })} /> : <>
+    {draft ? draft[0].kind === 'component' && draft[0].wdm
+      ? <WdmConfiguration key={draft[0].id} template definition={draft[0]} cancel={() => { edit(undefined); report(''); }} save={saveDraft} />
+      : <TemplateEditor key={draft[0].id} initial={draft[0]} hidden={config.hidden} definitions={[...definitions, ...draft.slice(1)]}
+        cancel={() => { edit(undefined); report(''); }} report={report} save={saveDraft} /> : <>
       <div className="actions">{(['component', 'module'] as const).map(kind => <button key={kind} onClick={() => {
         const base = { id: crypto.randomUUID(), name: '', ports: [] };
         start([kind === 'module' ? { ...base, kind, instances: [] } : { ...base, kind }]);

@@ -20,7 +20,7 @@ export type ReceiverMode = typeof receiverModes[number];
 
 export type Transfer =
   | (PortPair & { kind: 'rf'; gainDb?: Quantity<RfValue>; nfDb?: Quantity<RfValue> })
-  | (OpticalRoute & { kind: 'optical' })
+  | (OpticalRoute & { kind: 'optical'; insertionLossDb?: Quantity<OpticalValue> })
   | (PortPair & { kind: 'splitter'; secondPortId: string; firstPercent?: Quantity<FixedValue>; excessLossDb?: Quantity<FixedValue> })
   | (PortPair & ChannelFilter & { kind: 'digitalTx' })
   | (PortPair & ChannelFilter & { kind: 'digitalRx'; sensitivityDbm?: Quantity<OpticalValue>; overloadDbm?: Quantity<OpticalValue> })

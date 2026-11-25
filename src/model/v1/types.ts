@@ -19,13 +19,28 @@ export type ConnectionRef = {
 
 export type PortType = 'RF' | 'OPTICAL' | 'DC_POWER' | 'AC_POWER' | 'CONTROL';
 export function isPowerPort(type?: PortType) { return type === 'DC_POWER' || type === 'AC_POWER'; }
-export type PortDirection = 'in' | 'out';
+export type PortFlow = 'in' | 'out';
+export type PortDirection = PortFlow | 'bidirectional';
+export const portDirectionLabels = { in: '输入', out: '输出', bidirectional: '双向' } as const;
+
+export function supportsDirection(direction: PortDirection, flow: PortFlow) {
+  return direction === flow || direction === 'bidirectional';
+}
+
+export function canConnect(from: PortDirection, to: PortDirection) {
+  return supportsDirection(from, 'out') && supportsDirection(to, 'in');
+}
+
+export function canMapDirection(outer: PortDirection, inner: PortDirection) {
+  return inner === 'bidirectional' || outer === inner;
+}
 
 export type PortDefinition = {
   id: string;
   name?: string;
   type: PortType;
   direction: PortDirection;
+  side?: 'top';
   channelIds?: readonly OpticalChannelId[];
   opticalEmitter?: OpticalEmitter;
   inputRating?: InputRating;
@@ -53,6 +68,7 @@ export type ComponentIconKey = typeof componentIconKeys[number];
 
 export type ComponentDefinition = DefinitionIdentity & {
   kind: 'component';
+  wdm?: boolean;
   iconKey?: ComponentIconKey;
   physicalFootprint?: PhysicalFootprint;
   transfers?: readonly Transfer[];

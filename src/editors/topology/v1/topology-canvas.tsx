@@ -6,6 +6,8 @@ import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, 
 import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
 import type { PathResult } from '../../../engine/v1/path-resolver';
 import { signalPortKey } from '../../../engine/v1/signal-graph';
+import type { MultiplexPower } from '../../../engine/v1/multiplex-power';
+import { multiplexCaption, MultiplexDetails } from '../../../workbench/v1/budgets/multiplex-details';
 import { blankModuleId } from '../../../library/v1/built-in';
 import { libraryDragType, readLibraryItem } from '../../../library/v1/insert-library-item';
 import type { LibraryItem } from '../../../library/v1/insert-library-item';
@@ -17,7 +19,8 @@ import type { EndpointRef, InstancePath, PortDefinition, PortMapping, Project, T
 import { createPathNames, structureScope } from '../../../workbench/v1/structure-scope';
 import { BlockPorts } from './block-ports';
 import { definitionIcon, DeviceIcon, type DeviceIconKey } from './device-icon';
-import { frameHeader, frameInsets, ModuleFrame } from './module-frame';
+import { frameInsets, ModuleFrame, type FramePortHeights } from './module-frame';
+import { canConnect } from '../../../model/v1/types';
 import { keepNodeInside, moduleExtent } from './frame-geometry';
 import { ModulePlacement } from './module-placement';
 import { FrameResizeHandles } from './frame-resize-handles';
@@ -37,6 +40,7 @@ import { handleId, nodeId, portKey, projectWiring, scopedWiringProblem } from '.
 import type { WiringEdge } from './topology-wiring';
 import type { CenterPlacement } from './topology-layout-edits';
 import { preserveDeletionLayout } from './topology-layout-edits';
+import { planInlineExpansion } from './inline-expansion-layout';
 import { SignalWire, signalColor } from './signal-wire';
 import '@xyflow/react/dist/style.css';
 
@@ -59,10 +63,10 @@ type NodeData = {
 };
 type DeviceNode = Node<NodeData, 'device'>;
 type FrameNode = Node<NodeData & {
-  onPortHeight: (key: string, height: number) => void;
+  onPortHeight: (key: string, height: FramePortHeights) => void;
   outerHandles: boolean;
   locations: readonly string[];
-  resize?: Parameters<typeof FrameResizeHandles>[0];
+  resize: Parameters<typeof FrameResizeHandles>[0];
 }, 'moduleFrame'>;
 type CanvasNode = DeviceNode | FrameNode;
 type DropPreview = NonNullable<ReturnType<typeof reparentDropTarget>> & {
@@ -113,7 +117,7 @@ function Device({ id, data, selected }: NodeProps<DeviceNode>) {
 
 function Frame({ id, data, selected, width, height }: NodeProps<FrameNode>) {
   return <>
-    <ModuleFrame frameKey={data.key} onPortHeight={data.onPortHeight} labelContext={data.labelContext} iconKey={data.iconKey} metricTitle={data.notes?.map(n => n.detail).join('\n')} portValue={data.portValue} id={id} width={width} height={height} name={data.name} ports={data.ports} highlighted={data.pathPorts} newPortId={data.newPortId} handleId={handleId}
+    <ModuleFrame frameKey={data.key} insets={data.resize.insets} onPortHeight={data.onPortHeight} labelContext={data.labelContext} iconKey={data.iconKey} metricTitle={data.notes?.map(n => n.detail).join('\n')} portValue={data.portValue} id={id} width={width} height={height} name={data.name} ports={data.ports} highlighted={data.pathPorts} newPortId={data.newPortId} handleId={handleId}
       editable outerHandles={data.outerHandles} selected={selected} wireState={data.wireState} openPort={data.openPort}
       controls={<>
         {data.locations.length > 0 && <span className="v1-inline-shared" title={data.locations.join('、')}
@@ -130,6 +134,7 @@ const nodeTypes = { device: Device, moduleFrame: Frame };
 const edgeTypes = { signal: SignalWire };
 
 type Props = {
+  multiplex: MultiplexPower;
   project: Project;
   instances: readonly ResolvedInstance[];
   modulePath: InstancePath;
@@ -155,6 +160,7 @@ type Props = {
   restoreView?: CanvasView;
   move: (placements: readonly TopologyPlacement[], frame?: TopologyFrame) => void;
   resize: (frame: TopologyFrame, placementAdjustments: readonly TopologyPlacement[]) => void;
+  saveExpansion: (layout: ReturnType<typeof planInlineExpansion>) => void;
   connect: (scope: InstancePath, connection: Omit<Connection, 'id'>) => void;
   mapPort: (scope: InstancePath, mapping: PortMapping) => void;
   placingModule: boolean;
@@ -176,10 +182,10 @@ export function TopologyCanvas(props: Props) {
   return <ReactFlowProvider><EditableTopologyCanvas {...props} /></ReactFlowProvider>;
 }
 
-function EditableTopologyCanvas({ project, instances, modulePath, selectedInstance, selectedPaths, pathResult, budgetHighlight, expanded,
+function EditableTopologyCanvas({ multiplex, project, instances, modulePath, selectedInstance, selectedPaths, pathResult, budgetHighlight, expanded,
   toggleModule, selectObject, selectObjects, enterModule, reparent, focusMoved, move, resize, connect, mapPort, add, placingModule, cancelPlacement,
   deleteInstances, deleteWiring, route, rename, copyModule, pasteModule, centerPlacement, report, undo, redo, openPort, onAddPort, newPort,
-  depth, fullPage, toggleFullPage, restoreView, viewHost, topologyActive }: Props) {
+  depth, fullPage, toggleFullPage, restoreView, viewHost, topologyActive, saveExpansion }: Props) {
   const flowStore = useStoreApi<CanvasNode, WiringEdge>();
   const boxSelection = useRef<readonly InstancePath[] | undefined>(undefined);
   const panWithSpace = useKeyPress('Space', { actInsideInputWithModifier: false });
@@ -193,9 +199,12 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
   const appliedView = useRef<CanvasView>(undefined);
   const [resizePreview, setResizePreview] = useState<FrameResizePreview>();
   const [measured, setMeasured] = useState<ReadonlyMap<string, { width: number; height: number }>>(new Map());
-  const [portHeights, setPortHeights] = useState<ReadonlyMap<string, number>>(new Map());
-  const onPortHeight = useCallback((key: string, height: number) => {
-    setPortHeights(previous => previous.get(key) === height ? previous : new Map(previous).set(key, height));
+  const [portHeights, setPortHeights] = useState<ReadonlyMap<string, FramePortHeights>>(new Map());
+  const onPortHeight = useCallback((key: string, height: FramePortHeights) => {
+    setPortHeights(previous => {
+      const old = previous.get(key);
+      return old?.side === height.side && old.top === height.top ? previous : new Map(previous).set(key, height);
+    });
   }, []);
   const dragSession = useRef<DragSession | undefined>(undefined);
   const [dropPreview, setDropPreview] = useState<DropPreview>();
@@ -209,6 +218,22 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
   const projection = useMemo(() => projectTopology(project, instances, modulePath, expanded, measured, resizePreview, portHeights),
     [project, instances, modulePath, expanded, measured, resizePreview, portHeights]);
   const { nodes: items, rootKey, nodeByKey, scopes } = projection;
+  const previousFrames = useRef(new Set<string>());
+  const pendingExpansion = useRef(new Set<string>());
+  useLayoutEffect(() => {
+    const visible = new Set(scopes.keys());
+    visible.delete(rootKey);
+    const pending = pendingExpansion.current;
+    for (const key of visible) if (!previousFrames.current.has(key)) pending.add(key);
+    for (const key of pending) if (!visible.has(key)) pending.delete(key);
+    previousFrames.current = visible;
+    if (!pending.size || !topologyActive) return;
+    // The newly revealed cards and multiline frame ports need their real canvas dimensions.
+    if (items.some(node => node.frame ? !portHeights.has(node.key) : !measured.has(node.key))) return;
+    const layout = planInlineExpansion(projection, pending);
+    pending.clear();
+    if (layout.moves.length || layout.frames.length) saveExpansion(layout);
+  }, [projection, items, scopes, rootKey, topologyActive, portHeights, measured, saveExpansion]);
   // An empty scope has nothing to fit. A queued fit would zoom to its first insertion.
   const [fitInitialNodes] = useState(() => !initialViewport && items.length > 0);
   useEffect(() => {
@@ -236,11 +261,11 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
       // A blank area inside a large frame should not count as a visible node.
       return [{ ...node.internals.positionAbsolute,
         width: type === 'moduleFrame' ? Math.min(width, 320) : width,
-        height: type === 'moduleFrame' ? Math.min(height, frameHeader) : height }];
+        height: type === 'moduleFrame' ? Math.min(height, frameInsets(node.data.ports, portHeights.get(node.data.key)).top) : height }];
     });
     const next = keepGraphVisible(requested, canvas.current?.clientWidth ?? 0, canvas.current?.clientHeight ?? 0, bounds);
     setViewport(next);
-  }, [rootKey]);
+  }, [rootKey, portHeights]);
 
   useLayoutEffect(() => {
     if (restoreView && appliedView.current !== restoreView) {
@@ -266,12 +291,16 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     return [ports.get(portKey(edge.source, edge.sourceHandle)), ports.get(portKey(edge.target, edge.targetHandle))] as const;
   }
 
+  function wireEndpoints(edge: WiringEdge) {
+    return connectionPorts(edge).flatMap(p => p ? [{ instancePath: p.endpoint ? [...p.scope, p.endpoint.instanceId] : p.scope, portId: p.port.id }] : []);
+  }
+
   function onConnect(edge: FlowConnection) {
     if (cancelled.current) return;
     const [a, b] = connectionPorts(edge);
     if (!a || !b || scopedWiringProblem(a, b)) return;
     connected.current = true;
-    const [source, target] = a.direction === 'out' ? [a, b] : [b, a];
+    const [source, target] = canConnect(a.direction, b.direction) ? [a, b] : [b, a];
     if (source.endpoint && target.endpoint) connect(a.scope, { from: source.endpoint, to: target.endpoint });
     else if (a.endpoint) mapPort(a.scope, { portId: b.port.id, target: a.endpoint });
     else if (b.endpoint) mapPort(a.scope, { portId: a.port.id, target: b.endpoint });
@@ -313,7 +342,10 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     const id = nodeId(key);
     const data: NodeData = { key, path, name, labelContext: item, ports: definition.ports,
       iconKey: definitionIcon(definition),
-      portValue: budgetHighlight?.annotations && (portId => budgetHighlight.annotations!.ports.get(signalPortKey({ instancePath: path, portId }))),
+      portValue: portId => {
+        const ref = { instancePath: path, portId };
+        return multiplexCaption(multiplex.at(ref)) ?? budgetHighlight?.annotations?.ports.get(signalPortKey(ref));
+      },
       notes: budgetHighlight?.annotations?.nodes.get(key),
       pathPorts: new Set(definition.ports.filter(port =>
         highlight?.ports.has(signalPortKey({ instancePath: path, portId: port.id }))).map(port => port.id)),
@@ -338,7 +370,7 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
       zIndex: 3 + deepest - modulePath.length + (deepest - path.length) * 2 + Number(path[modulePath.length] === selectedBranch), data };
     const direct = scopes.get(key)?.members ?? [];
     const outer = parentKey && nodeByKey.get(parentKey);
-    const origin = outer && outer.frame ? moduleExtent(outer.frame.base, frameInsets(outer.item.definition.ports))[0] : undefined;
+    const origin = outer && outer.frame ? moduleExtent(outer.frame.base, outer.frame.insets)[0] : undefined;
     const originLimit = origin ? {
       x: frame.display.x + origin[0] - node.bounds.x,
       y: frame.display.y + origin[1] - node.bounds.y,
@@ -349,7 +381,7 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
       style: { width: frame.display.width, height: frame.display.height, pointerEvents: 'none' },
       data: { ...data, onPortHeight, outerHandles: !boundary, locations: boundary ? [] : structureScope(instances, definition.id),
         resize: {
-          frame: frame.display, insets: frameInsets(definition.ports, portHeights.get(key)), originLimit,
+          frame: frame.display, insets: frame.insets, originLimit,
           preview: next => setResizePreview(next && { key, frame: next }),
           childrenBounds: direct.map(child => child.frame ? { ...child.bounds,
             width: child.frame.display.width, height: child.frame.display.height } : child.bounds),
@@ -393,7 +425,7 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     // Keep the grabbed node first for placement and post-drop focus.
     const ordered = [anchor, ...members.filter(item => item.key !== anchor.key)];
     const bounds = groupDragBounds(ordered);
-    const extent = parent && frame ? groupDragExtent(bounds, moduleExtent(frame.base, frameInsets(parent.item.definition.ports))) : undefined;
+    const extent = parent && frame ? groupDragExtent(bounds, moduleExtent(frame.base, frame.insets)) : undefined;
     dragSession.current = { base: project, anchor, members: ordered, keys: new Set(ordered.map(item => item.key)),
       bounds, extent,
       frame: frame && !frame.saved ? { modulePath: parentPath, ...frame.base } : undefined };
@@ -497,7 +529,7 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
       const plan = preview.plan;
       const saved = session.base.layout?.topologyFrames?.find(frame => hierarchyKey(frame.modulePath) === hierarchyKey(target.destination));
       const dropped = position && placeDropGroup(session.bounds, session.anchor.bounds, position, saved,
-        definition && frameInsets(definition.ports));
+        frame?.insets ?? (definition && frameInsets(definition.ports)));
       const layout = dropped && {
         placements: session.members.map((item, index) => ({
           instancePath: plan.instancePaths[index], x: item.bounds.x + dropped.delta.x, y: item.bounds.y + dropped.delta.y,
@@ -558,7 +590,7 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     const topLeft = flow.current.screenToFlowPosition({ x: left, y: top });
     const bottomRight = flow.current.screenToFlowPosition({ x: right, y: bottom });
     const scope = nodeByKey.get(rootKey);
-    const extent = !inserting && scope?.frame?.saved ? moduleExtent(scope.frame.base, frameInsets(scope.item.definition.ports)) : undefined;
+    const extent = !inserting && scope?.frame?.saved ? moduleExtent(scope.frame.base, scope.frame.insets) : undefined;
     const visible: CoordinateExtent = extent ? [
       [Math.max(topLeft.x, extent[0][0]), Math.max(topLeft.y, extent[0][1])],
       [Math.min(bottomRight.x, extent[1][0]), Math.min(bottomRight.y, extent[1][1])],
@@ -679,7 +711,10 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     const dy = origin && frame ? origin.y - frame.display.y : 0;
     const saved = routes.get(edge.id);
     const selected = selectedWiring === edge;
+    const ref = wireEndpoints(edge)[0];
+    const reading = ref && multiplexCaption(multiplex.at(ref));
     return { ...edge, selected, data: { ...data,
+      caption: reading && ref ? multiplex.label(ref) + ' · ' + reading : data.caption,
       routePoint: saved && { x: saved.x + dx, y: saved.y + dy },
       savePoint: selected ? (p?: XYPosition) => route(data.scope, data.wire, p && { x: p.x - dx, y: p.y - dy }) : undefined,
     } };
@@ -809,6 +844,8 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
         if (locateIds.length) void flow.current?.fitView({ ...canvasFitOptions, nodes: locateIds.map(id => ({ id })), maxZoom: 1.2 });
       }} toggleFullPage={switchFullPage} />
     </ReactFlow>
+    {selectedWiring && <aside className="v1-wire-readings"><MultiplexDetails power={multiplex}
+      endpoints={wireEndpoints(selectedWiring)} title="复用光 · 查看两端逐波功率" /></aside>}
     {topologyActive && viewHost && !fullPage && createPortal(<button type="button" onClick={switchFullPage}>全页展示</button>, viewHost)}
     {dropPreview && <>
       {!dropPreview.node && <div className="v1-drop-canvas" aria-hidden="true" />}

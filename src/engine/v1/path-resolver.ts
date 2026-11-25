@@ -3,10 +3,11 @@ import { resolveOpticalChannel } from '../../model/v1/channels';
 import type { OpticalChannelId } from '../../model/v1/channels';
 import type { CableCoreRef, NamedLink } from '../../model/v1/topology';
 import type { ConnectionRef, EndpointRef, InstancePath, Project } from '../../model/v1/types';
+import { supportsDirection } from '../../model/v1/types';
 import { validateNamedLinks } from '../../model/v1/validate-topology';
 import { chooseRouteChannel, intersectCarrier, searchSignalPath } from './path-search';
 import type { Carrier, SignalPath } from './path-search';
-import { buildSignalGraph, signalPortKey } from './signal-graph';
+import { buildSignalGraph, opticalSourceFlow, signalPortKey } from './signal-graph';
 import type { SignalEdge, SignalPort } from './signal-graph';
 
 export type LocalPathRequest = { from: EndpointRef; to: EndpointRef; channelId?: OpticalChannelId };
@@ -134,7 +135,7 @@ export function createPathResolver(project: Project) {
       const port = getPort(ref);
       const scope = scopes.get(JSON.stringify(ref.instancePath));
       if (port?.definition.type !== 'OPTICAL' || !scope
-        || (scope.kind === 'module' ? port.definition.direction !== 'in' : port.definition.direction !== 'out')) {
+        || !supportsDirection(port.definition.direction, scope.kind === 'module' ? 'in' : 'out')) {
         return { status: 'invalid_reference', endpoint: ref, reason: '供光源必须位于器件的光输出端口或模块的光输入端口。' };
       }
       if (ref.channelId !== undefined && !resolveOpticalChannel(ref.channelId)) {
@@ -155,11 +156,18 @@ export function createPathResolver(project: Project) {
       if (!edge) return { status: 'unreachable', reason: '必经纤芯未接通，请检查所选纤芯两端的附件。' };
       requiredEdges.push(edge);
     }
-    const required = new Map([...new Set(requiredEdges)].map((edge, index) => [edge, 1n << BigInt(index)]));
+    // Both directed realizations of a physical wire satisfy the same via constraint.
+    const requiredRefs = new Map([...new Set(requiredEdges.map(edge => edge.source))].map((ref, index) => [ref, 1n << BigInt(index)]));
+    const required = new Map<SignalEdge, bigint>();
+    if (requiredRefs.size) for (const edge of graph.edges) {
+      const bit = requiredRefs.get(edge.source);
+      if (bit !== undefined) required.set(edge, bit);
+    }
     const carrier: Carrier = request.channelId === undefined ? undefined : [request.channelId];
     const query = {
-      starts: [from], target: to, adjacent: outgoing, carrier, required, allRequired: (1n << BigInt(required.size)) - 1n,
-      startCarriers: from.definition.type === 'OPTICAL' ? sources : undefined,
+      starts: [from], target: to, adjacent: outgoing, carrier, required, allRequired: (1n << BigInt(requiredRefs.size)) - 1n,
+      startFlow: from.definition.opticalEmitter || sources.has(from) ? opticalSourceFlow : undefined,
+      startCarriers: sources,
     };
     let result = searchSignalPath(query);
     if (result.status === 'ambiguous' && result.channelPort && !request.channelId) {
@@ -186,8 +194,8 @@ export function createPathResolver(project: Project) {
           if (reverse.status === 'unreachable') {
             const forwardPorts = [...result.reached];
             const reversePorts = [...reverse.reached];
-            const inputs = forwardPorts.filter(port => port.unmapped && port.definition.direction === 'in');
-            const outputs = reversePorts.filter(port => port.unmapped && port.definition.direction === 'out');
+            const inputs = forwardPorts.filter(port => port.unmapped && supportsDirection(port.definition.direction, 'in'));
+            const outputs = reversePorts.filter(port => port.unmapped && supportsDirection(port.definition.direction, 'out'));
             const open = inputs.find(port => reversePorts.some(other => inside(port.ref.instancePath, other.ref.instancePath))
                 || outputs.some(other => JSON.stringify(port.ref.instancePath) === JSON.stringify(other.ref.instancePath)))
               ?? outputs.find(port => forwardPorts.some(other => inside(port.ref.instancePath, other.ref.instancePath)));
@@ -209,7 +217,7 @@ export function createPathResolver(project: Project) {
               visited.add(last);
             }
           }
-          const prefix = searchSignalPath({ starts: [from], target: last, adjacent: outgoing, carrier });
+          const prefix = searchSignalPath({ starts: [from], target: last, adjacent: outgoing, carrier, startCarriers: sources });
           const trace = prefix.status === 'resolved' ? traceSupplies(prefix.path, sources).trace : undefined;
           const cascaded = graph.edges.some(edge => edge.supply && visited.has(edge.supply));
           const rejected = !emitted ? dml : outgoing.get(last)?.find(edge => !result.reached.has(edge.to));

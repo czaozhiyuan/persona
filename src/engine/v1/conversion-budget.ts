@@ -90,11 +90,9 @@ export function createConversionPathBudget(graph: SignalGraph) {
   function opticalSegment(trace: PathTrace, eoIndex: number, oeIndex: number, sources: readonly OpticalSource[]) {
     const eo = trace.edges[eoIndex];
     if (eo.source.kind === 'transfer' && eo.source.transfer.kind === 'dml') {
-      const first = trace.steps[eoIndex + 1];
-      const channelId = first.channelIds?.length === 1 ? first.channelIds[0] : undefined;
       const path = { steps: trace.steps.slice(eoIndex + 1, oeIndex + 1), edges: trace.edges.slice(eoIndex + 1, oeIndex) };
-      const optical = opticalBudget.calculateOpticalPath(path, { endpoint: eo.to.ref, channelId });
-      return { optical, channelId: optical.stages.at(-1)!.channelId };
+      const optical = opticalBudget.calculateSourcePath(path, sources);
+      return { optical, channelId: optical.stages.at(-1)?.channelId };
     }
     const terminal = eo.supply?.ref ?? eo.to.ref;
     const supply = trace.supplies.find(item => item.edgeIndex === eoIndex);
@@ -106,7 +104,7 @@ export function createConversionPathBudget(graph: SignalGraph) {
     const first = supply.path.steps[0];
     const source = selectOpticalSource(first, sources);
     if (!source) return { problem: { code: 'optical_supply', endpoint: first.port.ref, reason: '该光源有多项供光设置，请选择唯一的光通道。' } } as const;
-    const optical = opticalBudget.calculateEoPath(supply.path, source, eo, trace.edges.slice(eoIndex + 1, oeIndex));
+    const optical = opticalBudget.calculateEoPath(supply.path, source, eo, trace.edges.slice(eoIndex + 1, oeIndex), sources);
     return { optical, channelId: optical.stages.at(-1)!.channelId };
   }
 
@@ -142,7 +140,7 @@ export function createConversionPathBudget(graph: SignalGraph) {
       if (!source) {
         block({ code: 'optical_supply', endpoint: first.port.ref, reason: '该光源有多项供光设置，请选择唯一的光通道。' });
       } else if (edge.source.kind === 'transfer' && edge.source.transfer.kind === 'oe') {
-        const optical = opticalBudget.calculateOpticalPath({ steps: trace.steps.slice(0, index + 1), edges: trace.edges.slice(0, index) }, source);
+        const optical = opticalBudget.calculateOpticalPath({ steps: trace.steps.slice(0, index + 1), edges: trace.edges.slice(0, index) }, source, edge, opticalSources);
         const rho = resolveEmpiricalValue('A/W', edge.source.transfer.responsivity, { channelId: optical.stages.at(-1)?.channelId },
           instances.get(JSON.stringify(edge.from.ref.instancePath)));
         const averageCurrent = photocurrent(optical.powerDbm, rho);

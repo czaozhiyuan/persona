@@ -4,7 +4,7 @@ import type { planInstanceMoves } from '../../../state/v1/reparent-instance';
 import type { TopologyFrame, TopologyPlacement } from '../../../model/v1/types';
 import { keepNodeInside, moduleExtent } from './frame-geometry';
 import { hierarchyKey, inHierarchy } from './hierarchy-view';
-import { frameHeader, frameInsets, framePadding } from './module-frame';
+import { frameInsets, framePadding } from './module-frame';
 import type { TopologyItem } from './topology-projection';
 
 export type ApprovedMove = Extract<ReturnType<typeof planInstanceMoves>, { ok: true }>;
@@ -25,9 +25,9 @@ function contains(rect: Rect, point: XYPosition, margin = 0) {
 
 function moduleBody(node: TopologyItem, bounds: Rect): Rect {
   if (!node.frame) return bounds;
-  const insets = frameInsets(node.item.definition.ports);
-  return { x: bounds.x + insets.left, y: bounds.y + frameHeader,
-    width: bounds.width - insets.left - insets.right, height: bounds.height - frameHeader - framePadding };
+  const insets = node.frame.insets;
+  return { x: bounds.x + insets.left, y: bounds.y + insets.top,
+    width: bounds.width - insets.left - insets.right, height: bounds.height - insets.top - framePadding };
 }
 
 export function reparentDropTarget(source: TopologyItem, nodes: readonly TopologyItem[], rootPath: readonly string[],
@@ -64,7 +64,7 @@ export function reparentDropTarget(source: TopologyItem, nodes: readonly Topolog
   return { kind: 'up', node: grandparent, destination };
 }
 
-export function groupDragBounds(items: readonly Pick<TopologyItem, 'key' | 'bounds' | 'frame'>[]): Rect {
+export function groupDragBounds(items: readonly { key: string; bounds: Rect; frame?: { display: Rect } }[]): Rect {
   return getNodesBounds(items.map(item => ({
     id: item.key, position: item.bounds, measured: item.frame?.display ?? item.bounds, data: {},
   })));

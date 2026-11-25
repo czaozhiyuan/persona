@@ -1,4 +1,5 @@
-import { numberedNames } from '../../../model/v1/display-names';
+import { supportsDirection } from '../../../model/v1/types';
+import { numberedNames, wireArrow } from '../../../model/v1/display-names';
 import { createPathNames } from '../structure-scope';
 import { portDisplayName } from '../labels';
 import { createPathResolver } from '../../../engine/v1/path-resolver';
@@ -38,7 +39,7 @@ export function createLinkOptions(project: Project) {
       const option = { key: signalPortKey(ref), label: showEndpoint(ref), value: ref };
       endpoints.push(option);
       if (port.type === 'OPTICAL') opticalEndpoints.push(option);
-      if (port.type === 'OPTICAL' && port.direction === (definition.kind === 'component' ? 'out' : 'in')) {
+      if (port.type === 'OPTICAL' && supportsDirection(port.direction, definition.kind === 'component' ? 'out' : 'in')) {
         opticalSources.push(option);
       }
     }
@@ -49,7 +50,9 @@ export function createLinkOptions(project: Project) {
       };
       for (const connection of definition.connections ?? []) {
         const value = { scopePath: instancePath, connectionId: connection.id };
-        via.push({ key: requiredEdgeKey(value), value, label: `${showPath(instancePath)}：${localEndpoint(connection.from)} → ${localEndpoint(connection.to)}` });
+        const port = (ref: LocalEndpointRef) => graph.ports.get(signalPortKey({ instancePath: [...instancePath, ref.instanceId], portId: ref.portId }))?.definition;
+        const arrow = wireArrow(port(connection.from), port(connection.to));
+        via.push({ key: requiredEdgeKey(value), value, label: `${showPath(instancePath)}：${localEndpoint(connection.from)} ${arrow} ${localEndpoint(connection.to)}` });
       }
       for (const [index, bundle] of (definition.cableBundles ?? []).entries()) {
         for (const core of bundle.cores) {

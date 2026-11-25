@@ -1,4 +1,5 @@
 import { receiverModes } from '../../model/v1/device';
+import { wdmPort, wdmTransfers } from '../../model/v1/wdm';
 import type { NumericParameter } from '../../model/v1/parameters';
 import type { ComponentDefinition, ModuleDefinition, PortDefinition } from '../../model/v1/types';
 
@@ -17,6 +18,11 @@ const fiveVoltInput: PortDefinition = { id: 'DC_IN', type: 'DC_POWER', direction
 const poweredRfPorts = [...rfPorts, fiveVoltInput];
 const opticalPorts = [port('OPT_IN', '光输入', 'OPTICAL', 'in'), port('OPT_OUT', '光输出', 'OPTICAL', 'out')];
 const dcOutput: PortDefinition = { id: 'DC_OUT', type: 'DC_POWER', direction: 'out', outputVoltageV: fixed(5) };
+const wdmPorts: PortDefinition[] = [
+  { id: 'COM', name: 'COM', type: 'OPTICAL', direction: 'bidirectional', side: 'top' },
+  wdmPort('CH1', 'CWDM_1311', 'in'), wdmPort('CH2', 'CWDM_1351', 'in'),
+  wdmPort('CH3', 'CWDM_1371', 'out'), wdmPort('CH4', 'CWDM_1391', 'out'),
+];
 const gain = numeric('gain', '增益', 'dB');
 const attenuation = numeric('gain', '净增益（带符号）', 'dB', { max: 0 });
 const capacity = numeric('capacity', '额定输出功率', 'W', { min: 0 });
@@ -136,5 +142,10 @@ export const builtInDefinitions = [
       { ...capacity, defaultValue: fixed(10) }],
     transfers: [{ kind: 'dc', fromPortId: 'DC_IN', toPortId: 'DC_OUT',
       efficiency: parameter('efficiency'), capacity: { unit: 'W', value: parameter('capacity') } }],
+  },
+  {
+    kind: 'component', id: 'library-wdm', name: '波分/解波分复用器（WDM）', ports: wdmPorts, wdm: true,
+    parameters: [{ ...numeric('insertionLoss', '统一通道插损', 'dB', { min: 0 }), defaultValue: { kind: 'fixed', value: 1 } }],
+    transfers: wdmTransfers(wdmPorts),
   },
 ] as const satisfies readonly (ComponentDefinition | ModuleDefinition)[];

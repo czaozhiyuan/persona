@@ -7,7 +7,7 @@ import type { InstancePath, PortDefinition, Project, TopologyPlacement } from '.
 import { moveTopologyNode, moveTopologyNodes, resizeTopologyFrame } from '../../../state/v1/topology-edits';
 import { defaultTopologyPosition } from '../../../state/v1/topology-position';
 import { hierarchyKey } from './hierarchy-view';
-import { frameHeader, frameInsets, framePadding } from './module-frame';
+import { frameInsets, framePadding } from './module-frame';
 import { placeDropGroup } from './reparent-drop';
 import { estimatedBlockSize, projectTopology } from './topology-projection';
 
@@ -59,10 +59,10 @@ function placeInView(project: Project, path: InstancePath, position: XYPosition,
   if (!root?.frame) return result;
 
   const frame = root.frame.display;
-  const insets = frameInsets(root.item.definition.ports);
+  const insets = root.frame.insets;
   const size = estimatedBlockSize(ports);
   const x = Math.min(frame.x, position.x - insets.left);
-  const y = Math.min(frame.y, position.y - frameHeader);
+  const y = Math.min(frame.y, position.y - insets.top);
   const width = Math.max(frame.x + frame.width, position.x + size.width + insets.right) - x;
   const height = Math.max(frame.y + frame.height, position.y + size.height + framePadding) - y;
   const base = root.frame.base;

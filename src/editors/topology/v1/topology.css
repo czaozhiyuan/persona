@@ -48,6 +48,12 @@
 .v1-canvas-zoom .v1-hierarchy-depth button { width: auto; padding-inline: .2rem; white-space: nowrap; font-size: .73rem; }
 .v1-hierarchy-depth input { width: clamp(2.4rem, 8vw, 6rem); min-width: 0; height: 1.35rem; margin: 0; accent-color: #267e73; }
 .v1-block-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: .5rem; }
+.v1-topology-device:has(.v1-block-column.top) {
+  display: flex; flex-direction: column; width: min-content; min-width: calc(var(--v1-block-width-rem) * 1rem);
+}
+.v1-block-column.top { order: -1; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(4rem, 1fr); margin-top: -.7rem; }
+.v1-block-column.top .v1-topology-port { justify-content: center; padding: 4px 2px 0; }
+.v1-block-column.top .react-flow__handle-top { top: 0; }
 .v1-block-column .v1-topology-port { height: 24px; min-height: 24px; }
 .v1-block-column.right .v1-topology-port { justify-content: flex-end; }
 .v1-topology-port .v1-port-label {
@@ -55,6 +61,10 @@
   font: inherit; text-align: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; pointer-events: auto;
 }
 .v1-topology-port .v1-port-label:hover { text-decoration: underline; }
+.v1-port-multiplex { display: block; font-size: .65rem; font-weight: normal; white-space: normal; }
+.v1-wire-readings:has(details) { position: absolute; left: .5rem; bottom: .5rem; z-index: 4; max-width: min(42rem, 85%); max-height: 45%; overflow: auto; padding: .4rem .6rem; background: white; border: 1px solid #b6c7c1; border-radius: 4px; }
+.v1-multiplex-details table { border-collapse: collapse; }
+.v1-multiplex-details :is(th, td) { text-align: left; padding: .2rem .4rem; border-bottom: 1px solid #d8e2de; }
 .v1-port-actions label { display: block; margin-block: .45rem; }
 .v1-port-actions textarea { display: block; width: 100%; resize: vertical; }
 .v1-port-actions form + form { border-top: 1px solid #ccdad5; margin-top: .8rem; padding-top: .6rem; }
@@ -97,6 +107,13 @@
 .v1-inline-shared { margin-top: .1rem; padding: .08rem .25rem; border-radius: .2rem; background: #fff; color: #375951; font-size: .7rem; white-space: nowrap; }
 .v1-module-pins .react-flow__handle { pointer-events: auto; }
 .v1-module-pins { position: absolute; top: 52px; }
+.v1-module-pins.top {
+  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr);
+  top: 0; left: 28px; right: 28px; text-align: center;
+}
+.v1-module-pins.top .v1-topology-port { justify-content: center; padding: 9px 3px 2px; }
+.v1-module-pins.top .v1-frame-inner-handle { left: 50%; top: 3px; bottom: auto; }
+.v1-module-pins.top .v1-frame-outer-handle { left: 50%; top: -3px; }
 .v1-module-pins.left { left: 0; }
 .v1-module-pins.right { right: 0; text-align: right; }
 .v1-module-pins .v1-topology-port { box-sizing: border-box; min-height: 28px; padding-block: 2px; font-size: min(.78rem, 13px); line-height: 17px; }

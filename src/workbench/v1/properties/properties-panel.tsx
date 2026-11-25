@@ -1,3 +1,4 @@
+import { portDirectionLabels } from '../../../model/v1/types';
 import { moduleName } from '../../../state/v1/module-name';
 import { componentIconLabels, portDisplayName, portTypeLabels, transferLabels } from '../labels';
 import { useState } from 'react';
@@ -46,6 +47,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
   jumpToParameter: (path: InstancePath, parameterId: string) => void;
 }) {
   const { definition, instance, instancePath, parameters, settings } = occurrence;
+  const wdm = definition.kind === 'component' && definition.wdm;
   const [error, setError] = useState('');
   const [deletion, setDeletion] = useState<string>();
   const parentPath = instancePath.slice(0, -1);
@@ -231,14 +233,16 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
       <section className="v1-object-ports">
         <div className="v1-object-ports-heading">
           <h3>端口</h3>
-          <button type="button" className="primary" aria-haspopup="dialog" onClick={() => onAddPort(instancePath)}>端口管理</button>
+          <button type="button" className="primary" aria-haspopup="dialog" onClick={() => onAddPort(instancePath)}>{wdm ? '配置波长端口' : '端口管理'}</button>
         </div>
         <p className="v1-property-effective">编辑目标 · {instance?.name ?? definition.name}{definition.kind === 'module' && '（模块对外端口）'}</p>
         {sharedLocations.length > 0 && <p className="v1-property-effective">共享定义 · 影响 {sharedLocations.join('、')}</p>}
         {!definition.ports.length && <p className="empty">暂无端口。</p>}
-        {definition.ports.map(port => <details key={port.id} data-port-id={port.id}>
+        {wdm ? definition.ports.map(port => <p key={port.id} data-port-id={port.id}>{portDisplayName(port, false, definition.ports, occurrence)}
+          {' · ' + portDirectionLabels[port.direction]}{port.channelIds && port.name !== port.channelIds[0] && ' · ' + port.channelIds[0]}</p>)
+          : definition.ports.map(port => <details key={port.id} data-port-id={port.id}>
           <summary>{portDisplayName(port, false, definition.ports, occurrence)}<span className="v1-parameter-value">
-            {portTypeLabels[port.type]} · {port.direction === 'in' ? '输入' : '输出'}
+            {portTypeLabels[port.type]} · {portDirectionLabels[port.direction]}
           </span></summary>
           <PortFields port={port} occurrence={occurrence} remove={() => { setError(''); setDeletion(port.id); }}
             save={next => changeDefinition(() => ({ ...definition,
@@ -292,9 +296,9 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
         {definition.kind === 'component' && <DcLoadFields parameters={parameters} key={JSON.stringify([definition.dcLoad,
           definition.ports.filter(p => p.type === 'DC_POWER' && p.direction === 'in').map(p => p.id)])}
           definition={definition} save={read => changeDefinition(() => ({ ...definition, dcLoad: read() }))} />}
-        {definition.kind === 'component' && <AddConversion definition={definition} add={transfer =>
+        {definition.kind === 'component' && !wdm && <AddConversion definition={definition} add={transfer =>
           changeDefinition(() => ({ ...definition, transfers: [...(definition.transfers ?? []), transfer] }))} />}
-        {definition.kind === 'component' && definition.transfers?.map((transfer, index) => <details key={index}>
+        {definition.kind === 'component' && !wdm && definition.transfers?.map((transfer, index) => <details key={index}>
           <summary>传输 · {transferLabels[transfer.kind]} · {portDisplayName(definition.ports.find(port => port.id === transfer.fromPortId)!, true, definition.ports, occurrence)} → {portDisplayName(definition.ports.find(port => port.id === transfer.toPortId)!, true, definition.ports, occurrence)}</summary>
           <TransferFields effective={parameters} transfer={transfer} definition={definition} occurrences={occurrences}
             save={read => changeDefinition(() => ({ ...definition,
