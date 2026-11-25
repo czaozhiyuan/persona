@@ -37,8 +37,18 @@ function dissolve(project: Project, source: InstancePath) {
   const definitions = new Map([...project.moduleDefinitions, ...project.componentDefinitions].map(item => [item.id, item]));
   const children = new Map(container.instances.map(item => [item.id, item]));
   const ports = new Map(container.ports.map(port => [port.id, port]));
+  function checkAlias(portId: string, target: LocalEndpointRef) {
+    const boundary = ports.get(portId)!;
+    const inner = definitions.get(children.get(target.instanceId)!.definitionId)!.ports.find(port => port.id === target.portId)!;
+    if (unrestrictedAlias(boundary, inner)) return;
+    const condition = boundary.inputVoltageV ? '标称输入电压' : boundary.outputVoltageV ? '输出电压' : boundary.inputRating ? '输入额定范围' : '光通道限制';
+    throw new Error(`对外端口「${portDisplayName(boundary, true)}」设置了${condition}，解散会移除该约束。`);
+  }
+
   const mappings = new Map<string, PortMapping[]>();
   for (const mapping of container.portMappings ?? []) {
+    // An internal power source can energize the boundary even without an external wire.
+    if (isPowerPort(ports.get(mapping.portId)?.type)) checkAlias(mapping.portId, mapping.target);
     const branches = mappings.get(mapping.portId) ?? [];
     branches.push(mapping);
     mappings.set(mapping.portId, branches);
@@ -48,10 +58,7 @@ function dissolve(project: Project, source: InstancePath) {
     if (ref.instanceId !== slotId) return ref;
     const target = mappings.get(ref.portId)?.[0].target;
     if (!target) throw new Error(`对外端口「${portDisplayName(ports.get(ref.portId)!, true)}」仍被引用，但没有内部映射，无法解散。`);
-    const inner = definitions.get(children.get(target.instanceId)!.definitionId)!.ports.find(port => port.id === target.portId)!;
-    if (!unrestrictedAlias(ports.get(ref.portId)!, inner)) {
-      throw new Error(`对外端口「${portDisplayName(ports.get(ref.portId)!, true)}」带有光通道、额定限制或输出电压，解散会改变原有信号条件。`);
-    }
+    if (!isPowerPort(ports.get(ref.portId)?.type)) checkAlias(ref.portId, target);
     adjustedPorts.add(ref.portId);
     return target;
   }

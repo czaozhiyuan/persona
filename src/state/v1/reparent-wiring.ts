@@ -63,7 +63,7 @@ export function transferMoveParameters(modules: Map<string, ModuleDefinition>, f
 
 export function unrestrictedAlias(boundary: PortDefinition, target: PortDefinition): boolean {
   // Removing a boundary must not change the voltage, ratings, or channels of the old route.
-  return !boundary.inputRating && !boundary.outputVoltageV && (!boundary.channelIds
+  return !boundary.inputRating && !boundary.inputVoltageV && !boundary.outputVoltageV && (!boundary.channelIds
     || !!target.channelIds?.every(channel => boundary.channelIds!.includes(channel)));
 }
 

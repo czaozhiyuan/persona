@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { calculateDcBudget } from '../../src/engine/v1/dc-budget';
 import { resolveHierarchy } from '../../src/engine/v1/hierarchy';
 import { buildSignalGraph } from '../../src/engine/v1/signal-graph';
 import { mappingId, type ModuleDefinition, type Project } from '../../src/model/v1/types';
@@ -133,4 +134,35 @@ test('dissolving a meshed junction contracts self-loops and preserves references
   const restored = round(plan.project);
   assert.deepEqual(restored.moduleDefinitions[0].connections!.map(wire => [wire.from.instanceId, wire.to.instanceId]), [['A','B'], ['A','C']]);
   assert.deepEqual(restored.namedLinks![0].via, [{ scopePath: [], connectionId: 'AB' }]);
+});
+
+test('dissolution keeps nominal input voltage checks on externally and internally fed boundaries', () => {
+  const input = { ...port, type: 'DC_POWER' } as const;
+  const fixed = (value: number) => ({ kind: 'fixed' as const, value });
+  const src = { kind: 'component', id: 'source', name: '电源', dcSupply: true,
+    ports: [{ ...input, direction: 'out', outputVoltageV: fixed(5), supplyCapacity: { unit: 'W', value: fixed(10) } }] } as const;
+  const loads = [1, 2].map((value, i) => ({ kind: 'component' as const, id: 'L' + i, name: '负载' + i,
+    ports: [input], dcLoad: { portId: 'P', powerW: fixed(value) } }));
+  const project = round({ ...base, componentDefinitions: [src, ...loads], moduleDefinitions: [
+    { ...base.moduleDefinitions[0], ports: [], instances: [slot('source'), slot('Box', 'box')], portMappings: [],
+      connections: [{ id: 'feed', from: target('source'), to: target('Box') }] },
+    { ...base.moduleDefinitions[1], ports: [{ ...input, inputVoltageV: fixed(12) }], instances: loads.map(l => slot(l.id)),
+      portMappings: loads.map(l => ({ id: l.id, portId: 'P', target: target(l.id) })) },
+  ] });
+  const check = (p: Project) => {
+    const before = calculateDcBudget(p);
+    assert.ok(before.diagnostics.some(d => d.code === 'voltage_conflict' && /12 V.*5 V/.test(d.reason)));
+    const plan = planDissolveModule(p, ['Box']);
+    assert.equal(plan.ok, false);
+    assert.match(plan.message, /标称输入电压/);
+    assert.deepEqual(calculateDcBudget(p), before);
+  };
+  check(project);
+  const unrestricted = editModule(project, 'box', m => ({ ...m, ports: [input] }));
+  const success = planDissolveModule(unrestricted, ['Box']);
+  assert.ok(success.ok);
+  assert.deepEqual(calculateDcBudget(round(success.project)).networks[0].demandW, { availability: 'available', unit: 'W', value: 3 });
+
+  const internal = editModule(project, 'root', m => ({ ...m, instances: [slot('Box', 'box')], connections: [] }));
+  check(round(editModule(internal, 'box', m => ({ ...m, instances: [slot('source')], portMappings: [{ portId: 'P', target: target('source') }] }))));
 });
