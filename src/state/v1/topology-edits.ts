@@ -1,3 +1,4 @@
+import { retainWireRoutes } from './wire-routes';
 import { portDisplayName } from '../../model/v1/display-names';
 import { resolveHierarchy } from '../../engine/v1/hierarchy';
 import type { CableCoreRef, CableCore, LocalEndpointRef } from '../../model/v1/topology';
@@ -19,7 +20,7 @@ export function editModule(project: Project, moduleId: string, change: (module: 
 /** Remove only required edges whose records were deleted from the edited module. */
 export function editModuleWiring(project: Project, moduleId: string, change: (module: ModuleDefinition) => ModuleDefinition): Project {
   const before = project.moduleDefinitions.find(item => item.id === moduleId)!;
-  const updated = editModule(project, moduleId, change);
+  const updated = retainWireRoutes(project, editModule(project, moduleId, change));
   const module = updated.moduleDefinitions.find(item => item.id === moduleId)!;
   const removed = (ref: Via) => hasVia(before, ref) && !hasVia(module, ref);
   if (!project.namedLinks?.some(link => link.via?.some(removed))) return updated;
@@ -193,5 +194,5 @@ export function planPortDeletion(project: Project, definitionId: string, portId:
       }) } }),
     };
   });
-  return { impacts, project: { ...project, componentDefinitions, moduleDefinitions, namedLinks } };
+  return { impacts, project: retainWireRoutes(project, { ...project, componentDefinitions, moduleDefinitions, namedLinks }) };
 }

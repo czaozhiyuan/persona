@@ -1,3 +1,4 @@
+import { setWireRoute } from '../../../state/v1/wire-routes';
 import { createPortal } from 'react-dom';
 import { editablePortName, portDisplayName, portTypeLabels } from '../../../workbench/v1/labels';
 import { createPathNames, structureScope } from '../../../workbench/v1/structure-scope';
@@ -227,6 +228,7 @@ export function TopologyEditor({ centerPlacement, linkControls, library, store, 
         openPort={(path, portId) => { setMessage(''); setPortAction({ path, portId }); }}
         add={add} placingModule={placingModule} cancelPlacement={() => { setPlacingModule(false); setMessage(''); }}
         deleteInstances={deleteInstances} deleteWiring={deleteWiring} rename={rename} copyModule={copyModule} pasteModule={pasteModule} report={setMessage} undo={store.undo} redo={store.redo}
+        route={(scope, wire, point) => commit(draft => setWireRoute(draft, scope, wire, point))}
         move={(moves, frame) => commit(draft => {
           const placed = moveTopologyNodes(draft, moves);
           return frame ? resizeTopologyFrame(placed, frame) : placed;

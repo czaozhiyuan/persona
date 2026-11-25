@@ -1,3 +1,4 @@
+import { retainWireRoutes } from './wire-routes';
 import { portDisplayName } from '../../model/v1/display-names';
 import { boundaryPort } from './module-ports';
 import { moduleName } from './module-name';
@@ -150,7 +151,7 @@ export function groupModule(project: Project, paths: readonly InstancePath[], na
     ...(portMappings.length > 0 && { portMappings }),
     ...(parameters.size > 0 && { parameters: [...parameters.values()], parameterMappings: internalParameterMappings }),
   };
-  return {
+  return retainWireRoutes(project, {
     ...project,
     moduleDefinitions: [...project.moduleDefinitions.map(item => item.id === parent.id ? enclosing : item), group],
     instanceSettings: project.instanceSettings?.map(endpoint),
@@ -160,5 +161,5 @@ export function groupModule(project: Project, paths: readonly InstancePath[], na
       physical: layout?.physical?.map(item => ({ ...endpoint(item), enclosurePath: remap(item.enclosurePath) })),
       topologyFrames: layout?.topologyFrames?.map(item => ({ ...item, modulePath: remap(item.modulePath) })),
     },
-  };
+  }, remap);
 }

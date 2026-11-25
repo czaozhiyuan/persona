@@ -1,3 +1,4 @@
+import { localWireKey as canvasEdgeKey } from '../../../model/v1/wire-route';
 import type { linkAnnotations } from './link-annotations';
 import type { PathResult } from '../../../engine/v1/path-resolver';
 import type { SignalEdge } from '../../../engine/v1/signal-graph';
@@ -5,8 +6,7 @@ import { portTypeLabels } from '../../../model/v1/display-names';
 import { signalPortKey } from '../../../engine/v1/signal-graph';
 import type { EndpointRef, InstancePath } from '../../../model/v1/types';
 
-export const canvasEdgeKey = (kind: 'connection' | 'mapping' | 'core', id: string, coreId?: string) =>
-  JSON.stringify(coreId === undefined ? [kind, id] : [kind, id, coreId]);
+export { canvasEdgeKey };
 
 export type BudgetHighlight = {
   annotations?: ReturnType<typeof linkAnnotations>;

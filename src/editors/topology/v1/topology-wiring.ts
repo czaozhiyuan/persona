@@ -1,4 +1,4 @@
-import type { Edge } from '@xyflow/react';
+import type { Edge, XYPosition } from '@xyflow/react';
 import { portDisplayName } from '../../../workbench/v1/labels';
 import type { LocalEndpointRef } from '../../../model/v1/topology';
 import type { InstancePath, ModuleDefinition, PortType } from '../../../model/v1/types';
@@ -14,7 +14,10 @@ export const nodeId = (key: string) => encodeURIComponent(key);
 export const handleId = (id: string, inner = false) => encodeURIComponent(JSON.stringify([id, inner]));
 export const portKey = (node: string, handle?: string | null) => JSON.stringify([node, handle]);
 type ScopedPort = CanvasPort & { module: ModuleDefinition; scope: InstancePath };
-export type WiringEdge = Edge<WiringSelection & {
+export type WiringEdge = Edge<{
+  wire: WiringSelection;
+  routePoint?: XYPosition;
+  savePoint?: (point?: XYPosition) => void;
   scope: InstancePath;
   portType: PortType;
   caption?: string;
@@ -89,7 +92,7 @@ export function projectWiring(projection: ReturnType<typeof projectTopology>,
 
     function edge(localId: string, selection: WiringSelection, portType: PortType, details: Omit<WiringEdge, 'id' | 'data' | 'type'>) {
       const active = highlighted?.has(localId);
-      edges.push({ ...details, id: JSON.stringify([scope, localId]), type: 'signal', data: { ...selection, scope, portType, caption: highlights.get(key)?.captions?.get(localId) },
+      edges.push({ ...details, id: JSON.stringify([scope, localId]), type: 'signal', data: { wire: selection, scope, portType, caption: highlights.get(key)?.captions?.get(localId) },
         zIndex: active ? 1 : 0, className: active ? 'v1-path-edge' : undefined });
     }
 

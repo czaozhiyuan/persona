@@ -188,6 +188,11 @@ const projectShape = shape({
     physical: list(shape({ instancePath, enclosurePath: instancePath, xMm: number, yMm: number, rotationDeg: number },
       { footprint: shape(footprint) })),
     topology: list(shape({ instancePath, x: number, y: number })),
+    topologyWireRoutes: list(shape({ modulePath: instancePath, x: number, y: number, wire: byKind({
+      connection: shape({ kind: oneOf('connection'), id: text }),
+      mapping: shape({ kind: oneOf('mapping'), id: text }),
+      core: shape({ kind: oneOf('core'), id: text, bundleId: text }),
+    }) })),
     topologyFrames: list(shape({ modulePath: instancePath, x: number, y: number, width: number, height: number })),
   }),
 });

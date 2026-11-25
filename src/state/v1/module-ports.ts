@@ -2,7 +2,7 @@ import { resolveHierarchy } from '../../engine/v1/hierarchy';
 import { isPowerPort } from '../../model/v1/types';
 import type { InstancePath, PortDefinition, Project } from '../../model/v1/types';
 import type { LocalEndpointRef } from '../../model/v1/topology';
-import { editModule } from './topology-edits';
+import { editModule, editModuleWiring } from './topology-edits';
 
 export function boundaryPort(inner: PortDefinition, id: string, name: string): PortDefinition {
   const port: PortDefinition = { id, type: inner.type, direction: inner.direction };
@@ -52,7 +52,7 @@ export function renamePort(project: Project, definitionId: string, portId: strin
 }
 
 export function connectBoundaryPort(project: Project, definitionId: string, portId: string, target?: LocalEndpointRef): Project {
-  return editModule(project, definitionId, module => ({
+  return editModuleWiring(project, definitionId, module => ({
     ...module,
     portMappings: [...(module.portMappings ?? []).filter(item => item.portId !== portId), ...(target ? [{ portId, target }] : [])],
   }));
