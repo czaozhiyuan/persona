@@ -145,7 +145,8 @@ export function readTransfer(data: FormData, transfer: Transfer): Transfer {
     case 'splitter': return { ...transfer, ...ports, secondPortId: choice(data, 'secondPort'),
       firstPercent: readQuantity(data, 'percent', ['fixed']), excessLossDb: readQuantity(data, 'excess', ['fixed']) };
     case 'rf': return { ...transfer, ...ports, gainDb: readQuantity(data, 'gain', rfKinds), nfDb: readQuantity(data, 'nf', rfKinds) };
-    case 'optical': return { ...transfer, ...ports, channelIds: channelList(data, 'channels'), gainDb: readQuantity(data, 'gain', opticalKinds) };
+    case 'optical': return { ...transfer, ...ports, channelIds: channelList(data, 'channels'),
+      gainDb: readQuantity(data, 'gain', opticalKinds), insertionLossDb: readQuantity(data, 'insertionLoss', opticalKinds) };
     case 'eo': return { ...transfer, ...ports, channelIds: channelList(data, 'channels'), supplyPortId: choice(data, 'supply') || undefined,
       insertionLossDb: readQuantity(data, 'insertionLoss', opticalKinds), vPi: readQuantity(data, 'vPi', rfKinds) };
     case 'dml': return { ...transfer, ...ports, channelIds: channelList(data, 'channels'), modulationSlope: readQuantity(data, 'slope', rfKinds) };
@@ -261,7 +262,9 @@ function TransferForm({ transfer, definition, effective, occurrences = [], save,
       <QuantityField hidden={!mixed && !usesReceiverField(mode, 'loadedGain')} name="loadedGain" label="有源 RF 预算必填 · 加载转换增益 C(f)（外接 50 Ω）" unit="V/W" kinds={rfKinds} value={transfer.loadedGain} parameters={parameters}
         onCurveApply={draft ? undefined : loadedGain => saveCurve({ ...transfer, loadedGain })} />
     </>}
-    {(transfer.kind === 'optical' || transfer.kind === 'wavelengthConversion') &&
+    {transfer.kind === 'optical' && !transfer.gainDb &&
+      <QuantityField name="insertionLoss" label="光插损" kinds={opticalKinds} value={transfer.insertionLossDb} parameters={parameters} minimum={0} />}
+    {((transfer.kind === 'optical' && !transfer.insertionLossDb) || transfer.kind === 'wavelengthConversion') &&
       <QuantityField name="gain" label="增益" kinds={opticalKinds} value={transfer.gainDb} parameters={parameters} />}
     {draft && transfer.kind === 'dc' && <>
       <QuantityField name="efficiency" label="转换效率" kinds={['fixed']} unit="ratio" minimum={Number.MIN_VALUE}

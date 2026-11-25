@@ -10,6 +10,7 @@ import { supportsDirection } from '../../model/v1/types';
 import { addGain, budgetValue, checkInputRating, logZero, unavailable } from './budget-metric';
 import type { BudgetMetric, InputRatingCheck } from './budget-metric';
 import { resolveEmpiricalValue } from './empirical-value';
+import { cochannelConflict, createOpticalOrigins } from './optical-origins';
 import { chooseRouteChannel, intersectCarrier, searchSignalPath } from './path-search';
 import type { SearchResult, SignalPath } from './path-search';
 import { buildSignalGraph, channelRoutingPorts, opticalSourceFlow, portFlowAt, signalPortKey } from './signal-graph';
@@ -61,9 +62,16 @@ export function createOpticalBudget(project: Project) {
   return createOpticalBudgetForGraph(buildSignalGraph(project));
 }
 
-export function createOpticalBudgetForGraph(graph: SignalGraph) {
+type OriginLookup = ReturnType<typeof createOpticalOrigins>;
+
+export function createOpticalBudgetForGraph(graph: SignalGraph, sharedOrigins?: OriginLookup) {
   const { showPath } = createPathNames(graph.instances);
   const wavelengthPorts = channelRoutingPorts(graph.edges);
+  const commonPorts = new Map(graph.instances.flatMap(({ instancePath, definition }) => {
+    if (definition.kind !== 'component' || !definition.wdm) return [];
+    const key = signalPortKey({ instancePath, portId: 'COM' });
+    return [[key, graph.ports.get(key)!] as const];
+  }));
   const instances = new Map(graph.instances.map(item => [JSON.stringify(item.instancePath), item]));
   const outgoing = new Map<SignalPort, SignalEdge[]>();
   for (const edge of graph.edges) {
@@ -73,6 +81,12 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
   }
   const instanceAt = (ref: EndpointRef) => instances.get(JSON.stringify(ref.instancePath));
   const portAt = (ref: EndpointRef) => graph.ports.get(signalPortKey(ref));
+  let defaultOrigins: OriginLookup | undefined;
+  function originsFor(sources: readonly OpticalSource[]) {
+    if (sharedOrigins || !commonPorts.size) return sharedOrigins;
+    if (sources.length) return createOpticalOrigins(graph, sources);
+    return defaultOrigins ??= createOpticalOrigins(graph);
+  }
 
   function search(start: SignalPort, target: SignalPort, carrier: Carrier) {
     return searchSignalPath({ starts: [start], startFlow: opticalSourceFlow, target, adjacent: outgoing, carrier, opticalOnly: true });
@@ -88,6 +102,8 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
   }
 
   function finish(stages: OpticalStage[], gainDb: BudgetMetric<'dB'>, pathIssue?: PathIssue, receiverEdge?: SignalEdge): OpticalBudget {
+    const clash = stages.find(s => s.incoming?.gainDb.availability === 'unavailable' && s.incoming.gainDb.reason === cochannelConflict);
+    if (!pathIssue && clash) pathIssue = { status: 'ambiguous', endpoint: clash.endpoint, reason: cochannelConflict };
     const powerDbm = pathIssue ? unavailable('dBm', pathIssue.reason) : stages.at(-1)!.powerDbm;
     const status = powerDbm.availability === 'available' && gainDb.availability === 'available' ? 'valid'
       : gainDb.availability === 'available' || stages.some(item => item.powerDbm.availability === 'available'
@@ -143,8 +159,17 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
       result.status === 'feedback_loop' ? result.endpoint.ref : target.ref, reason, stages);
   }
 
-  function advance(stages: OpticalStage[], edge: SignalEdge, gainDb: BudgetMetric<'dB'>) {
+  function advance(stages: OpticalStage[], edge: SignalEdge, gainDb: BudgetMetric<'dB'>, origins?: OriginLookup) {
     const previous = stages.at(-1)!;
+    const common = commonPorts.size ? commonPorts.get(signalPortKey(edge.to.ref)) : undefined;
+    if (previous.channelId && common && origins) {
+      const carriers = origins(common, previous.channelId, portFlowAt(edge, edge.to));
+      if (carriers.unresolved.length || carriers.paths.length > 1) {
+        const gain = unavailable('dB', cochannelConflict);
+        stages.push(stage(edge.to, previous.channelId, unavailable('dBm', cochannelConflict), { edge, gainDb: gain }));
+        return gain;
+      }
+    }
     const source = edge.source;
     const query = { channelId: previous.channelId };
     const instance = instanceAt(edge.from.ref);
@@ -176,22 +201,24 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
       stages.push(stage(edge.to, previous.channelId, addGain(previous.powerDbm, gain), { edge, gainDb: gain }));
       return addGain(gainDb, gain);
     }
+    const loss = source.kind === 'transfer' && source.transfer.kind === 'optical' ? source.transfer.insertionLossDb : undefined;
     const declared = source.kind === 'switchRoute' ? source.route.gainDb
       : source.kind === 'transfer' && 'gainDb' in source.transfer ? source.transfer.gainDb : undefined;
     // Every device route needs an explicit gain, even if its specified gain is zero.
     const value = source.kind === 'switchRoute' || source.kind === 'transfer'
       ? !previous.channelId && (wavelengthPorts.from.has(edge.from) || wavelengthPorts.to.has(edge.to))
-        ? unavailable('dB', '该器件按波长选路，请选择光通道。') : resolveEmpiricalValue('dB', declared, query, instance)
-      : budgetValue('dB', 0);
+        ? unavailable('dB', '该器件按波长选路，请选择光通道。') : resolveEmpiricalValue('dB', loss ?? declared, query, instance)
+      : budgetValue('dB', (source.kind === 'connection' || source.kind === 'cableCore') && source.lossDb ? -source.lossDb : 0);
     const gain = value.availability === 'unavailable'
-      ? unavailable('dB', `${showPath(edge.from.ref.instancePath)} 光增益：${value.reason}`) : value;
+      ? unavailable('dB', `${showPath(edge.from.ref.instancePath)} ${loss ? '光插损' : '光增益'}：${value.reason}`)
+      : loss ? budgetValue('dB', 0 - value.value) : value;
     const nextChannel = edge.channels.kind === 'convert' ? edge.channels.toChannelId : previous.channelId;
     stages.push(stage(edge.to, nextChannel, addGain(previous.powerDbm, gain), { edge, gainDb: gain }));
     return addGain(gainDb, gain);
   }
 
-  function propagate(stages: OpticalStage[], edges: readonly SignalEdge[], gain: BudgetMetric<'dB'>) {
-    for (const edge of edges) gain = advance(stages, edge, gain);
+  function propagate(stages: OpticalStage[], edges: readonly SignalEdge[], gain: BudgetMetric<'dB'>, origins?: OriginLookup) {
+    for (const edge of edges) gain = advance(stages, edge, gain, origins);
     return gain;
   }
 
@@ -212,7 +239,7 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
       : unavailable('dBm', `${showPath(port.ref.instancePath)} · ${portDisplayName(port.definition)} 光源功率：${power.reason}`), undefined, flow)];
   }
 
-  function calculateOpticalPath(path: SignalPath, source: OpticalSource, receiverEdge?: SignalEdge) {
+  function calculateOpticalPath(path: SignalPath, source: OpticalSource, receiverEdge?: SignalEdge, trials: readonly OpticalSource[] = []) {
     const first = path.steps[0].port;
     const departure = path.edges.length ? portFlowAt(path.edges[0], first) : opticalSourceFlow(first);
     const hasSource = first.definition.opticalEmitter !== undefined || source.powerDbm !== undefined;
@@ -220,7 +247,7 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
       return fail('unreachable', first.ref, '该路径不经过此双向光口的供光方向。');
     }
     const stages = start(first, source, departure);
-    return finish(stages, propagate(stages, path.edges, budgetValue('dB', 0)), undefined, receiverEdge);
+    return finish(stages, propagate(stages, path.edges, budgetValue('dB', 0), originsFor(trials)), undefined, receiverEdge);
   }
 
   function calculateSourcePath(path: SignalPath, selection: OpticalSource | readonly OpticalSource[] = [], receiverEdge?: SignalEdge) {
@@ -228,19 +255,21 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
     const source = 'endpoint' in selection ? selection : selectOpticalSource(first, selection);
     if (!source) return fail('ambiguous', first.port.ref, '该光源有多项供光设置，请选择唯一的光通道。');
     const problem = sourceIssue(source, path.steps[0].port);
-    return problem ? fail('invalid_reference', source.endpoint, problem) : calculateOpticalPath(path, source, receiverEdge);
+    return problem ? fail('invalid_reference', source.endpoint, problem)
+      : calculateOpticalPath(path, source, receiverEdge, 'endpoint' in selection ? [selection] : selection);
   }
 
-  function calculateEoSupply(supply: SignalPath, source: OpticalSource, eo: SignalEdge) {
+  function calculateEoSupply(supply: SignalPath, source: OpticalSource, eo: SignalEdge, origins?: OriginLookup) {
     const stages = start(supply.steps[0].port, source);
-    const gain = propagate(stages, supply.edges, budgetValue('dB', 0));
-    return { stages, gainDb: advance(stages, eo, gain) };
+    const gain = propagate(stages, supply.edges, budgetValue('dB', 0), origins);
+    return { stages, gainDb: advance(stages, eo, gain, origins) };
   }
 
   /** Evaluates the supplied EO and the already selected optical edges up to the PD input. */
-  function calculateEoPath(supply: SignalPath, source: OpticalSource, eo: SignalEdge, opticalEdges: readonly SignalEdge[]) {
-    const { stages, gainDb } = calculateEoSupply(supply, source, eo);
-    return finish(stages, propagate(stages, opticalEdges, gainDb));
+  function calculateEoPath(supply: SignalPath, source: OpticalSource, eo: SignalEdge, opticalEdges: readonly SignalEdge[], trials: readonly OpticalSource[] = []) {
+    const origins = originsFor(trials);
+    const { stages, gainDb } = calculateEoSupply(supply, source, eo, origins);
+    return finish(stages, propagate(stages, opticalEdges, gainDb, origins));
   }
 
   function calculateLocal(request: LocalOpticalRequest): OpticalBudget {
@@ -254,7 +283,7 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
       const path = search(port, target, source.channelId ? [source.channelId] : undefined);
       if (path.status !== 'resolved') return pathFailure(path, target,
         !source.channelId || !port.definition.channelIds || port.definition.channelIds.includes(source.channelId) ? start(port, source) : []);
-      return calculateOpticalPath(path.path, selectOpticalSource(path.path.steps[0], [source])!);
+      return calculateOpticalPath(path.path, selectOpticalSource(path.path.steps[0], [source])!, undefined, [source]);
     }
 
     const { eo, sources, channelId } = request;
@@ -295,9 +324,9 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
     const source = selectOpticalSource(first, sources);
     if (!source) return fail('ambiguous', first.port.ref, '该光源有多项供光设置，请选择唯一的光通道。');
     if (path.status !== 'resolved') {
-      return pathFailure(path, target, calculateEoSupply(candidate.path, source, edge).stages);
+      return pathFailure(path, target, calculateEoSupply(candidate.path, source, edge, originsFor(sources)).stages);
     }
-    return calculateEoPath(candidate.path, source, edge, path.path.edges);
+    return calculateEoPath(candidate.path, source, edge, path.path.edges, sources);
   }
 
   function calculateDigitalPath(path: SignalPath, channel?: OpticalChannelId, sources: readonly OpticalSource[] = []) {

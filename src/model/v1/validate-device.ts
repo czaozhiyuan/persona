@@ -6,6 +6,7 @@ import { isPowerPort, isSupplyOutput, supportsDirection } from './types';
 import type { ComponentDefinition, PortDefinition, PortType } from './types';
 import { validateChannelIds, validateEmpirical, validateRange } from './validate-parameters';
 import { indexById, requireValid } from './validation';
+import { validateWdm } from './wdm';
 
 function validateDcValue(value: DcValue | undefined, unit: 'V' | 'A' | 'W' | 'ratio', parameters: ReadonlyMap<string, ParameterDefinition>, context: string) {
   if (value === undefined) return;
@@ -81,6 +82,7 @@ export function validateDevice(
   definition: ComponentDefinition, ports: ReadonlyMap<string, PortDefinition>,
   parameters: ReadonlyMap<string, ParameterDefinition>,
 ): void {
+  if (definition.wdm) validateWdm(definition);
   function validateRoute(route: Transfer, context: string) {
     const from = ports.get(route.fromPortId);
     const to = ports.get(route.toPortId);
@@ -135,6 +137,10 @@ export function validateDevice(
     }
     const kinds = route.kind === 'rf' ? ['fixed', 'rfCurve'] as const : ['fixed', 'channelTable'] as const;
     if ('gainDb' in route && route.gainDb !== undefined) validateQuantity(parameters, 'dB', route.gainDb, kinds, context);
+    if (route.kind === 'optical' && route.insertionLossDb) {
+      requireValid(!route.gainDb, `${context}: 光传输不能同时设置增益和插损`);
+      validateQuantity(parameters, 'dB', route.insertionLossDb, kinds, `${context} 光插损`, 0);
+    }
     if (route.kind === 'rf' && route.nfDb !== undefined) validateQuantity(parameters, 'dB', route.nfDb, kinds, `${context} NF`);
     if (route.kind === 'dml' && route.modulationSlope) {
       validateQuantity(parameters, 'W/V', route.modulationSlope, ['fixed', 'rfCurve'], `${context} K(f)`, 0);

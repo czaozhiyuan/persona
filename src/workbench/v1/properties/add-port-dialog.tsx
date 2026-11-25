@@ -9,15 +9,24 @@ import type { ProjectStore } from '../../../state/v1/project-store';
 import { editablePortName, portDisplayName, portTypeLabels } from '../labels';
 import { PortParameterFields, readPort } from './device-fields';
 import { ratingUnits } from './input-rating-field';
+import { WdmPortDialog } from './wdm-configuration';
 
 function signature(form: HTMLFormElement) {
   return JSON.stringify(Array.from(new FormData(form).entries()));
 }
 
-export function PortManagerDialog({ name, owner, locations, store, added, close }: {
+type PortManagerProps = {
   owner: ResolvedInstance; name: string; locations: readonly string[]; store: ProjectStore;
   added: (id: string) => void; close: () => void;
-}) {
+};
+
+export function PortManagerDialog(props: PortManagerProps) {
+  const { definition } = props.owner;
+  return definition.kind === 'component' && definition.wdm
+    ? <WdmPortDialog {...props} definition={definition} /> : <StandardPortDialog {...props} />;
+}
+
+function StandardPortDialog({ name, owner, locations, store, added, close }: PortManagerProps) {
   const { ports, id: definitionId } = owner.definition;
   const [selected, setSelected] = useState<string | undefined>(ports[0]?.id);
   const [revision, setRevision] = useState(0);

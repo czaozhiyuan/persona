@@ -16,6 +16,8 @@ import type { EndpointRef, InstancePath, ModuleDefinition, Project } from '../..
 import type { ProjectStore, ProjectStoreSnapshot } from '../../../state/v1/project-store';
 import { editModule, editModuleWiring, moveTopologyNodes, resizeTopologyFrame } from '../../../state/v1/topology-edits';
 import { PortActionsDialog } from './port-actions-dialog';
+import type { MultiplexPower } from '../../../engine/v1/multiplex-power';
+import { MultiplexDetails } from '../../../workbench/v1/budgets/multiplex-details';
 import { PortBindingDialog } from './port-binding-dialog';
 import type { BindingPreview } from './port-binding-dialog';
 import { PortDeletionDialog } from './port-deletion-dialog';
@@ -30,7 +32,8 @@ import './topology.css';
 
 import type { LibraryConfig } from '../../../library/v1/user-library';
 
-export function TopologyEditor({ centerPlacement, linkControls, library, store, state, module, pathResult, graph, rename, expanded, setExpanded, budgetHighlight, onPortBudget, onDcBudget, onAddPort, newPort, onSelectObject, onSelectObjects, moveAcrossLevels, focusMoved, copyModule, pasteModule, copyNotice, fullPage, toggleFullPage, restoreView, placingModule, setPlacingModule, toolsHost, viewHost, topologyActive }: {
+export function TopologyEditor({ multiplex, centerPlacement, linkControls, library, store, state, module, pathResult, graph, rename, expanded, setExpanded, budgetHighlight, onPortBudget, onDcBudget, onAddPort, newPort, onSelectObject, onSelectObjects, moveAcrossLevels, focusMoved, copyModule, pasteModule, copyNotice, fullPage, toggleFullPage, restoreView, placingModule, setPlacingModule, toolsHost, viewHost, topologyActive }: {
+  multiplex: MultiplexPower;
   linkControls: import('react').ReactNode;
   library: LibraryConfig;
   store: ProjectStore; state: ProjectStoreSnapshot; module: ModuleDefinition; pathResult?: PathResult; graph: SignalGraph; rename: () => void;
@@ -203,6 +206,7 @@ export function TopologyEditor({ centerPlacement, linkControls, library, store, 
       },
     } : undefined;
     return <PortActionsDialog port={port} label={portDisplayName(port, false, definition.ports, item)} name={instance?.name ?? definition.name} exposure={exposure}
+      readings={<MultiplexDetails power={multiplex} endpoints={[{ instancePath: path, portId }]} />}
       locations={structureScope(graph.instances, definition.id)} error={message}
       budget={action => { setPortAction(undefined); onPortBudget(action, { instancePath: path, portId }); }}
       rename={name => {
@@ -217,7 +221,7 @@ export function TopologyEditor({ centerPlacement, linkControls, library, store, 
 
   return <section className="v1-topology" aria-label={`框图 · ${moduleName}`}>
     <div className="v1-hierarchy-workspace">
-      <TopologyCanvas centerPlacement={centerPlacement} project={project} instances={graph.instances} modulePath={scope} selectedInstance={selection.instancePath}
+      <TopologyCanvas multiplex={multiplex} centerPlacement={centerPlacement} project={project} instances={graph.instances} modulePath={scope} selectedInstance={selection.instancePath}
         pathResult={pathResult} budgetHighlight={budgetHighlight} expanded={expanded} toggleModule={toggleModule}
         selectedPaths={selectedPaths} selectObject={onSelectObject} selectObjects={onSelectObjects}
         enterModule={store.selectModule} focusMoved={focusMoved}

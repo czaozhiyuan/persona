@@ -18,6 +18,9 @@ export function TopologyTool({ title, children }: { title: string; children: Rea
 }
 
 export const field = (data: FormData, name: string) => String(data.get(name) ?? '').trim();
+const fibreLoss = (data: FormData) => field(data, 'lossDb') ? { lossDb: Number(field(data, 'lossDb')) } : {};
+const FibreLoss = ({ value }: { value?: number }) => <label>光纤损耗（dB）<input name="lossDb" type="number"
+  min={0} step="any" defaultValue={value} placeholder="0" /></label>;
 const endpointKey = (ref: LocalEndpointRef) => JSON.stringify([ref.instanceId, ref.portId]);
 const endpointAt = (value: string, ports: readonly LocalPort[]) => ports.find(item => endpointKey(item.ref) === value)?.ref;
 
@@ -52,7 +55,7 @@ export function ConnectionForm({ module, ports, update }: { module: ModuleDefini
       if (!from || !to) return;
       const id = connection?.id ?? crypto.randomUUID();
       const mediaKind = (field(data, 'media') || undefined) as Connection['mediaKind'];
-      const next = { id, from, to, mediaKind };
+      const next = { id, from, to, mediaKind, ...fibreLoss(data) };
       if (update(current => ({
         ...current, connections: [...(current.connections ?? []).filter(item => item.id !== id), next],
       }))) setSelected(id);
@@ -62,6 +65,7 @@ export function ConnectionForm({ module, ports, update }: { module: ModuleDefini
       <label>介质<select name="media" defaultValue={connection?.mediaKind ?? ''}>
         <option value="">未指定</option>{Object.entries(mediaLabels).map(([type, label]) => <option key={type} value={type}>{label}</option>)}
       </select></label>
+      {(!connection || at(connection.from)?.port.type === 'OPTICAL') && <FibreLoss value={connection?.lossDb} />}
       <button type="submit">{connection ? '保存连接' : '添加连接'}</button>
       {connection && <button type="button" onClick={() => {
         if (update(current => ({ ...current, connections: current.connections?.filter(item => item.id !== connection.id) }))) setSelected('');
@@ -113,12 +117,13 @@ function CoreForm({ bundle, ports, update }: { bundle: CableBundle; ports: reado
       const data = new FormData(event.currentTarget);
       const id = core?.id ?? crypto.randomUUID();
       const side = (key: 'a' | 'b') => ({ pin: Number(field(data, key + 'Pin')), endpoint: endpointAt(field(data, key), ports) });
-      if (update({ ...bundle, cores: [...bundle.cores.filter(item => item.id !== id), { id, a: side('a'), b: side('b') }] })) setSelected(id);
+      if (update({ ...bundle, cores: [...bundle.cores.filter(item => item.id !== id), { id, a: side('a'), b: side('b'), ...fibreLoss(data) }] })) setSelected(id);
     }}>
       <label>A 端芯号<input name="aPin" type="number" min={1} max={bundle.coreCount} defaultValue={core?.a.pin} required /></label>
       <EndpointSelect name="a" label="A 端附件" ports={ports} value={core?.a.endpoint} optional />
       <label>B 端芯号<input name="bPin" type="number" min={1} max={bundle.coreCount} defaultValue={core?.b.pin} required /></label>
       <EndpointSelect name="b" label="B 端附件" ports={ports} value={core?.b.endpoint} optional />
+      <FibreLoss value={core?.lossDb} />
       <button type="submit">{core ? '保存纤芯' : '添加纤芯'}</button>
       {core && <button type="button" onClick={() => {
         if (update({ ...bundle, cores: bundle.cores.filter(item => item.id !== core.id) })) setSelected('');

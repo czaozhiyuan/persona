@@ -6,6 +6,8 @@ import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, 
 import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
 import type { PathResult } from '../../../engine/v1/path-resolver';
 import { signalPortKey } from '../../../engine/v1/signal-graph';
+import type { MultiplexPower } from '../../../engine/v1/multiplex-power';
+import { multiplexCaption, MultiplexDetails } from '../../../workbench/v1/budgets/multiplex-details';
 import { blankModuleId } from '../../../library/v1/built-in';
 import { libraryDragType, readLibraryItem } from '../../../library/v1/insert-library-item';
 import type { LibraryItem } from '../../../library/v1/insert-library-item';
@@ -132,6 +134,7 @@ const nodeTypes = { device: Device, moduleFrame: Frame };
 const edgeTypes = { signal: SignalWire };
 
 type Props = {
+  multiplex: MultiplexPower;
   project: Project;
   instances: readonly ResolvedInstance[];
   modulePath: InstancePath;
@@ -179,7 +182,7 @@ export function TopologyCanvas(props: Props) {
   return <ReactFlowProvider><EditableTopologyCanvas {...props} /></ReactFlowProvider>;
 }
 
-function EditableTopologyCanvas({ project, instances, modulePath, selectedInstance, selectedPaths, pathResult, budgetHighlight, expanded,
+function EditableTopologyCanvas({ multiplex, project, instances, modulePath, selectedInstance, selectedPaths, pathResult, budgetHighlight, expanded,
   toggleModule, selectObject, selectObjects, enterModule, reparent, focusMoved, move, resize, connect, mapPort, add, placingModule, cancelPlacement,
   deleteInstances, deleteWiring, route, rename, copyModule, pasteModule, centerPlacement, report, undo, redo, openPort, onAddPort, newPort,
   depth, fullPage, toggleFullPage, restoreView, viewHost, topologyActive, saveExpansion }: Props) {
@@ -288,6 +291,10 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     return [ports.get(portKey(edge.source, edge.sourceHandle)), ports.get(portKey(edge.target, edge.targetHandle))] as const;
   }
 
+  function wireEndpoints(edge: WiringEdge) {
+    return connectionPorts(edge).flatMap(p => p ? [{ instancePath: p.endpoint ? [...p.scope, p.endpoint.instanceId] : p.scope, portId: p.port.id }] : []);
+  }
+
   function onConnect(edge: FlowConnection) {
     if (cancelled.current) return;
     const [a, b] = connectionPorts(edge);
@@ -335,7 +342,10 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     const id = nodeId(key);
     const data: NodeData = { key, path, name, labelContext: item, ports: definition.ports,
       iconKey: definitionIcon(definition),
-      portValue: budgetHighlight?.annotations && (portId => budgetHighlight.annotations!.ports.get(signalPortKey({ instancePath: path, portId }))),
+      portValue: portId => {
+        const ref = { instancePath: path, portId };
+        return multiplexCaption(multiplex.at(ref)) ?? budgetHighlight?.annotations?.ports.get(signalPortKey(ref));
+      },
       notes: budgetHighlight?.annotations?.nodes.get(key),
       pathPorts: new Set(definition.ports.filter(port =>
         highlight?.ports.has(signalPortKey({ instancePath: path, portId: port.id }))).map(port => port.id)),
@@ -701,7 +711,10 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     const dy = origin && frame ? origin.y - frame.display.y : 0;
     const saved = routes.get(edge.id);
     const selected = selectedWiring === edge;
+    const ref = wireEndpoints(edge)[0];
+    const reading = ref && multiplexCaption(multiplex.at(ref));
     return { ...edge, selected, data: { ...data,
+      caption: reading && ref ? multiplex.label(ref) + ' · ' + reading : data.caption,
       routePoint: saved && { x: saved.x + dx, y: saved.y + dy },
       savePoint: selected ? (p?: XYPosition) => route(data.scope, data.wire, p && { x: p.x - dx, y: p.y - dy }) : undefined,
     } };
@@ -831,6 +844,8 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
         if (locateIds.length) void flow.current?.fitView({ ...canvasFitOptions, nodes: locateIds.map(id => ({ id })), maxZoom: 1.2 });
       }} toggleFullPage={switchFullPage} />
     </ReactFlow>
+    {selectedWiring && <aside className="v1-wire-readings"><MultiplexDetails power={multiplex}
+      endpoints={wireEndpoints(selectedWiring)} title="复用光 · 查看两端逐波功率" /></aside>}
     {topologyActive && viewHost && !fullPage && createPortal(<button type="button" onClick={switchFullPage}>全页展示</button>, viewHost)}
     {dropPreview && <>
       {!dropPreview.node && <div className="v1-drop-canvas" aria-hidden="true" />}

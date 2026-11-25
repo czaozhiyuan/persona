@@ -7,6 +7,8 @@ import type { ApprovedMove, ReparentLayout } from '../../editors/topology/v1/rep
 import type { CanvasView } from '../../editors/topology/v1/canvas-controls';
 import type { CenterPlacement } from '../../editors/topology/v1/topology-layout-edits';
 import { TopologyEditor } from '../../editors/topology/v1/topology-editor';
+import { createMultiplexPower } from '../../engine/v1/multiplex-power';
+import { MultiplexDetails } from './budgets/multiplex-details';
 import { isRfFrequency } from '../../engine/v1/rf-budget';
 import { createLinkBudget } from '../../engine/v1/link-budget';
 import { createOpticalBudgetForGraph } from '../../engine/v1/optical-budget';
@@ -123,6 +125,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     const ports = new Set(linkOptions.opticalSources.map(option => option.key));
     return activeTrial.opticalSources?.filter(source => ports.has(signalPortKey(source.endpoint)));
   }, [linkOptions, activeTrial.opticalSources]);
+  const multiplex = useMemo(() => createMultiplexPower(linkOptions.graph, opticalSources), [linkOptions, opticalSources]);
   const conditions = useMemo(() => ({ ...activeTrial, opticalSources }), [activeTrial, opticalSources]);
   const pathResult = useMemo(() => selectedLink ? budget.resolveNamedLink(selectedLink, { opticalSources }) : undefined,
     [selectedLink, budget, opticalSources]);
@@ -652,7 +655,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
           <div className="v1-canvas-page" inert={page !== 'canvas' || selection.view !== 'topology'}
             aria-hidden={page !== 'canvas' || selection.view !== 'topology'}>
             {active?.kind === 'module' &&
-              <TopologyEditor centerPlacement={centerPlacement} library={library.config} key={JSON.stringify(['topology', projectSession, selection.modulePath])}
+              <TopologyEditor multiplex={multiplex} centerPlacement={centerPlacement} library={library.config} key={JSON.stringify(['topology', projectSession, selection.modulePath])}
                 linkControls={<div className="v1-canvas-link">
                   <label>当前链路<select aria-label="框图当前链路" value={category === 'links' ? savedLink?.id ?? '' : ''} onChange={e => chooseLink(e.target.value || undefined)}>
                     <option value="">{category !== 'links' ? budgetTitles[category] : draftLink ? '画布临时链路' : '未选择链路'}</option>
@@ -756,6 +759,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
                   setConditions={next => {
                     if (selectedLink) setLinkInputs(previous => new Map(previous).set(selectedLink.id, next));
                   }} />
+                {pathResult?.trace && <MultiplexDetails power={multiplex} endpoints={pathResult.trace.steps.map(s => s.port.ref)} />}
               </div>
               {category === 'optical' && <LocalOpticalPanel key={opticalTarget && signalPortKey(opticalTarget)} options={linkOptions}
                 settings={localOptical} onChange={setLocalOptical} target={opticalTarget} result={opticalResult} locate={locateBudgetPort} />}

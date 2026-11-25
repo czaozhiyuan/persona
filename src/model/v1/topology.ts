@@ -9,11 +9,13 @@ export type Connection = {
   from: LocalEndpointRef;
   to: LocalEndpointRef;
   mediaKind?: 'OPTICAL_FIBER' | 'RF_COAX' | 'RJ45_CABLE';
+  lossDb?: number;
 };
 
 export type CableCore = {
   /** Stable within the bundle, even if an attachment or pin number changes. */
   id: string;
+  lossDb?: number;
   a: { pin: number; endpoint?: LocalEndpointRef };
   b: { pin: number; endpoint?: LocalEndpointRef };
 };

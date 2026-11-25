@@ -27,6 +27,8 @@ export function validateModuleTopology(
     requireValid(from && to, `${context}: 端点必须是直接子实例的端口`);
     requireValid(canConnect(from.direction, to.direction), `${context}: 连接方向必须从输出到输入`);
     requireValid(from.type === to.type, `${context}: 两端端口类型不匹配`);
+    requireValid(connection.lossDb === undefined || (from.type === 'OPTICAL' && Number.isFinite(connection.lossDb) && connection.lossDb >= 0),
+      `${context}: 仅光纤可设置非负的光纤损耗`);
     requireValid(connection.mediaKind === undefined || mediaTypes[connection.mediaKind] === from.type,
       `${context}: 连接介质与端口类型不兼容`);
     requireValid(channelSetsOverlap(from, to), `${context}: 两端没有共同的光通道`);
@@ -40,6 +42,7 @@ export function validateModuleTopology(
     const attachments = new Set<string>();
     for (const core of indexById(bundle.cores, `${context}的纤芯`).values()) {
       const coreContext = `${context}的纤芯「${core.id}」`;
+      requireValid(core.lossDb === undefined || (Number.isFinite(core.lossDb) && core.lossDb >= 0), `${coreContext}: 光纤损耗应为非负数`);
       for (const [side, pins] of [[core.a, pinsA], [core.b, pinsB]] as const) {
         requireValid(Number.isSafeInteger(side.pin) && side.pin >= 1 && side.pin <= bundle.coreCount,
           `${coreContext}: 芯号必须在 1–${bundle.coreCount} 范围内`);

@@ -3,7 +3,7 @@ import type { LibraryDefinition } from './project-snapshots';
 
 const categories = [
   ['光电器件', ['library-laser', 'library-dml', 'library-optical-source', 'library-mzm', 'library-pd', 'library-optical-switch',
-    'library-optical-attenuator', 'library-splitter', 'library-sfp']],
+    'library-optical-attenuator', 'library-splitter', 'library-sfp', 'library-wdm']],
   ['射频器件', ['library-rf-amplifier', 'library-rf-attenuator']],
   ['电源与控制', ['library-dc-supply', 'library-dc-converter', 'library-pcb']],
   ['我的模板', []],
@@ -12,7 +12,7 @@ const categories = [
 
 export const creationLabels = new Map([[blankComponentId, '新建器件'], [blankModuleId, '新建模块'], [blankEnclosureId, '新建机箱']]);
 const abbreviations: Readonly<Record<string, string>> = {
-  'library-mzm': 'MZM', 'library-dml': 'DML', 'library-pd': 'PD', 'library-sfp': 'SFP',
+  'library-mzm': 'MZM', 'library-dml': 'DML', 'library-pd': 'PD', 'library-sfp': 'SFP', 'library-wdm': 'WDM MUX DEMUX',
   'library-dc-converter': 'DC/DC', 'library-rf-amplifier': 'RF', 'library-rf-attenuator': 'RF',
 };
 export function templateMatches(id: string, label: string, query: string) {
