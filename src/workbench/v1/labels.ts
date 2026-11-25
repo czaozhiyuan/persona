@@ -17,6 +17,7 @@ export const componentIconLabels = {
   photodiode: 'PD / 光接收机',
   amplifier: 'RF 放大器',
   opticalAttenuator: '光衰减器',
+  opticalAmplifier: '光放大器', circulator: '光环形器', isolator: '光隔离器',
   rfAttenuator: '射频衰减器',
   opticalSwitch: '光开关',
   dcSupply: '直流电源',

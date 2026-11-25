@@ -159,10 +159,16 @@ export function buildSignalGraph(project: Project): SignalGraph {
       definition.transfers?.forEach((transfer, index) => {
         const supply = transfer.kind === 'eo' && transfer.supplyPortId !== undefined
           ? portAt(instancePath, transfer.supplyPortId) : undefined;
-        addEdge(portAt(instancePath, transfer.fromPortId), portAt(instancePath, transfer.toPortId),
-          { kind: 'transfer', index, transfer }, supply);
+        const from = portAt(instancePath, transfer.fromPortId);
+        const to = portAt(instancePath, transfer.toPortId);
+        const source = { kind: 'transfer', index, transfer } as const;
+        addEdge(from, to, source, supply);
         if (transfer.kind === 'splitter') {
-          addEdge(portAt(instancePath, transfer.fromPortId), portAt(instancePath, transfer.secondPortId), { kind: 'transfer', index, transfer });
+          const second = portAt(instancePath, transfer.secondPortId);
+          addEdge(from, second, source);
+          for (const branch of [to, second]) {
+            if (from.definition.direction === 'bidirectional' && branch.definition.direction === 'bidirectional') addEdge(branch, from, source);
+          }
         }
       });
       switchState?.routes.forEach((route, index) => {

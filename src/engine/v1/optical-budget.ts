@@ -73,6 +73,26 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
   }
   const instanceAt = (ref: EndpointRef) => instances.get(JSON.stringify(ref.instancePath));
   const portAt = (ref: EndpointRef) => graph.ports.get(signalPortKey(ref));
+  const litBranches = new Map<SignalPort, Map<string, boolean>>();
+
+  function branchHasLight(port: SignalPort, channels: Carrier): boolean {
+    const key = JSON.stringify(channels ?? []);
+    let cached = litBranches.get(port);
+    if (!cached) litBranches.set(port, cached = new Map());
+    const known = cached.get(key);
+    if (known !== undefined) return known;
+    // An EO output also carries light if its own optical supply is connected.
+    const lit = findOpticalSupply(graph, outgoing, port, channels, new Map()).status !== 'unreachable' ||
+      graph.edges.some(eo => {
+        if (!eo.supply) return false;
+        const route = searchSignalPath({ starts: [eo.to], startFlow: opticalSourceFlow, target: port, targetFlow: 'in',
+          adjacent: outgoing, carrier: undefined, targetCarrier: channels, opticalOnly: true });
+        return route.status !== 'unreachable' && findOpticalSupply(graph, outgoing, eo.supply,
+          route.status === 'resolved' ? route.path.steps[0].channelIds : channels, new Map()).status !== 'unreachable';
+      });
+    cached.set(key, lit);
+    return lit;
+  }
 
   function search(start: SignalPort, target: SignalPort, carrier: Carrier) {
     return searchSignalPath({ starts: [start], startFlow: opticalSourceFlow, target, adjacent: outgoing, carrier, opticalOnly: true });
@@ -165,13 +185,25 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
       let gain: BudgetMetric<'dB'>;
       if (percent.availability === 'unavailable') gain = unavailable('dB', percent.reason);
       else {
-        const outputPercent = edge.to.ref.portId === split.toPortId ? percent.value : 100 - percent.value;
+        const firstBranch = edge.to.ref.portId === split.toPortId || edge.from.ref.portId === split.toPortId;
+        const outputPercent = firstBranch ? percent.value : 100 - percent.value;
         if (outputPercent === 0) {
           const zeroGain = logZero('dB');
           stages.push(stage(edge.to, previous.channelId, logZero('dBm'), { edge, gainDb: zeroGain }));
           return zeroGain;
         }
         gain = loss.availability === 'unavailable' ? loss : budgetValue('dB', 10 * (Math.log10(outputPercent) - 2) - loss.value);
+        if (edge.to.ref.portId === split.fromPortId && outputPercent < 100) {
+          const otherId = firstBranch ? split.secondPortId : split.toPortId;
+          const other = portAt({ instancePath: edge.from.ref.instancePath, portId: otherId })!;
+          const channels = previous.channelId ? [previous.channelId] : stages.reduce<Carrier>((carrier, stage) => {
+            const rule = stage.incoming?.edge.channels;
+            return intersectCarrier(carrier, rule?.kind === 'preserve' ? rule.channelIds : portAt(stage.endpoint)?.definition.channelIds);
+          }, edge.channels.kind === 'preserve' ? edge.channels.channelIds : undefined);
+          if (other.definition.direction === 'bidirectional' && branchHasLight(other, channels)) {
+            gain = unavailable('dB', '分路器的两条支路向公共口汇入同波长的光，无法唯一计算合路功率。');
+          }
+        }
       }
       stages.push(stage(edge.to, previous.channelId, addGain(previous.powerDbm, gain), { edge, gainDb: gain }));
       return addGain(gainDb, gain);
