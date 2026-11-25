@@ -11,7 +11,7 @@ export const mediaLabels = {
 
 export const componentIconLabels = {
   laser: '激光器',
-  dml: '直调激光器（DML）',
+  dml: '直调激光器',
   multiWavelengthSource: '多波长光源',
   mzm: 'MZM 电光调制器',
   photodiode: 'PD / 光接收机',
