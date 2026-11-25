@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { hierarchyKey } from '../../src/editors/topology/v1/hierarchy-view';
+import { frameHeader, type FramePortHeights } from '../../src/editors/topology/v1/module-frame';
 import { planInlineExpansion } from '../../src/editors/topology/v1/inline-expansion-layout';
 import { projectTopology } from '../../src/editors/topology/v1/topology-projection';
 import { resolveHierarchy } from '../../src/engine/v1/hierarchy';
@@ -29,10 +30,10 @@ function fixture(width: number, height: number): Project {
     },
   };
 }
-function view(project: Project, scope: InstancePath, expanded: InstancePath[]) {
+function view(project: Project, scope: InstancePath, expanded: InstancePath[], portHeights?: ReadonlyMap<string, FramePortHeights>) {
   const instances = [...resolveHierarchy(project).walkInstances()];
   const measured = new Map(instances.map(i => [hierarchyKey(i.instancePath), { width: 84, height: 50 }]));
-  return projectTopology(project, instances, scope, new Set(expanded.map(hierarchyKey)), measured);
+  return projectTopology(project, instances, scope, new Set(expanded.map(hierarchyKey)), measured, undefined, portHeights);
 }
 function object(view: ReturnType<typeof projectTopology>, path: InstancePath) {
   return view.nodeByKey.get(hierarchyKey(path))!;
@@ -40,6 +41,23 @@ function object(view: ReturnType<typeof projectTopology>, path: InstancePath) {
 const apply = (p: Project, { moves, frames }: ReturnType<typeof planInlineExpansion>) =>
   frames.reduce(resizeTopologyFrame, moveTopologyNodes(p, moves));
 const key = new Set([hierarchyKey(board)]);
+
+test('expanding a child keeps displaced devices below the measured top optical port row and header', () => {
+  const project = fixture(540, 300);
+  const parent = project.moduleDefinitions.find(d => d.id === 'receiver')!;
+  parent.ports = [{ id: 'COM', name: 'COM', type: 'OPTICAL', direction: 'bidirectional', side: 'top' }];
+  const portHeights = new Map([[hierarchyKey(receiver), { side: 0, top: 112 }]]);
+  const expanded = [receiver, board];
+  const edit = planInlineExpansion(view(project, [], expanded, portHeights), key);
+  assert.ok(edit.moves.some(move => move.instancePath.at(-1) === 'pd'));
+  const after = view(apply(project, edit), [], expanded, portHeights);
+  const frame = object(after, receiver).frame!;
+  assert.equal(frame.insets.top, 112 + frameHeader);
+  for (const item of after.scopes.get(hierarchyKey(receiver))!.members) {
+    assert.ok(item.bounds.y >= frame.display.y + frame.insets.top, item.key);
+  }
+  assert.deepEqual(planInlineExpansion(after, key), { moves: [], frames: [] });
+});
 
 test('inline expansion pins the anchor, moves only intersecting siblings, and preserves compacted positions after reload', () => {
   const project = fixture(540, 300);

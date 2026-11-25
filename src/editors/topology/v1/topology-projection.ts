@@ -29,7 +29,7 @@ export const toLocalPosition = (position: XYPosition, offset: XYPosition): XYPos
 
 export function projectTopology(project: Project, instances: readonly ResolvedInstance[], scope: InstancePath,
   expanded: ReadonlySet<string>, measured: ReadonlyMap<string, Size>, resizePreview?: FrameResizePreview,
-  portHeights?: ReadonlyMap<string, number | FramePortHeights>) {
+  portHeights?: ReadonlyMap<string, FramePortHeights>) {
   const rootKey = hierarchyKey(scope);
   const root = instances.find(item => hierarchyKey(item.instancePath) === rootKey)!;
   const children = hierarchyChildren(instances);

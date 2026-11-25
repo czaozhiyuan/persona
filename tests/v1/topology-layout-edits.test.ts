@@ -59,7 +59,7 @@ test('rendered multiline rows set the minimum projected and resized height per o
   const ports = [{ id: 'IN', direction: 'in', type: 'RF', name: '监测\n'.repeat(50).trim() }] as const;
   const project = { ...fixture, moduleDefinitions: fixture.moduleDefinitions.map(d => d.id === 'inner' ? { ...d, ports } : d) };
   const instances = [...resolveHierarchy(project).walkInstances()];
-  const view = projectTopology(project, instances, [], expanded, measured, undefined, new Map([[key, 900]]));
+  const view = projectTopology(project, instances, [], expanded, measured, undefined, new Map([[key, { side: 900, top: 0 }]]));
   const frame = view.nodeByKey.get(key)!.frame!.display;
   const insets = frameInsets(ports, 900);
   assert.equal(frame.height, insets.height);
