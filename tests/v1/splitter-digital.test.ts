@@ -21,6 +21,7 @@ const channel = 'DWDM_CH28' as const;
 function opticalNetwork(percent = 50, loss = 0, missing = false): Project {
   const defs = ['library-sfp','library-splitter','library-pd','library-pcb'].map(id =>
     builtInDefinitions.find(d => d.id === id)! as ComponentDefinition);
+  if (missing) defs[0] = { ...defs[0], parameters: defs[0].parameters?.map(p => ({ ...p, defaultValue: undefined })) };
   return { id: 'network', name: '数字光与分光', rootModuleDefinitionId: 'root', componentDefinitions: defs,
     moduleDefinitions: [{ kind: 'module', id: 'root', name: '系统', ports: [],
       instances: [['a', 'SFP A', defs[0].id], ['b', 'SFP B', defs[0].id], ['split', '光分路器', defs[1].id],

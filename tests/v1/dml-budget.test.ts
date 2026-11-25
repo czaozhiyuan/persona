@@ -25,7 +25,8 @@ function fixture(overrides: Record<string, ParameterValue> = {}, gain = halfPowe
   const defs = ids.map(id => builtInDefinitions.find(d => d.id === id)! as ComponentDefinition);
   const [dml, optical, pd, amp] = defs;
   // Use an unrelated definition ID and a public input to exercise semantic dispatch and port mappings.
-  const custom = { ...dml, id: 'custom-source', name: 'Custom source' };
+  const custom = { ...dml, id: 'custom-source', name: 'Custom source',
+    parameters: dml.parameters?.map(p => ({ ...p, defaultValue: undefined })) };
   return { id: 'dml-test', name: 'DML', rootModuleDefinitionId: 'root', componentDefinitions: [custom, optical, pd, amp],
     moduleDefinitions: [{ kind: 'module', id: 'tx-module', name: 'TX', ports: custom.ports.map(({ opticalEmitter, ...p }) => p),
       instances: [{ id: 'source', name: 'Source', definitionId: custom.id }],

@@ -78,6 +78,8 @@ test('port editor uses direct values on supply outputs and clears capacity on re
   for (const id of ['library-dc-supply', 'library-dc-converter']) {
     const d = factory.get(id)!;
     assert.ok(!d.parameters?.some(p => p.id === 'voltage'));
-    assert.equal(d.ports.find(p => p.id === 'DC_OUT')?.outputVoltageV, undefined);
+    const power = d.ports.find(p => p.id === 'DC_OUT')!;
+    assert.deepEqual(power.outputVoltageV, fixed(5));
+    assert.deepEqual(power.supplyCapacity, id === 'library-dc-supply' ? { unit: 'W', value: fixed(60) } : undefined);
   }
 });
