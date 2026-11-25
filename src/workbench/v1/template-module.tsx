@@ -1,4 +1,4 @@
-import { canMapDirection, supportsDirection } from '../../model/v1/types';
+import { canMapDirection, isPowerPort, mappingId, supportsDirection } from '../../model/v1/types';
 import { withMappedVoltages, readChildParameters, type ResolvedInstance } from '../../engine/v1/hierarchy';
 import { numberedNamesById, wireArrow } from '../../model/v1/display-names';
 import { useState } from 'react';
@@ -49,7 +49,17 @@ export function TemplateModule({ occurrence, module, definitions, hidden, change
       }] })}>添加子实例</button>
     </fieldset>
     <fieldset><legend>端口映射</legend>{module.ports.map(p => {
-      const target = module.portMappings?.find(m => m.portId === p.id)?.target;
+      const mappings = module.portMappings?.filter(m => m.portId === p.id) ?? [];
+      if (isPowerPort(p.type)) return <fieldset key={p.id}><legend>{portDisplayName(p, false, module.ports, occurrence)}</legend>
+        {ports.filter(o => o.p.type === p.type).map(o => {
+          const match = mappings.find(m => m.target.instanceId === o.target.instanceId && m.target.portId === o.target.portId);
+          return <label key={JSON.stringify(o.target)}><input type="checkbox" checked={!!match} onChange={e => change({ ...module,
+            portMappings: e.target.checked ? [...module.portMappings ?? [], { id: crypto.randomUUID(), portId: p.id, target: o.target }]
+              : module.portMappings?.filter(m => !match || mappingId(m) !== mappingId(match)),
+          })} />{o.label}</label>;
+        })}
+      </fieldset>;
+      const target = mappings[0]?.target;
       return <label key={p.id}>{portDisplayName(p, false, module.ports, occurrence)}<select value={target ? JSON.stringify(target) : ''} onChange={e => {
         const keep = (module.portMappings ?? []).filter(m => m.portId !== p.id);
         change({ ...module, portMappings: e.target.value ? [...keep, { portId: p.id, target: JSON.parse(e.target.value) }] : keep });
@@ -75,8 +85,8 @@ export function TemplateModule({ occurrence, module, definitions, hidden, change
         change({ ...module, connections: [...module.connections ?? [], { id: crypto.randomUUID(),
           from: JSON.parse(String(data.get('from'))), to: JSON.parse(String(data.get('to'))) }] });
       }}>{(['out', 'in'] as const).map(dir => <label key={dir}>{dir === 'out' ? '起点' : '终点'}<select name={dir === 'out' ? 'from' : 'to'} required>
-        {ports.filter(o => supportsDirection(o.p.direction, dir)).map(o => <option key={JSON.stringify(o.target)} value={JSON.stringify(o.target)}>{o.label}</option>)}</select></label>)}
-        <button type="submit" disabled={!ports.some(o => supportsDirection(o.p.direction, 'in')) || !ports.some(o => supportsDirection(o.p.direction, 'out'))}>添加连线</button></form>
+        {ports.filter(o => isPowerPort(o.p.type) || supportsDirection(o.p.direction, dir)).map(o => <option key={JSON.stringify(o.target)} value={JSON.stringify(o.target)}>{o.label}</option>)}</select></label>)}
+        <button type="submit" disabled={!ports.some(o => isPowerPort(o.p.type) || supportsDirection(o.p.direction, 'in')) || !ports.some(o => isPowerPort(o.p.type) || supportsDirection(o.p.direction, 'out'))}>添加连线</button></form>
     </fieldset>
     <label><input type="checkbox" checked={!!module.physicalEnclosure} onChange={e => change({ ...module,
       physicalEnclosure: e.target.checked ? { widthMm: 440, depthMm: 350, heightMm: 44.45 } : undefined })} />作为机箱</label>

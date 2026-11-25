@@ -2,7 +2,7 @@ import type { Edge, XYPosition } from '@xyflow/react';
 import { portDisplayName } from '../../../workbench/v1/labels';
 import type { LocalEndpointRef } from '../../../model/v1/topology';
 import type { InstancePath, ModuleDefinition, PortType } from '../../../model/v1/types';
-import { canConnect } from '../../../model/v1/types';
+import { canConnect, mappingId } from '../../../model/v1/types';
 import { wireArrow } from '../../../model/v1/display-names';
 import type { WiringSelection } from '../../../state/v1/remove-topology-object';
 import type { projectTopology, TopologyItem } from './topology-projection';
@@ -112,7 +112,8 @@ export function projectWiring(projection: ReturnType<typeof projectTopology>,
       const inner = { id: child(mapping.target.instanceId), handle: handleId(mapping.target.portId) };
       const outer = { id: boundary, handle: handleId(mapping.portId, true) };
       const [from, to] = outward ? [inner, outer] : [outer, inner];
-      edge(canvasEdgeKey('mapping', mapping.portId), { kind: 'mapping', id: mapping.portId }, port.type, {
+      const id = mappingId(mapping);
+      edge(canvasEdgeKey('mapping', id), { kind: 'mapping', id }, port.type, {
         source: from.id, target: to.id, sourceHandle: from.handle, targetHandle: to.handle,
         ariaLabel: `连接到内部端口：${portDisplayName(port, false, module.ports, projection.nodeByKey.get(key)?.item)} · ${childLabel(mapping.target)}`,
       });

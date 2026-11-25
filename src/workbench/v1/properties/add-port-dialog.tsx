@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import { PortDeletionDialog } from '../../../editors/topology/v1/port-deletion-dialog';
 import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
-import { isPowerPort, isSupplyOutput, portDirectionLabels, supportsDirection } from '../../../model/v1/types';
+import { canSetSupplyCapacity, isPowerPort, portDirectionLabels, supportsDirection } from '../../../model/v1/types';
 import type { PortDefinition, PortDirection, PortType } from '../../../model/v1/types';
 import { addDefinitionPort, updateDefinitionPort } from '../../../state/v1/module-ports';
 import type { ProjectStore } from '../../../state/v1/project-store';
@@ -151,7 +151,8 @@ function PortDetail({ form, port, owner, preview, save, remove, close }: {
       inputRating: seed.inputRating && ratings.includes(seed.inputRating.unit) ? seed.inputRating : undefined,
       inputVoltageV: nextDirection === 'in' ? voltage : undefined,
       outputVoltageV: nextDirection === 'out' ? voltage : undefined,
-      supplyCapacity: isSupplyOutput(owner.definition, { type: nextType, direction: nextDirection }) ? seed.supplyCapacity : undefined,
+      supplyCapacity: nextType === seed.type && canSetSupplyCapacity(owner.definition, { type: nextType, direction: nextDirection }) ? seed.supplyCapacity : undefined,
+      acLoadW: nextType === 'AC_POWER' && nextDirection === 'in' ? seed.acLoadW : undefined,
     });
   }
   return <form ref={form} onChange={event => {

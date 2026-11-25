@@ -32,7 +32,7 @@ export function projectPathHighlight(result: PathResult | undefined, scope: Inst
     let key: string | undefined;
     if (source.kind === 'connection' && exactScope(source.ref.scopePath)) key = canvasEdgeKey('connection', source.ref.connectionId);
     if (source.kind === 'cableCore' && exactScope(source.ref.scopePath)) key = canvasEdgeKey('core', source.ref.bundleId, source.ref.coreId);
-    if (source.kind === 'portMapping' && exactScope(source.publicPort.instancePath)) key = canvasEdgeKey('mapping', source.publicPort.portId);
+    if (source.kind === 'portMapping' && exactScope(source.publicPort.instancePath)) key = canvasEdgeKey('mapping', source.mappingId);
     if (!key) return;
     edges.add(key);
     if (budget?.annotations) {

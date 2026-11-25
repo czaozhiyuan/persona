@@ -1,7 +1,7 @@
 import type { OpticalChannelId } from '../../model/v1/channels';
 import type { OpticalRoute, Transfer } from '../../model/v1/device';
 import type { CableCoreRef, Connection, LocalEndpointRef } from '../../model/v1/topology';
-import { canConnect, supportsDirection } from '../../model/v1/types';
+import { canConnect, isPowerPort, mappingId, supportsDirection } from '../../model/v1/types';
 import type { ConnectionRef, EndpointRef, InstancePath, PortDefinition, PortFlow, Project } from '../../model/v1/types';
 import { resolveHierarchy } from './hierarchy';
 import type { ResolvedInstance } from './hierarchy';
@@ -23,7 +23,7 @@ export type SignalChannels =
 
 export type SignalEdgeSource =
   | { kind: 'darkParallelPaths'; fromFlow: PortFlow; toFlow: PortFlow }
-  | { kind: 'portMapping'; publicPort: EndpointRef }
+  | { kind: 'portMapping'; publicPort: EndpointRef; mappingId: string }
   | { kind: 'connection'; ref: ConnectionRef; mediaKind?: Connection['mediaKind']; lossDb?: number }
   | { kind: 'cableCore'; ref: CableCoreRef; aPin: number; bPin: number; lossDb?: number }
   | { kind: 'transfer'; index: number; transfer: Transfer }
@@ -136,6 +136,10 @@ export function buildSignalGraph(project: Project): SignalGraph {
   }
 
   function addWire(a: SignalPort, b: SignalPort, source: SignalEdgeSource) {
+    if (isPowerPort(a.definition.type)) {
+      addEdge(a, b, source);
+      return;
+    }
     if (canConnect(a.definition.direction, b.definition.direction)) addEdge(a, b, source);
     if (canConnect(b.definition.direction, a.definition.direction)) addEdge(b, a, source);
   }
@@ -146,7 +150,7 @@ export function buildSignalGraph(project: Project): SignalGraph {
       for (const mapping of definition.portMappings ?? []) {
         const outer = portAt(instancePath, mapping.portId);
         const inner = localPort(instancePath, mapping.target);
-        const source = { kind: 'portMapping', publicPort: outer.ref } as const;
+        const source = { kind: 'portMapping', publicPort: outer.ref, mappingId: mappingId(mapping) } as const;
         if (supportsDirection(outer.definition.direction, 'in')) addEdge(outer, inner, source);
         if (supportsDirection(outer.definition.direction, 'out')) addEdge(inner, outer, source);
       }

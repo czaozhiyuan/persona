@@ -1,9 +1,8 @@
 import { wireEndpoints, wireRouteKey } from './wire-route';
-import { isSupplyOutput } from './types';
 import type { Instance, InstancePath, ModuleDefinition, PhysicalFootprint, PortDefinition, Project } from './types';
 import type { ParameterDefinition } from './parameters';
 import { channelSetsOverlap, validateDevice, validatePortConstraints } from './validate-device';
-import { canMapDirection } from './types';
+import { canMapDirection, canSetSupplyCapacity, isPowerPort, mappingId } from './types';
 import { parameterCanFeed, validateParameterDefinition, validateParameterValue } from './validate-parameters';
 import { validateModuleTopology, validateNamedLinks } from './validate-topology';
 import { indexById, requireValid } from './validation';
@@ -78,7 +77,9 @@ export function validateProject(project: Project): void {
         || (port.direction === 'bidirectional' && port.type === 'OPTICAL')),
         `定义「${definition.id}」的端口「${port.id}」类型或方向无效`);
       requireValid(!port.opticalEmitter || definition.kind === 'component', `定义「${definition.id}」：请在实际器件的光输出端口设置光源。`);
-      requireValid(port.supplyCapacity === undefined || isSupplyOutput(definition, port), `定义「${definition.id}」：仅电源的直流输出端口可设置供电容量。`);
+      requireValid(port.supplyCapacity === undefined || canSetSupplyCapacity(definition, port), `定义「${definition.id}」：仅电源的直流输出端口或实际器件的交流输出端口可设置供电容量。`);
+      requireValid(port.acLoadW === undefined || definition.kind === 'component' && port.type === 'AC_POWER' && port.direction === 'in',
+        `定义「${definition.id}」：仅实际器件的交流输入端口可设置交流负载功耗。`);
       validatePortConstraints(port, parameters, `定义「${definition.id}」的端口「${port.id}」`);
     }
     portsByDefinition.set(definition.id, ports);
@@ -118,18 +119,22 @@ export function validateProject(project: Project): void {
       return child && portsByDefinition.get(child.definitionId)?.get(endpoint.portId);
     });
     const mapped = new Set<string>();
+    const mappingIds = new Set<string>();
     for (const mapping of module.portMappings ?? []) {
       const port = portsByDefinition.get(module.id)?.get(mapping.portId);
       requireValid(port, `模块「${module.id}」没有对外端口「${mapping.portId}」`);
-      requireValid(!mapped.has(port.id), `模块「${module.id}」的端口「${port.id}」存在重复映射`);
+      requireValid(mappingId(mapping).trim(), `模块「${module.id}」的端口映射 ID 不得为空`);
+      const key = JSON.stringify(isPowerPort(port.type) ? [port.id, mapping.target.instanceId, mapping.target.portId] : [port.id]);
+      requireValid(!mapped.has(key) && !mappingIds.has(mappingId(mapping)), `模块「${module.id}」的端口「${port.id}」存在重复映射`);
       const child = children.get(mapping.target.instanceId);
       requireValid(child, `模块「${module.id}」的端口「${port.id}」须映射到直接子实例`);
       const target = portsByDefinition.get(child.definitionId)?.get(mapping.target.portId);
       requireValid(target, `模块「${module.id}」的端口「${port.id}」映射到不存在的子实例端口「${mapping.target.portId}」`);
-      requireValid(port.type === target.type && canMapDirection(port.direction, target.direction),
+      requireValid(port.type === target.type && (isPowerPort(port.type) || canMapDirection(port.direction, target.direction)),
         `模块「${module.id}」的端口「${port.id}」映射前后须保持端口类型和方向一致`);
       requireValid(channelSetsOverlap(port, target), `模块「${module.id}」的端口「${port.id}」与映射端口没有共同的光通道`);
-      mapped.add(port.id);
+      mapped.add(key);
+      mappingIds.add(mappingId(mapping));
     }
     const mappedParameters = new Set<string>();
     for (const mapping of module.parameterMappings ?? []) {

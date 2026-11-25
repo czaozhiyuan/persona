@@ -1,5 +1,6 @@
 import type { ParameterMapping } from '../../model/v1/parameters';
 import type { CableBundle, LocalEndpointRef } from '../../model/v1/topology';
+import { isPowerPort } from '../../model/v1/types';
 import type { Instance, ModuleDefinition, PortDefinition } from '../../model/v1/types';
 
 export function availableId(base: string, used: ReadonlySet<string>): string {
@@ -62,7 +63,7 @@ export function transferMoveParameters(modules: Map<string, ModuleDefinition>, f
 
 export function unrestrictedAlias(boundary: PortDefinition, target: PortDefinition): boolean {
   // Removing a boundary must not change the voltage, ratings, or channels of the old route.
-  return !boundary.inputRating && !boundary.outputVoltageV && (!boundary.channelIds
+  return !boundary.inputRating && !boundary.inputVoltageV && !boundary.outputVoltageV && (!boundary.channelIds
     || !!target.channelIds?.every(channel => boundary.channelIds!.includes(channel)));
 }
 
@@ -136,9 +137,14 @@ export function moveLocalWiring(source: ModuleDefinition, destination: ModuleDef
     return [{ ...bundle, cores }];
   });
 
+  const powerPorts = new Set(source.ports.filter(port => isPowerPort(port.type)).map(port => port.id));
+  const portMappings = source.portMappings?.filter(mapping => {
+    if (!isMoving(mapping.target)) return true;
+    if (powerPorts.has(mapping.portId)) disconnected++;
+    return false;
+  });
   return {
-    source: { ...source, connections, cableBundles,
-      portMappings: source.portMappings?.filter(mapping => !isMoving(mapping.target)) },
+    source: { ...source, connections, cableBundles, portMappings },
     destination: { ...destination,
       connections: destinationConnections.length ? destinationConnections : destination.connections,
       cableBundles: destinationBundles.length ? destinationBundles : destination.cableBundles },

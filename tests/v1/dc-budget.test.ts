@@ -12,6 +12,24 @@ const rf = (direction: PortDefinition['direction']): PortDefinition => ({ id: 'R
 const local = (instanceId: string, portId: string) => ({ instanceId, portId });
 const ref = (instancePath: readonly string[], portId: string): EndpointRef => ({ instancePath, portId });
 const instance = (id: string, definitionId = id) => ({ id, name: id, definitionId });
+const wire = (a: string, b: string) => ({ id: a + '-' + b, from: local(a, 'p'), to: local(b, 'p') });
+
+function powerBus(type: 'AC_POWER' | 'DC_POWER', sources: { voltage?: number; watts?: number; amps?: number }[],
+  loads: (number | undefined)[], pairs: string[][]): Project {
+  const componentDefinitions: Project['componentDefinitions'] = [
+    ...sources.map(({ voltage, watts, amps }, i) => ({ kind: 'component' as const, id: 's' + i, name: 'Source ' + i,
+      dcSupply: type === 'DC_POWER', ports: [{ id: 'p', type, direction: 'out' as const, outputVoltageV: voltage === undefined ? undefined : fixed(voltage),
+        supplyCapacity: amps !== undefined ? { unit: 'A' as const, value: fixed(amps) }
+          : watts !== undefined ? { unit: 'W' as const, value: fixed(watts) } : undefined }] })),
+    ...loads.map((watts, i) => ({ kind: 'component' as const, id: 'l' + i, name: 'Load ' + i,
+      ports: [{ id: 'p', type, direction: 'in' as const, acLoadW: type === 'AC_POWER' && watts !== undefined ? fixed(watts) : undefined }],
+      dcLoad: type === 'DC_POWER' ? { portId: 'p', powerW: watts === undefined ? undefined : fixed(watts) } : undefined })),
+  ];
+  return { id: 'bus', name: 'Bus', rootModuleDefinitionId: 'root', componentDefinitions, moduleDefinitions: [{
+    kind: 'module', id: 'root', name: 'Root', ports: [], instances: componentDefinitions.map(d => instance(d.id)),
+    connections: pairs.map(([a,b]) => wire(a,b)),
+  }] };
+}
 
 function fixture(): Project {
   return {
@@ -72,6 +90,100 @@ function unavailableBecause(metric: BudgetMetric, reason: RegExp) {
   assert.match(metric.reason, reason);
 }
 
+test('star, daisy chain and mesh count only electrically attached sources and loads once', () => {
+  const star = [['s0','l0'], ['s0','l1'], ['l2','s0']], chain = [['s0','l0'], ['l0','l1'], ['l2','l1']];
+  const mesh = [...chain, ['l2','s0']];
+  const sources = [{ voltage: 5, watts: 10 }, { voltage: 5, amps: 3 }, { voltage: 5, watts: 5 }];
+  function expectNet(count: number, pairs: string[][], expected: number[]) {
+    const project = powerBus('DC_POWER', sources.slice(0,count), [1,2,3], pairs);
+    const budget = calculateDcBudget(parseProjectJson(serializeProjectJson(project)));
+    const net = budget.networks.find(n => n.ports.some(p => p.instancePath[0] === 's0'))!;
+    assert.deepEqual([value(net.voltageV), value(net.capacityW), value(net.demandW), value(net.marginW)], expected);
+    assert.equal(net.capacityStatus, 'within_capacity');
+    assert.ok(!budget.diagnostics.some(d => d.code === 'feedback'));
+  }
+  for (const edges of [star, chain, mesh]) expectNet(1, edges, [5,10,6,4]);
+  expectNet(1, chain.slice(0,2), [5,10,3,7]);
+  expectNet(2, [...mesh, ['s1','s0']], [5,25,6,19]);
+  expectNet(3, [...mesh, ['s1','s0'], ['l1','s2']], [5,30,6,24]);
+  expectNet(3, [...mesh, ['l1','s2']], [5,15,6,9]);
+});
+
+test('AC and DC preserve voltage conflicts, partial capacities and undocumented loads', () => {
+  const edges = [['s1','s0'], ['l0','s0'], ['l1','l0']];
+  for (const type of ['DC_POWER', 'AC_POWER'] as const) {
+    const voltage = type === 'DC_POWER' ? 5 : 220;
+    const sources = [{ voltage, watts: 10 }, { voltage, watts: 15 }];
+    const budget = (s: Parameters<typeof powerBus>[1], loads: (number | undefined)[]) =>
+      calculateDcBudget(powerBus(type, s, loads, edges));
+    const same = budget(sources, [1,5]);
+    assert.equal(same.networks.length, 1);
+    assert.deepEqual([value(same.networks[0].capacityW), value(same.networks[0].demandW), value(same.networks[0].marginW)], [25,6,19]);
+    assert.deepEqual(same.diagnostics, []);
+    const clash = budget([sources[0], { voltage: type === 'DC_POWER' ? 12 : 110, watts: 15 }], [1,5]);
+    assert.equal(value(clash.networks[0].capacityW), 25);
+    unavailableBecause(clash.networks[0].voltageV, /不一致/);
+    assert.equal(clash.networks[0].capacityStatus, 'unknown');
+    assert.ok(clash.diagnostics.some(d => d.code === 'voltage_conflict'));
+    const partial = budget([sources[0], { voltage }], [1,undefined]).networks[0];
+    assert.equal(value(partial.knownCapacityW), 10);
+    assert.equal(value(partial.knownDemandW), 1);
+    assert.equal(partial.capacityW.availability, 'unavailable');
+    assert.equal(partial.demandW.availability, 'unavailable');
+    assert.equal(partial.capacityStatus, 'unknown');
+    const overload = budget(sources, [25,1]).networks[0];
+    assert.equal(value(overload.marginW), -1);
+    assert.equal(overload.capacityStatus, 'over_capacity');
+  }
+});
+
+test('a parallel source retains its own ampere nameplate rating when the common voltage is undetermined', () => {
+  function budget(voltage?: number) {
+    const project = powerBus('DC_POWER', [{ voltage: 5, amps: 2 }, { voltage, amps: 1 }], [1], [['s0', 's1'], ['s0', 'l0']]);
+    return calculateDcBudget(parseProjectJson(serializeProjectJson(project)));
+  }
+  const partial = budget(), missing = partial.networks[0];
+  assert.equal(value(partial.supplies[0].capacityW), 10);
+  assert.equal(partial.supplies[1].capacityW.availability, 'unavailable');
+  assert.equal(value(missing.knownCapacityW), 10);
+  assert.equal(missing.capacityW.availability, 'unavailable');
+  assert.equal(missing.voltageV.availability, 'unavailable');
+  assert.equal(missing.marginW.availability, 'unavailable');
+  assert.equal(missing.capacityStatus, 'unknown');
+
+  const same = budget(5).networks[0];
+  assert.deepEqual([value(same.voltageV), value(same.knownCapacityW), value(same.capacityW), value(same.marginW)], [5, 15, 15, 14]);
+  assert.equal(same.capacityStatus, 'within_capacity');
+
+  const conflict = budget(12), net = conflict.networks[0];
+  assert.deepEqual(conflict.supplies.map(source => value(source.capacityW)), [10, 12]);
+  assert.equal(value(net.knownCapacityW), 22);
+  unavailableBecause(net.voltageV, /不一致/);
+  assert.equal(net.marginW.availability, 'unavailable');
+  assert.equal(net.capacityStatus, 'unknown');
+});
+
+test('parallel converters retain the output budget and reflect a common input demand only when it is determined', () => {
+  const base = fixture();
+  const rail = base.moduleDefinitions.find(d => d.id === 'rail')!;
+  const parallel = (separate: boolean) => changeRailA(base, m => ({ ...m,
+    instances: [...m.instances, instance('second','converter'), ...(separate ? [instance('independent','source')] : [])],
+    connections: [...rail.connections!,
+      { id: 'in2', from: local(separate ? 'independent' : 'source','OUT'), to: local('second','IN') },
+      { id: 'out2', from: local('second','OUT'), to: local('converter','OUT') }] }));
+  for (const separate of [false, true]) {
+    const result = calculateDcBudget(parallel(separate));
+    const outputNet = result.networks.find(n => n.sources.length === 2)!;
+    assert.deepEqual([value(outputNet.capacityW), value(outputNet.demandW), value(outputNet.marginW)], [12,4,8]);
+    const inputNet = result.networks.find(n => n.endpoint.instancePath.join('/') === 'A/source')!;
+    if (separate) {
+      unavailableBecause(inputNet.demandW, /单路分担/);
+      assert.equal(value(inputNet.knownDemandW), 3);
+    } else assert.equal(value(inputNet.demandW), 8);
+    for (const c of result.converters.filter(c => c.input.instancePath[0] === 'A')) unavailableBecause(c.inputDemandW, /单路分担/);
+  }
+});
+
 test('DC capacity, converted demand and ratings follow mapped ports without double counting loads', () => {
   const input = fixture();
   const project = parseProjectJson(serializeProjectJson(input));
@@ -91,6 +203,35 @@ test('DC capacity, converted demand and ratings follow mapped ports without doub
   assert.ok(direct.rating?.status === 'above_max' && Math.abs(direct.rating.excess - 0.1) < 1e-12);
   assert.equal(budget.ports.find(port => port.endpoint.instancePath.join('/') === 'A/box')?.rating?.status, 'within_range');
   assert.equal(budget.ports.find(port => port.endpoint.instancePath.join('/') === 'A/box/load')?.rating, undefined);
+});
+
+test('an unpowered converter cannot contribute capacity or absorb load from a powered parallel rail', () => {
+  const bus = powerBus('DC_POWER', [{ voltage: 5, watts: 10 }, { voltage: 5, watts: 15 }], [1, 2, 3],
+    [['s0', 's1'], ['s1', 'l0'], ['l0', 'l1'], ['l1', 'l2']]);
+  const converter = fixture().componentDefinitions.find(d => d.id === 'converter')!;
+  const m = bus.moduleDefinitions[0];
+  const result = calculateDcBudget({ ...bus, componentDefinitions: [...bus.componentDefinitions, converter], moduleDefinitions: [
+    { ...m, instances: [...m.instances, instance('idle', converter.id)],
+      connections: [...m.connections!, { id: 'idle', from: local('idle', 'OUT'), to: local('s0', 'p') }] },
+  ] });
+  const powered = result.networks.find(n => n.sources.length)!;
+  assert.equal(powered.sources.length, 2);
+  assert.deepEqual([value(powered.capacityW), value(powered.demandW), value(powered.marginW)], [25, 6, 19]);
+  assert.equal(value(result.converters[0].inputDemandW), 0);
+  assert.ok(result.diagnostics.some(d => d.code === 'open_input' && d.endpoint.instancePath[0] === 'idle'));
+});
+
+test('converter feedback also invalidates the indirect upstream demand while retaining its known physical loads', () => {
+  const p = changeRailA(fixture(), m => ({ ...m,
+    instances: [...m.instances, instance('middle', 'converter'), instance('last', 'converter')],
+    connections: [...m.connections!, { id: 'next', from: local('converter', 'OUT'), to: local('middle', 'IN') },
+      { id: 'chain', from: local('middle', 'OUT'), to: local('last', 'IN') },
+      { id: 'loop', from: local('last', 'OUT'), to: local('last', 'IN') }] }));
+  const result = calculateDcBudget(p);
+  const source = result.supplies.find(s => s.endpoint.instancePath.join('/') === 'A/source')!;
+  unavailableBecause(source.demandW, /回路/);
+  assert.equal(value(source.knownDemandW), 8);
+  assert.equal(value(result.supplies.find(s => s.endpoint.instancePath[0] === 'B')!.demandW), 8);
 });
 
 test('missing voltage keeps a W demand but makes A capacity and current ratings unavailable', () => {
@@ -117,7 +258,7 @@ test('unknown efficiency preserves downstream demand and the known direct demand
   assert.equal(value(budget.supplies[0].knownDemandW), 3);
 });
 
-test('open, ambiguous and feedback branches retain the independent rail and known subtotals', () => {
+test('open feeds, parallel supplies and converter feedback retain the independent rail and known subtotals', () => {
   const project = fixture();
   const open = calculateDcBudget(changeRailA(project, rail => ({
     ...rail, connections: rail.connections?.filter(item => item.id !== 'feed'),
@@ -126,22 +267,22 @@ test('open, ambiguous and feedback branches retain the independent rail and know
   assert.ok(open.diagnostics.some(item => item.code === 'open_input' && item.endpoint.instancePath[0] === 'A'));
   assert.equal(value(open.supplies.at(-1)!.demandW), 8);
 
-  const ambiguous = calculateDcBudget(changeRailA(project, rail => ({
+  const parallel = calculateDcBudget(changeRailA(project, rail => ({
     ...rail, instances: [...rail.instances, instance('extra', 'source')],
     connections: [...rail.connections!, { id: 'alternate', from: local('extra', 'OUT'), to: local('direct', 'IN') }],
   })));
-  const a = ambiguous.supplies.find(supply => supply.endpoint.instancePath.join('/') === 'A/source')!;
-  unavailableBecause(a.demandW, /供电分配不明确/);
-  assert.equal(value(a.knownDemandW), 5);
-  assert.ok(ambiguous.diagnostics.some(item => item.code === 'ambiguous_input' && item.endpoint.instancePath[1] === 'direct'));
-  assert.equal(value(ambiguous.supplies.find(supply => supply.endpoint.instancePath[0] === 'B')!.demandW), 8);
+  const shared = parallel.networks.find(n => n.sources.length === 2)!;
+  assert.deepEqual([value(shared.capacityW), value(shared.demandW), value(shared.marginW)], [14, 8, 6]);
+  unavailableBecause(parallel.supplies.find(s => s.endpoint.instancePath.join('/') === 'A/source')!.demandW, /单个电源/);
+  assert.deepEqual(parallel.diagnostics, []);
+  assert.equal(value(parallel.supplies.find(supply => supply.endpoint.instancePath[0] === 'B')!.demandW), 8);
 
   const cyclic = calculateDcBudget(changeRailA(project, rail => ({
     ...rail, connections: [...rail.connections!, { id: 'feedback', from: local('converter', 'OUT'), to: local('converter', 'IN') }],
   })));
-  const cycleSupply = cyclic.supplies.find(supply => supply.endpoint.instancePath[0] === 'A')!;
-  unavailableBecause(cycleSupply.demandW, /直流供电存在回路/);
-  assert.equal(value(cycleSupply.knownDemandW), 3);
+  const cycleNet = cyclic.networks.find(n => n.endpoint.instancePath[0] === 'A')!;
+  unavailableBecause(cycleNet.demandW, /直流供电存在回路/);
+  assert.equal(value(cycleNet.knownDemandW), 7);
   assert.equal(value(cyclic.supplies.find(supply => supply.endpoint.instancePath[0] === 'B')!.demandW), 8);
   assert.ok(cyclic.diagnostics.some(item => item.code === 'feedback' && item.endpoint.instancePath[1] === 'converter'));
 });
@@ -194,7 +335,7 @@ test('configured passive outputs need a real feed and cannot change a known upst
   const tap = (input: Project) => calculateDcBudget(input).ports.find(port => port.endpoint.portId === 'TAP')!;
   assert.equal(value(tap(withBoundary).voltageV), 5);
   const open = changeRailA(withBoundary, rail => ({ ...rail, portMappings: [] }));
-  unavailableBecause(tap(open).voltageV, /没有可唯一确定的直流供电/);
+  unavailableBecause(tap(open).voltageV, /尚未接入电源/);
   assert.equal(calculateDcBudget(open).supplies.length, 2);
   const conflict = changeRailA(withBoundary, rail => ({
     ...rail, ports: [{ ...dc('TAP', 'out'), outputVoltageV: fixed(12) }],

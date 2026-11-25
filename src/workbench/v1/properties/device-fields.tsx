@@ -6,7 +6,7 @@ import { receiverModes } from '../../../model/v1/device';
 import { resolveEmpiricalValue } from '../../../engine/v1/empirical-value';
 import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
 import { transferTypes } from '../../../model/v1/validate-device';
-import { isPowerPort, isSupplyOutput, supportsDirection } from '../../../model/v1/types';
+import { canSetSupplyCapacity, isPowerPort, isSupplyOutput, supportsDirection } from '../../../model/v1/types';
 import type { ComponentDefinition, PortDefinition, PortDirection, PortType } from '../../../model/v1/types';
 import type { Transfer } from '../../../model/v1/device';
 import { CapacityField, readCapacity, SupplyCapacityField, readSupplyCapacity } from './dc-fields';
@@ -41,7 +41,8 @@ export function readPort(data: FormData, port: PortDefinition): PortDefinition {
       ? { powerDbm: readQuantity(data, 'sourcePower', opticalKinds) } : undefined,
     inputVoltageV: direction === 'in' ? voltage : undefined,
     outputVoltageV: direction === 'out' ? voltage : undefined,
-    supplyCapacity: type === 'DC_POWER' && direction === 'out' && data.has('supplyCapacity') ? readSupplyCapacity(data) : undefined,
+    supplyCapacity: isPowerPort(type) && type === port.type && direction === 'out' && data.has('supplyCapacity') ? readSupplyCapacity(data) : undefined,
+    acLoadW: type === 'AC_POWER' && direction === 'in' ? readQuantity(data, 'acLoad', ['fixed']) : undefined,
   };
 }
 
@@ -94,7 +95,10 @@ export function PortParameterFields({ port, occurrence, draft = false }: {
       <EmitterFields port={port} occurrence={occurrence} draft={draft} />}
     {ratings.length > 0 && <InputRatingField key={draft ? ratings.join('/') : type} units={ratings} rating={port.inputRating} />}
     {isPowerPort(type) && <PortVoltage key={type + direction} port={port} occurrence={occurrence} draft={draft} />}
-    {isSupplyOutput(occurrence.definition, port) && <SupplyCapacityField value={port.supplyCapacity} />}
+    {canSetSupplyCapacity(occurrence.definition, port) && <SupplyCapacityField key={type} wattsOnly={type === 'AC_POWER'} value={port.supplyCapacity} />}
+    {type === 'AC_POWER' && direction === 'in' && occurrence.definition.kind === 'component' &&
+      <QuantityField name="acLoad" label="交流负载功耗（W，可选）" unit="W" kinds={['fixed']} minimum={0}
+        parameters={occurrence.definition.parameters ?? []} value={port.acLoadW} />}
     {draft && !isPowerPort(type) && type !== 'OPTICAL' && !ratings.length && <p className="v1-property-effective">无需额外参数</p>}
   </>;
 }

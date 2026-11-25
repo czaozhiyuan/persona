@@ -1,3 +1,4 @@
+import { mappingId } from '../../model/v1/types';
 import type { ComponentDefinition, ModuleDefinition } from '../../model/v1/types';
 
 type Definition = ComponentDefinition | ModuleDefinition;
@@ -40,7 +41,7 @@ export function describeDefinitionChanges(before: Definition, after: Definition)
     records('内部实例', before.instances, after.instances, idOf);
     records('连接', before.connections, after.connections, idOf);
     records('多芯线缆', before.cableBundles, after.cableBundles, idOf);
-    records('端口映射', before.portMappings, after.portMappings, item => item.portId);
+    records('端口映射', before.portMappings, after.portMappings, mappingId);
     records('参数映射', before.parameterMappings, after.parameterMappings,
       item => JSON.stringify([item.target.instanceId, item.target.parameterId]));
     record('物理包络', before.physicalEnclosure, after.physicalEnclosure);

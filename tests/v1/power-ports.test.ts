@@ -119,7 +119,9 @@ test('labels resolve voltage at the selected occurrence, keep port IDs and ignor
   const outer = nested.moduleDefinitions[0];
   const explicit = { ...nested, moduleDefinitions: [{ ...outer, parameters: device.parameters, ports: [port] }, nested.moduleDefinitions[1]] };
   assert.equal(rootLabel(explicit), 'DC ?V IN');
-  assert.equal(rootLabel(connectBoundaryPort(exposed, 'root', 'P', { instanceId: '1', portId: 'P' })), '+12V IN');
+  const conflict = connectBoundaryPort(exposed, 'root', 'P', { instanceId: '1', portId: 'P' });
+  assert.equal(rootLabel(conflict), 'DC ?V IN');
+  assert.equal(rootLabel(connectBoundaryPort(connectBoundaryPort(exposed, 'root', 'P'), 'root', 'P', { instanceId: '1', portId: 'P' })), '+12V IN');
   assert.equal(rootLabel(connectBoundaryPort(exposed, 'root', 'P', { instanceId: '2', portId: 'P' })), 'DC ?V IN');
   assert.equal(rootLabel(connectBoundaryPort(exposed, 'root', 'P')), 'DC ?V IN');
   const ac: PortDefinition = { id: 'A', name: 'Old AC name', type: 'AC_POWER', direction: 'out', outputVoltageV: fixed(110) };
@@ -158,7 +160,7 @@ test('grouped fixed supply output follows internal edits, while an explicit boun
   assert.equal(planDissolveModule(explicit, ['g']).ok, false);
 });
 
-test('AC wiring stays outside DC calculations and nominal inputs are neither limits nor supplies', () => {
+test('AC wiring changes only the AC network and nominal inputs are neither limits nor supplies', () => {
   const ac: PortDefinition = { id: 'AC', type: 'AC_POWER', direction: 'out', outputVoltageV: fixed(220) };
   const outlet: ComponentDefinition = { kind: 'component', id: 'wall', name: 'Wall', ports: [ac] };
   const template = factory.get('library-dc-supply') as ComponentDefinition;
@@ -171,11 +173,15 @@ test('AC wiring stays outside DC calculations and nominal inputs are neither lim
   const project = { ...base, componentDefinitions: [outlet, supply, amp] };
   const setup = (connections: typeof acWire[]): Project => ({ ...project, moduleDefinitions: [{ ...system, connections }] });
   const budget = calculateDcBudget(setup([acWire, dcWire]));
-  assert.deepEqual(budget, calculateDcBudget(setup([dcWire])));
-  assert.deepEqual(budget.supplies[0].voltageV, { availability: 'available', unit: 'V', value: 12 });
-  assert.equal(budget.supplies[0].demandW.availability, 'unavailable');
+  const withoutMains = calculateDcBudget(setup([dcWire]));
+  assert.deepEqual(budget.networks.filter(n => n.type === 'DC_POWER'), withoutMains.networks.filter(n => n.type === 'DC_POWER'));
+  assert.equal(budget.networks.filter(n => n.type === 'AC_POWER').length, 1);
+  assert.equal(withoutMains.networks.filter(n => n.type === 'AC_POWER').length, 2);
+  const dcSource = budget.supplies.find(s => s.endpoint.portId === 'DC_OUT')!;
+  assert.deepEqual(dcSource.voltageV, { availability: 'available', unit: 'V', value: 12 });
+  assert.equal(dcSource.demandW.availability, 'unavailable');
   const load = budget.ports.find(p => p.endpoint.portId === 'DC_IN')!;
-  assert.deepEqual(load.voltageV, budget.supplies[0].voltageV);
+  assert.deepEqual(load.voltageV, dcSource.voltageV);
   assert.equal(load.rating, undefined);
   const unplugged = calculateDcBudget(setup([])).ports.find(p => p.endpoint.portId === 'DC_IN')!;
   assert.equal(unplugged.voltageV.availability, 'unavailable');

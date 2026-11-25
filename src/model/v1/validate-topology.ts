@@ -1,5 +1,5 @@
 import type { Connection, LocalEndpointRef, NamedLink } from './topology';
-import { canConnect, supportsDirection } from './types';
+import { canConnect, isPowerPort, supportsDirection } from './types';
 import type { ComponentDefinition, InstancePath, ModuleDefinition, PortDefinition, PortType } from './types';
 import { channelSetsOverlap } from './validate-device';
 import { validateChannelIds } from './validate-parameters';
@@ -25,7 +25,7 @@ export function validateModuleTopology(
     const from = resolvePort(connection.from);
     const to = resolvePort(connection.to);
     requireValid(from && to, `${context}: 端点必须是直接子实例的端口`);
-    requireValid(canConnect(from.direction, to.direction), `${context}: 连接方向必须从输出到输入`);
+    requireValid(isPowerPort(from.type) || canConnect(from.direction, to.direction), `${context}: 连接方向必须从输出到输入`);
     requireValid(from.type === to.type, `${context}: 两端端口类型不匹配`);
     requireValid(connection.lossDb === undefined || (from.type === 'OPTICAL' && Number.isFinite(connection.lossDb) && connection.lossDb >= 0),
       `${context}: 仅光纤可设置非负的光纤损耗`);

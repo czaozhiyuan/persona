@@ -59,8 +59,11 @@ export function renamePort(project: Project, definitionId: string, portId: strin
 }
 
 export function connectBoundaryPort(project: Project, definitionId: string, portId: string, target?: LocalEndpointRef): Project {
-  return editModuleWiring(project, definitionId, module => ({
-    ...module,
-    portMappings: [...(module.portMappings ?? []).filter(item => item.portId !== portId), ...(target ? [{ portId, target }] : [])],
-  }));
+  return editModuleWiring(project, definitionId, module => {
+    const mappings = module.portMappings ?? [];
+    if (target && isPowerPort(module.ports.find(port => port.id === portId)?.type)) {
+      return { ...module, portMappings: [...mappings, { id: crypto.randomUUID(), portId, target }] };
+    }
+    return { ...module, portMappings: [...mappings.filter(item => item.portId !== portId), ...(target ? [{ portId, target }] : [])] };
+  });
 }

@@ -13,6 +13,7 @@ import type { ApprovedMove, ReparentLayout } from './reparent-drop';
 import { groupModule } from '../../../state/v1/group-module';
 import { connectBoundaryPort, exposeModulePort, renamePort } from '../../../state/v1/module-ports';
 import type { WiringSelection } from '../../../state/v1/remove-topology-object';
+import { isPowerPort, mappingId } from '../../../model/v1/types';
 import type { EndpointRef, InstancePath, ModuleDefinition, Project } from '../../../model/v1/types';
 import { selectionPaths, type ProjectStore, type ProjectStoreSnapshot } from '../../../state/v1/project-store';
 import { editModule, editModuleWiring, moveTopologyNodes, resizeTopologyFrame } from '../../../state/v1/topology-edits';
@@ -123,9 +124,12 @@ export function TopologyEditor({ multiplex, centerPlacement, linkControls, libra
   function requestBinding(path: InstancePath, portId: string, target?: LocalEndpointRef) {
     const definition = store.resolveInstance(path)?.definition;
     if (definition?.kind !== 'module') return false;
-    const existing = definition.portMappings?.find(mapping => mapping.portId === portId);
-    if (!existing) return !!target && commit(draft => connectBoundaryPort(draft, definition.id, portId, target));
-    if (target?.instanceId === existing.target.instanceId && target.portId === existing.target.portId) return false;
+    const existing = definition.portMappings?.filter(mapping => mapping.portId === portId) ?? [];
+    if (target && existing.some(mapping => target.instanceId === mapping.target.instanceId && target.portId === mapping.target.portId)) return false;
+    if (target && (!existing.length || isPowerPort(definition.ports.find(port => port.id === portId)?.type))) {
+      return commit(draft => connectBoundaryPort(draft, definition.id, portId, target));
+    }
+    if (!existing.length) return false;
     setMessage('');
     setBindingPreview({ scope: path, module: definition, portId, target });
     return true;
@@ -139,8 +143,13 @@ export function TopologyEditor({ multiplex, centerPlacement, linkControls, libra
   }
 
   function deleteWiring(path: InstancePath, wire: WiringSelection) {
-    if (wire.kind === 'mapping') return requestBinding(path, wire.id);
     const definition = store.resolveInstance(path)?.definition;
+    if (wire.kind === 'mapping' && definition?.kind === 'module') {
+      const mapping = definition.portMappings?.find(item => mappingId(item) === wire.id);
+      if (!mapping) return false;
+      setBindingPreview({ scope: path, module: definition, portId: mapping.portId, wire });
+      return true;
+    }
     return definition?.kind === 'module' && commit(draft => removeWiring(draft, definition.id, wire));
   }
 
