@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { createServer } from 'vite';
 import { calculateDcBudget } from '../../src/engine/v1/dc-budget';
 import { resolveHierarchy } from '../../src/engine/v1/hierarchy';
 import { groupModule } from '../../src/state/v1/group-module';
 import { planDissolveModule } from '../../src/state/v1/dissolve-module';
-import { connectBoundaryPort, exposeModulePort } from '../../src/state/v1/module-ports';
+import { connectBoundaryPort, exposeModulePort, updateDefinitionPort } from '../../src/state/v1/module-ports';
 import { factory, factoryLibrary, libraryDefinitions, parseLibrary } from '../../src/library/v1/user-library';
+import { insertLibraryItem } from '../../src/library/v1/insert-library-item';
 import { portDisplayName } from '../../src/model/v1/display-names';
 import type { ComponentDefinition, ModuleDefinition, PortDefinition, Project } from '../../src/model/v1/types';
 import { parseProjectJson, serializeProjectJson } from '../../src/storage/v1/project-json';
@@ -14,6 +16,57 @@ const fixed = (value: number) => ({ kind: 'fixed' as const, value });
 const slot = (id: string, definitionId = id) => ({ id, name: id, definitionId });
 const root: ModuleDefinition = { kind: 'module', id: 'root', name: 'root', ports: [], instances: [] };
 const base: Project = { id: 'test', name: 'Test', rootModuleDefinitionId: root.id, moduleDefinitions: [root], componentDefinitions: [] };
+
+test('new port drafts start at 220 V AC and keep entered and empty voltages separate by type', async t => {
+  const vite = await createServer({ server: { middlewareMode: true, ws: false, watch: null },
+    optimizeDeps: { noDiscovery: true, include: [] }, appType: 'custom' });
+  t.after(() => vite.close());
+  const { createPortVoltageDraft } = await vite.ssrLoadModule('/src/workbench/v1/properties/port-voltage-field.tsx') as
+    typeof import('../../src/workbench/v1/properties/port-voltage-field');
+  const voltage = createPortVoltageDraft();
+  const data = new FormData();
+  const rf: PortDefinition = { id: 'P', type: 'RF', direction: 'in' };
+  const ac: PortDefinition = { ...rf, type: 'AC_POWER' };
+  const out: PortDefinition = { ...ac, direction: 'out' };
+  const dc: PortDefinition = { ...rf, type: 'DC_POWER' };
+  assert.deepEqual(voltage(data, rf, ac, root), fixed(220));
+  data.set('inputVoltageV', '110');
+  assert.deepEqual(voltage(data, ac, out, root), fixed(110));
+  data.set('outputVoltageV', '');
+  assert.equal(voltage(data, out, dc, root), undefined);
+  data.set('inputVoltageV', '12');
+  assert.equal(voltage(data, dc, ac, root), undefined);
+  data.set('inputVoltageV', '');
+  assert.deepEqual(voltage(data, ac, dc, root), fixed(12));
+  assert.deepEqual(createPortVoltageDraft()(data, rf, out, root), fixed(220));
+});
+
+test('explicit and unknown AC voltages survive library copies, exposure and project reopening', () => {
+  const template: ComponentDefinition = { kind: 'component', id: 'adapter', name: 'Adapter', ports: [
+    { id: 'line', type: 'AC_POWER', direction: 'in', inputVoltageV: fixed(110) },
+    { id: 'socket', type: 'AC_POWER', direction: 'out' },
+  ] };
+  const library = parseLibrary(JSON.stringify({ ...factoryLibrary(), custom: [template] }));
+  let project = base;
+  for (const id of ['a', 'b']) {
+    project = insertLibraryItem(project, { source: 'template', id: template.id, name: id }, root.id, [], id, undefined, library);
+  }
+  for (const port of template.ports) {
+    project = exposeModulePort(project, [], { instanceId: 'a', portId: port.id }, '');
+  }
+  const tree = resolveHierarchy(parseProjectJson(serializeProjectJson(project)));
+  const outer = tree.resolveInstance([])!;
+  const a = tree.resolveInstance(['a'])!;
+  assert.deepEqual(outer.definition.ports.map(p => [p.inputVoltageV, p.outputVoltageV, portDisplayName(p, false, undefined, outer)]),
+    [[undefined, undefined, '110V~ IN'], [undefined, undefined, 'AC ?V OUT']]);
+  const changed = updateDefinitionPort(project, a.definition.id, { ...a.definition.ports[0], inputVoltageV: fixed(115) });
+  const updated = resolveHierarchy(parseProjectJson(serializeProjectJson(changed)));
+  const boundary = updated.resolveInstance([])!;
+  assert.equal(portDisplayName(boundary.definition.ports[0], false, undefined, boundary), '115V~ IN');
+  assert.deepEqual(updated.resolveInstance(['b'])!.definition.ports, template.ports);
+  assert.deepEqual(library.custom[0].ports, template.ports);
+  assert.deepEqual(factory.get('library-dc-supply')!.ports.find(p => p.id === 'AC_IN')?.inputVoltageV, fixed(220));
+});
 
 test('factory power inputs are explicit, optional and confined to the active templates', () => {
   const powered = ['rf-gain', 'rf-amplifier', 'laser', 'optical-source', 'dml', 'pcb', 'sfp', 'optical-switch', 'optical-amplifier', 'pd', 'mzm', 'rf-stage'];

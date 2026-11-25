@@ -13,7 +13,7 @@ import { CapacityField, readCapacity, SupplyCapacityField, readSupplyCapacity } 
 import { AutosaveForm } from './autosave-form';
 import { ChannelField } from './channel-field';
 import { InputRatingField, ratingUnits, readInputRating } from './input-rating-field';
-import { PortVoltageField, readPortVoltage, voltageTitle, voltageParameters } from './port-voltage-field';
+import { createPortVoltageDraft, PortVoltageField, readPortVoltage, voltageTitle, voltageParameters } from './port-voltage-field';
 import { channelId, channelList, choice, enumLabel, opticalKinds, QuantityField, readQuantity, rfKinds } from './value-fields';
 
 export function readPort(data: FormData, port: PortDefinition): PortDefinition {
@@ -45,12 +45,19 @@ export function readPort(data: FormData, port: PortDefinition): PortDefinition {
   };
 }
 
-export function PortFields({ port, occurrence, save, remove }: {
+export function PortFields({ port, occurrence, save, remove, newPort = false }: {
   port: PortDefinition; occurrence: ResolvedInstance; save: (port: PortDefinition) => boolean; remove: () => void;
+  newPort?: boolean;
 }) {
+  const [draftVoltage] = useState(() => newPort ? createPortVoltageDraft() : undefined);
   const version = JSON.stringify(port);
   return <AutosaveForm version={version} save={data => {
     const next = readPort(data, port);
+    if (draftVoltage && (next.type !== port.type || next.direction !== port.direction)) {
+      const voltage = draftVoltage(data, port, next, occurrence.definition);
+      if (next.direction === 'in') next.inputVoltageV = voltage;
+      if (next.direction === 'out') next.outputVoltageV = voltage;
+    }
     const nextVersion = JSON.stringify(next);
     if (nextVersion !== version && save(next)) return nextVersion;
   }}>
@@ -86,7 +93,7 @@ export function PortParameterFields({ port, occurrence, draft = false }: {
     {type === 'OPTICAL' && supportsDirection(direction, 'out') && occurrence.definition.kind === 'component' &&
       <EmitterFields port={port} occurrence={occurrence} draft={draft} />}
     {ratings.length > 0 && <InputRatingField key={draft ? ratings.join('/') : type} units={ratings} rating={port.inputRating} />}
-    {isPowerPort(type) && <PortVoltage key={draft ? direction : type + direction} port={port} occurrence={occurrence} draft={draft} />}
+    {isPowerPort(type) && <PortVoltage key={type + direction} port={port} occurrence={occurrence} draft={draft} />}
     {isSupplyOutput(occurrence.definition, port) && <SupplyCapacityField value={port.supplyCapacity} />}
     {draft && !isPowerPort(type) && type !== 'OPTICAL' && !ratings.length && <p className="v1-property-effective">无需额外参数</p>}
   </>;

@@ -1,6 +1,7 @@
 import type { ParameterDefinition } from '../../../model/v1/parameters';
 import type { DcValue } from '../../../model/v1/device';
-import type { PortDirection, PortType } from '../../../model/v1/types';
+import { isPowerPort, isSupplyOutput } from '../../../model/v1/types';
+import type { ComponentDefinition, ModuleDefinition, PortDefinition, PortDirection, PortType } from '../../../model/v1/types';
 import { choice, numberField } from './value-fields';
 
 export function voltageParameters(parameters: readonly ParameterDefinition[] = []) {
@@ -12,6 +13,16 @@ export function readPortVoltage(data: FormData, direction: PortDirection): DcVal
   if (parameterId) return { kind: 'parameter', parameterId };
   const value = numberField(data, direction === 'in' ? 'inputVoltageV' : 'outputVoltageV');
   return value === undefined ? undefined : { kind: 'fixed', value };
+}
+
+export function createPortVoltageDraft() {
+  const voltages: Partial<Record<'AC_POWER' | 'DC_POWER', DcValue>> = { AC_POWER: { kind: 'fixed', value: 220 } };
+  return (data: FormData, previous: PortDefinition, next: Pick<PortDefinition, 'type' | 'direction'>,
+    definition: ComponentDefinition | ModuleDefinition) => {
+    if (isPowerPort(previous.type)) voltages[previous.type] = readPortVoltage(data, previous.direction);
+    const value = isPowerPort(next.type) ? voltages[next.type] : undefined;
+    return value?.kind === 'parameter' && isSupplyOutput(definition, next) ? undefined : value;
+  };
 }
 
 export function voltageTitle(type: PortType, direction: PortDirection) {

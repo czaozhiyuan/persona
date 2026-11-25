@@ -9,7 +9,7 @@ import type { ProjectStore } from '../../../state/v1/project-store';
 import { editablePortName, portDisplayName, portTypeLabels } from '../labels';
 import { PortParameterFields, readPort } from './device-fields';
 import { ratingUnits } from './input-rating-field';
-import { readPortVoltage } from './port-voltage-field';
+import { createPortVoltageDraft, readPortVoltage } from './port-voltage-field';
 import { WdmPortDialog } from './wdm-configuration';
 
 function signature(form: HTMLFormElement) {
@@ -129,6 +129,7 @@ function PortDetail({ form, port, owner, preview, save, remove, close }: {
   save: (next: PortDefinition) => void; remove: () => void; close: () => void;
 }) {
   const [seed, setSeed] = useState<PortDefinition>(() => port ?? { id: crypto.randomUUID(), type: 'RF', direction: 'in' });
+  const [draftVoltage] = useState(() => port ? undefined : createPortVoltageDraft());
   const [error, setError] = useState('');
   const { type, direction } = seed;
   useLayoutEffect(() => {
@@ -138,14 +139,15 @@ function PortDetail({ form, port, owner, preview, save, remove, close }: {
   function change(nextType: PortType, nextDirection: PortDirection) {
     if (nextType !== 'OPTICAL' && nextDirection === 'bidirectional') nextDirection = 'in';
     const power = isPowerPort(nextType);
+    const voltage = draftVoltage?.(new FormData(form.current!), seed, { type: nextType, direction: nextDirection }, owner.definition);
     const ratings = ratingUnits(nextType, nextDirection);
     setSeed({ ...seed, type: nextType, direction: nextDirection,
       name: power ? undefined : seed.name,
       channelIds: nextType === 'OPTICAL' ? seed.channelIds : undefined,
       opticalEmitter: nextType === 'OPTICAL' && supportsDirection(nextDirection, 'out') ? seed.opticalEmitter : undefined,
       inputRating: seed.inputRating && ratings.includes(seed.inputRating.unit) ? seed.inputRating : undefined,
-      inputVoltageV: power && nextDirection === 'in' ? seed.inputVoltageV : undefined,
-      outputVoltageV: power && nextDirection === 'out' ? seed.outputVoltageV : undefined,
+      inputVoltageV: nextDirection === 'in' ? voltage : undefined,
+      outputVoltageV: nextDirection === 'out' ? voltage : undefined,
       supplyCapacity: isSupplyOutput(owner.definition, { type: nextType, direction: nextDirection }) ? seed.supplyCapacity : undefined,
     });
   }
