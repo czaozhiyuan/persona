@@ -9,7 +9,7 @@ import type { EndpointRef, PortFlow, Project } from '../../model/v1/types';
 import { supportsDirection } from '../../model/v1/types';
 import { addGain, budgetValue, checkInputRating, logZero, unavailable } from './budget-metric';
 import type { BudgetMetric, InputRatingCheck } from './budget-metric';
-import { resolveEmpiricalValue, splitterBranchPercent } from './empirical-value';
+import { resolveEmpiricalValue } from './empirical-value';
 import { cochannelConflict, createOpticalOrigins } from './optical-origins';
 import { chooseRouteChannel, intersectCarrier, searchSignalPath } from './path-search';
 import type { SearchResult, SignalPath } from './path-search';
@@ -187,7 +187,7 @@ export function createOpticalBudgetForGraph(graph: SignalGraph, sharedOrigins?: 
     }
     if (source.kind === 'transfer' && source.transfer.kind === 'splitter') {
       const split = source.transfer;
-      const percent = splitterBranchPercent(edge, split, instance);
+      const percent = edge.splitterPercent!;
       const loss = split.excessLossDb ? resolveEmpiricalValue('dB', split.excessLossDb, {}, instance) : budgetValue('dB', 0);
       let gain: BudgetMetric<'dB'>;
       if (percent.availability === 'unavailable') gain = unavailable('dB', percent.reason);
@@ -199,7 +199,8 @@ export function createOpticalBudgetForGraph(graph: SignalGraph, sharedOrigins?: 
           return zeroGain;
         }
         gain = loss.availability === 'unavailable' ? loss : budgetValue('dB', 10 * (Math.log10(outputPercent) - 2) - loss.value);
-        if (origins && edge.to.ref.portId === split.fromPortId && outputPercent < 100) {
+        const darkInput = previous.powerDbm.availability === 'available' && previous.powerDbm.value === -Infinity;
+        if (origins && !darkInput && edge.to.ref.portId === split.fromPortId && outputPercent < 100) {
           const otherId = edge.from.ref.portId === split.toPortId ? split.secondPortId : split.toPortId;
           const other = portAt({ instancePath: edge.from.ref.instancePath, portId: otherId })!;
           const channels = previous.channelId ? [previous.channelId] : stages.reduce<Carrier>((carrier, stage) => {

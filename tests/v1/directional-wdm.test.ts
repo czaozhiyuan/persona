@@ -4,6 +4,7 @@ import { createLinkBudget } from '../../src/engine/v1/link-budget';
 import type { BudgetMetric } from '../../src/engine/v1/budget-metric';
 import { createMultiplexPower } from '../../src/engine/v1/multiplex-power';
 import { createOpticalBudget } from '../../src/engine/v1/optical-budget';
+import { createPathResolver } from '../../src/engine/v1/path-resolver';
 import { buildSignalGraph } from '../../src/engine/v1/signal-graph';
 import { builtInDefinitions } from '../../src/library/v1/built-in';
 import type { ComponentDefinition } from '../../src/model/v1/types';
@@ -137,6 +138,48 @@ test('a dark splitter branch has zero power even with unknown launch power; a tr
       assert.equal(wave?.sources.length, 1);
       assert.equal(wave?.power.availability, 'unavailable');
       assert.equal(result.powerDbm.availability, 'unavailable');
+    }
+  }
+});
+
+test('a split and rejoined carrier uses its transmitting leg for named and local budgets, respecting explicit dark routes', () => {
+  for (const ratio of [100, 0, 50]) {
+    const p = combiner(50, 1, false), root = p.moduleDefinitions[0];
+    root.instances = [...root.instances, { id: 'divider', name: 'Divider', definitionId: 'library-splitter',
+      parameterOverrides: { firstPercent: fixed(ratio) } }];
+    root.connections = [root.connections![1], { id: 'launch', from: local('A','COM'), to: local('divider','OPT_IN') },
+      ...[1,2].map(i => ({ id: 'leg' + i, from: local('divider','OPT_OUT_' + i), to: local('split','OPT_OUT_' + i) }))];
+    const resolver = createPathResolver(p), optical = createOpticalBudget(p), budget = createLinkBudget(p);
+    const mux = createMultiplexPower(resolver.graph), trial = { frequencyGHz: 15, inputPowerDbm: -20 };
+    for (const [index, receiver] of [[0, 'B'], [2, 'A']] as const) {
+      const link = p.namedLinks![index], channelId = link.channelId!, to = endpoint(receiver,'wave' + index,'OPT_IN');
+      const localPower = index === 0 ? optical.calculateLocal({ eo: { instancePath: ['A','mzm'], fromPortId: 'RF_IN', toPortId: 'OPT_OUT' },
+        sources: [], channelId, to }) : optical.calculateLocal({ source: { endpoint: endpoint('B','wave2','OPT_OUT'), channelId }, to });
+      const named = resolver.resolveNamedLink(link), rf = budget.calculateNamedLink(link, trial);
+      const wave = mux.readWave(endpoint(receiver,'wdm','COM'), channelId, 'in')!;
+      if (ratio === 50) {
+        assert.equal(named.status, 'ambiguous');
+        assert.equal(localPower.pathIssue?.status, 'ambiguous');
+        assert.equal(wave.power.availability, 'unavailable');
+        assert.equal(rf.powerDbm.availability, 'unavailable');
+        continue;
+      }
+      assert.equal(named.status, 'resolved');
+      const lightLeg = ratio === 100 ? 1 : 2;
+      assert.ok(named.trace.edges.some(e => e.source.kind === 'connection' && e.source.ref.connectionId === 'leg' + lightLeg));
+      const splitLoss = 10 * Math.log10(2);
+      const pdDbm = -4 - splitLoss - (index === 0 ? splitLoss : 0);
+      near(wave.power, pdDbm + 1);
+      near(localPower.powerDbm, pdDbm);
+      assert.equal(rf.kind, 'conversion');
+      near(rf.segments[0].pdPowerDbm, pdDbm);
+      near(rf.powerDbm, (index === 0 ? -66.01580271955808 : -29.938200260161125) - 2 * splitLoss);
+      const forced = { ...link, via: [{ scopePath: [], connectionId: 'leg' + (3 - lightLeg) }] };
+      assert.equal(resolver.resolveNamedLink(forced).status, 'resolved');
+      const dark = budget.calculateNamedLink(forced, trial);
+      assert.equal(dark.kind, 'conversion');
+      assert.equal(numeric(dark.segments[0].pdPowerDbm), -Infinity);
+      assert.equal(numeric(dark.powerDbm), -Infinity);
     }
   }
 });

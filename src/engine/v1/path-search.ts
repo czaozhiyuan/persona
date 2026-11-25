@@ -1,6 +1,6 @@
 import type { OpticalChannelId } from '../../model/v1/channels';
 import type { PortFlow } from '../../model/v1/types';
-import { channelRoutingPorts, portFlowAt } from './signal-graph';
+import { channelRoutingPorts, isDarkSplitterEdge, portFlowAt } from './signal-graph';
 import type { SignalEdge, SignalPort } from './signal-graph';
 
 /** Undefined denotes an unrestricted optical carrier, or no carrier at an electrical port. */
@@ -18,6 +18,8 @@ type State = {
 };
 type Arc = { state: State; edge: SignalEdge };
 
+export type SplitterRouting = 'transmitting' | 'physical';
+
 type Search = {
   starts: readonly SignalPort[];
   target?: SignalPort;
@@ -33,6 +35,7 @@ type Search = {
   allRequired?: bigint;
   opticalOnly?: boolean;
   reverse?: boolean;
+  splitterRouting?: SplitterRouting;
 };
 
 export type SearchResult =
@@ -99,6 +102,19 @@ function toPath(states: readonly State[], edges: readonly SignalEdge[], reverse:
 
 /** Searches a bounded state graph, then counts viable routes up to two without enumerating paths. */
 export function searchSignalPath(query: Search): SearchResult {
+  if (query.splitterRouting === 'physical') return searchRoutes(query);
+  let skippedDark = false;
+  const transmitting = searchRoutes(query, edge => {
+    if (!isDarkSplitterEdge(edge)) return false;
+    skippedDark = true;
+    return true;
+  });
+  // An explicitly required or solely connected dark leg is still a measurable zero-power path.
+  return transmitting.status === 'unreachable' && skippedDark && query.splitterRouting !== 'transmitting'
+    ? searchRoutes(query) : transmitting;
+}
+
+function searchRoutes(query: Search, skip?: (edge: SignalEdge) => boolean): SearchResult {
   const reverse = query.reverse ?? false;
   const allRequired = query.allRequired ?? 0n;
   const index = new Map<SignalPort, Map<string, State>>();
@@ -141,6 +157,7 @@ export function searchSignalPath(query: Search): SearchResult {
     }
     for (const edge of query.adjacent.get(current.port) ?? []) {
       if (current.flow && current.flow !== portFlowAt(edge, current.port)) continue;
+      if (skip?.(edge)) continue;
       const port = reverse ? edge.from : edge.to;
       if (query.opticalOnly && port.definition.type !== 'OPTICAL') continue;
       const emitted = edge.channels.kind === 'enter' && !edge.supply ? query.startCarriers?.get(edge.to) : undefined;
