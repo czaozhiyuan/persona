@@ -1,5 +1,5 @@
 import type { ParameterValue } from './parameters';
-import { isPowerPort } from './types';
+import { isPowerPort, portDirectionLabels } from './types';
 import type { ComponentDefinition, ModuleDefinition, PortDefinition, PortType, Project } from './types';
 
 export const portTypeLabels = {
@@ -9,6 +9,10 @@ export const portTypeLabels = {
   AC_POWER: '交流供电',
   CONTROL: '控制',
 } satisfies Record<PortType, string>;
+
+export function wireArrow(from?: PortDefinition, to?: PortDefinition) {
+  return from?.direction === 'bidirectional' && to?.direction === 'bidirectional' ? '↔' : '→';
+}
 
 export function numberedNames(names: readonly string[]): string[] {
   const reserved = new Set<string>();
@@ -44,7 +48,7 @@ type DisplayPort = Pick<PortDefinition, 'id' | 'name'> & Partial<Pick<PortDefini
 const uuid = /[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}(?:_\d+)?/gi;
 
 function portFallback({ type, direction }: DisplayPort) {
-  return type && direction ? portTypeLabels[type] + (direction === 'in' ? '输入' : '输出') : '未命名端口';
+  return type && direction ? portTypeLabels[type] + portDirectionLabels[direction] : '未命名端口';
 }
 
 export function editablePortName(port: DisplayPort): string {

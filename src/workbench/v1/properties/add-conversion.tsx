@@ -1,3 +1,4 @@
+import { supportsDirection } from '../../../model/v1/types';
 import { useState } from 'react';
 import { isPowerPort } from '../../../model/v1/types';
 import type { ComponentDefinition, PortDefinition } from '../../../model/v1/types';
@@ -9,8 +10,8 @@ type Conversion = { kind: 'eo' | 'dml' | 'oe' | 'digitalTx' | 'digitalRx'; fromP
 export function conversionCandidates({ ports, transfers }: ComponentDefinition): Candidate[] {
   const candidates: Candidate[] = [];
   for (const input of ports) {
-    if (input.direction !== 'in' || isPowerPort(input.type)) continue;
-    const outputs = ports.filter(port => port.direction === 'out' &&
+    if (!supportsDirection(input.direction, 'in') || isPowerPort(input.type)) continue;
+    const outputs = ports.filter(port => supportsDirection(port.direction, 'out') &&
       (input.type === 'OPTICAL' ? port.type === 'RF' || port.type === 'CONTROL' : port.type === 'OPTICAL') &&
       !transfers?.some(transfer => transfer.fromPortId === input.id && transfer.toPortId === port.id));
     if (outputs.length) candidates.push({ input, outputs });

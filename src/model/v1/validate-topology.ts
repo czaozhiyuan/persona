@@ -1,4 +1,5 @@
 import type { Connection, LocalEndpointRef, NamedLink } from './topology';
+import { canConnect, supportsDirection } from './types';
 import type { ComponentDefinition, InstancePath, ModuleDefinition, PortDefinition, PortType } from './types';
 import { channelSetsOverlap } from './validate-device';
 import { validateChannelIds } from './validate-parameters';
@@ -13,7 +14,9 @@ export function validateModuleTopology(
 ): void {
   const pairs = new Set<string>();
   const recordPair = (from: LocalEndpointRef, to: LocalEndpointRef, context: string) => {
-    const key = JSON.stringify([from.instanceId, from.portId, to.instanceId, to.portId]);
+    const terminals = [from, to].map(e => JSON.stringify([e.instanceId, e.portId]));
+    requireValid(terminals[0] !== terminals[1], `${context}: 不能连接同一端口`);
+    const key = JSON.stringify(terminals.sort());
     requireValid(!pairs.has(key), `${context}: 同一对端点之间存在重复连接`);
     pairs.add(key);
   };
@@ -22,7 +25,7 @@ export function validateModuleTopology(
     const from = resolvePort(connection.from);
     const to = resolvePort(connection.to);
     requireValid(from && to, `${context}: 端点必须是直接子实例的端口`);
-    requireValid(from.direction === 'out' && to.direction === 'in', `${context}: 连接方向必须从输出到输入`);
+    requireValid(canConnect(from.direction, to.direction), `${context}: 连接方向必须从输出到输入`);
     requireValid(from.type === to.type, `${context}: 两端端口类型不匹配`);
     requireValid(connection.mediaKind === undefined || mediaTypes[connection.mediaKind] === from.type,
       `${context}: 连接介质与端口类型不兼容`);
@@ -53,10 +56,10 @@ export function validateModuleTopology(
       requireValid((!a || portA?.type === 'OPTICAL') && (!b || portB?.type === 'OPTICAL'),
         `${coreContext}: 纤芯必须接到直接子实例的光端口`);
       if (a && b && portA && portB) {
-        requireValid(portA.direction !== portB.direction, `${coreContext}: 纤芯必须连接光输出与光输入端口`);
+        requireValid(canConnect(portA.direction, portB.direction) || canConnect(portB.direction, portA.direction),
+          `${coreContext}: 纤芯必须连接光输出与光输入端口`);
         requireValid(channelSetsOverlap(portA, portB), `${coreContext}: 两端没有共同的光通道`);
-        if (portA.direction === 'out') recordPair(a, b, coreContext);
-        else recordPair(b, a, coreContext);
+        recordPair(a, b, coreContext);
       }
     }
   }
@@ -83,7 +86,7 @@ export function validateNamedLinks(
       for (const { endpoint, channelId, powerDbm } of opticalSources ?? []) {
         const owner = definitionAtPath(endpoint.instancePath);
         const port = owner?.ports.find(port => port.id === endpoint.portId);
-        requireValid(port?.type === 'OPTICAL' && port.direction === (owner?.kind === 'module' ? 'in' : 'out'),
+        requireValid(port?.type === 'OPTICAL' && supportsDirection(port.direction, owner?.kind === 'module' ? 'in' : 'out'),
           `${context}：试算光源端口无效`);
         if (channelId !== undefined) validateChannelIds([channelId], context);
         const key = JSON.stringify([endpoint.instancePath, endpoint.portId, channelId]);

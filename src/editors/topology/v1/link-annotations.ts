@@ -4,7 +4,7 @@ import type { OpticalBudget } from '../../../engine/v1/optical-budget';
 import type { PathResult } from '../../../engine/v1/path-resolver';
 import { signalPortKey } from '../../../engine/v1/signal-graph';
 import type { SignalGraph } from '../../../engine/v1/signal-graph';
-import type { EndpointRef } from '../../../model/v1/types';
+import type { EndpointRef, PortFlow } from '../../../model/v1/types';
 import { resolveOpticalChannel } from '../../../model/v1/channels';
 import { portDisplayName } from '../../../model/v1/display-names';
 import { formatMetric } from '../../../workbench/v1/budgets/format-metric';
@@ -63,13 +63,14 @@ export function linkAnnotations(graph: SignalGraph, path?: PathResult, point?: L
   function diagnostic(ref: EndpointRef, reason: string) {
     note(ref, 'diagnostic', 'supplemental', reason);
   }
-  function power(ref: EndpointRef, value: BudgetMetric, channel?: string, p0 = false) {
+  function power(ref: EndpointRef, value: BudgetMetric, channel?: string, p0 = false, flow?: PortFlow) {
     const key = signalPortKey(ref);
     const port = graph.ports.get(key);
     if (!port) return;
     const domain = port.definition.type === 'OPTICAL' ? '光' : 'RF ';
-    const label = domain + (port.definition.direction === 'in' ? '入' : '出') + (p0 ? ' P0' : '');
-    note(ref, 'power', port.definition.direction, label + ' ' + formatMetric(value), { p0, channel,
+    const role = flow ?? (port.definition.direction === 'out' ? 'out' : 'in');
+    const label = domain + (role === 'in' ? '入' : '出') + (p0 ? ' P0' : '');
+    note(ref, 'power', role, label + ' ' + formatMetric(value), { p0, channel,
       ...(value.availability === 'unavailable' ? { reason: value.reason } : { value: value.value }) });
     if (p0) return;
     ports.set(key, [domain.trim(), formatMetric(value), channel].filter(Boolean).join(' '));
@@ -81,7 +82,7 @@ export function linkAnnotations(graph: SignalGraph, path?: PathResult, point?: L
   function opticalStages(result: OpticalBudget) {
     for (const stage of result.stages) {
       const { endpoint, incoming } = stage;
-      power(endpoint, stage.powerDbm, stage.channelId);
+      power(endpoint, stage.powerDbm, stage.channelId, false, stage.flow);
       if (incoming?.opticalLoss) {
         metric(endpoint, 'intrinsicLoss', incoming.opticalLoss.intrinsicLossDb, stage.channelId);
         metric(endpoint, 'quadratureLoss', incoming.opticalLoss.quadratureLossDb, stage.channelId);

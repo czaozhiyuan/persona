@@ -1,3 +1,4 @@
+import { portDirectionLabels } from '../../../model/v1/types';
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { DragEvent } from 'react';
 import { portDisplayName, portTypeLabels } from '../../../workbench/v1/labels';
@@ -144,8 +145,8 @@ export function HierarchyTree({ project, focusMoved, move, instances, modulePath
           {open && module && definition.ports.map(port => <li className="v1-tree-port" key={port.id}
             style={{ paddingInlineStart: 4 + (instancePath.length + 1) * 14 }}>
             <button type="button" onClick={() => navigatePort(instancePath, port.id)}
-              title={`对外端口 · ${portTypeLabels[port.type]} · ${port.direction === 'in' ? '输入' : '输出'}`}>
-              <span aria-hidden="true">{port.direction === 'in' ? '↦' : '↤'}</span> {portDisplayName(port, false, definition.ports, item)}
+              title={`对外端口 · ${portTypeLabels[port.type]} · ${portDirectionLabels[port.direction]}`}>
+              <span aria-hidden="true">{port.direction === 'bidirectional' ? '↔' : port.direction === 'in' ? '↦' : '↤'}</span> {portDisplayName(port, false, definition.ports, item)}
             </button>
           </li>)}
         </Fragment>;

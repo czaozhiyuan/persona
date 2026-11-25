@@ -1,3 +1,4 @@
+import { supportsDirection } from '../../model/v1/types';
 import { useState } from 'react';
 import type { OpticalRoute, SwitchState } from '../../model/v1/device';
 import type { ComponentDefinition } from '../../model/v1/types';
@@ -16,8 +17,8 @@ export function TemplateSwitch({ definition }: { definition: ComponentDefinition
         <button onClick={() => edit(states.map(other => other.id === s.id ? { ...s, routes: s.routes.filter(item => item.key !== r.key) } : other))}>移除光路</button>
       </div>)}
       <button onClick={() => edit(states.map(other => other.id === s.id ? { ...s, routes: [...s.routes, row({
-        fromPortId: definition.ports.find(p => p.type === 'OPTICAL' && p.direction === 'in')?.id ?? '',
-        toPortId: definition.ports.find(p => p.type === 'OPTICAL' && p.direction === 'out')?.id ?? '',
+        fromPortId: definition.ports.find(p => p.type === 'OPTICAL' && supportsDirection(p.direction, 'in'))?.id ?? '',
+        toPortId: definition.ports.find(p => p.type === 'OPTICAL' && supportsDirection(p.direction, 'out'))?.id ?? '',
       })] } : other))}>添加光路</button>
       <button onClick={() => edit(states.filter(other => other.id !== s.id))}>删除状态</button>
     </fieldset>)}

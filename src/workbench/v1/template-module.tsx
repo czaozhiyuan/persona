@@ -1,5 +1,6 @@
+import { canMapDirection, supportsDirection } from '../../model/v1/types';
 import { withMappedVoltages, readChildParameters, type ResolvedInstance } from '../../engine/v1/hierarchy';
-import { numberedNamesById } from '../../model/v1/display-names';
+import { numberedNamesById, wireArrow } from '../../model/v1/display-names';
 import { useState } from 'react';
 import type { LibraryDefinition } from '../../library/v1/project-snapshots';
 import type { ModuleDefinition } from '../../model/v1/types';
@@ -25,7 +26,7 @@ export function TemplateModule({ occurrence, module, definitions, hidden, change
   const params = children.flatMap(({ i, d }) => (d?.parameters ?? []).map(p => ({
     p, target: { instanceId: i.id, parameterId: p.id }, label: i.name + ' · ' + p.name,
   })));
-  const endpointName = (ref: LocalEndpointRef) => ports.find(o => o.target.instanceId === ref.instanceId && o.target.portId === ref.portId)?.label ?? '已移除的端口';
+  const endpoint = (ref: LocalEndpointRef) => ports.find(o => o.target.instanceId === ref.instanceId && o.target.portId === ref.portId);
   return <>
     <fieldset><legend>模块子结构</legend>
       {module.instances.map(i => <div key={i.id}><label>子实例名称<input value={i.name}
@@ -52,7 +53,7 @@ export function TemplateModule({ occurrence, module, definitions, hidden, change
       return <label key={p.id}>{portDisplayName(p, false, module.ports, occurrence)}<select value={target ? JSON.stringify(target) : ''} onChange={e => {
         const keep = (module.portMappings ?? []).filter(m => m.portId !== p.id);
         change({ ...module, portMappings: e.target.value ? [...keep, { portId: p.id, target: JSON.parse(e.target.value) }] : keep });
-      }}><option value="">未映射</option>{ports.filter(o => o.p.type === p.type && o.p.direction === p.direction).map(o =>
+      }}><option value="">未映射</option>{ports.filter(o => o.p.type === p.type && canMapDirection(p.direction, o.p.direction)).map(o =>
         <option key={JSON.stringify(o.target)} value={JSON.stringify(o.target)}>{o.label}</option>)}</select></label>;
     })}</fieldset>
     {!!params.length && <fieldset><legend>子实例参数映射</legend>{params.map(o => {
@@ -64,15 +65,18 @@ export function TemplateModule({ occurrence, module, definitions, hidden, change
       }}><option value="">未映射</option>{module.parameters?.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>;
     })}</fieldset>}
     <fieldset><legend>内部连线</legend>
-      {module.connections?.map(c => <div key={c.id}>{endpointName(c.from)} → {endpointName(c.to)}
-        <button onClick={() => change({ ...module, connections: module.connections?.filter(conn => conn.id !== c.id) })}>移除连线</button></div>)}
+      {module.connections?.map(c => {
+        const from = endpoint(c.from), to = endpoint(c.to);
+        return <div key={c.id}>{from?.label ?? '已移除的端口'} {wireArrow(from?.p, to?.p)} {to?.label ?? '已移除的端口'}
+          <button onClick={() => change({ ...module, connections: module.connections?.filter(conn => conn.id !== c.id) })}>移除连线</button></div>;
+      })}
       <form onSubmit={e => {
         e.preventDefault(); const data = new FormData(e.currentTarget);
         change({ ...module, connections: [...module.connections ?? [], { id: crypto.randomUUID(),
           from: JSON.parse(String(data.get('from'))), to: JSON.parse(String(data.get('to'))) }] });
       }}>{(['out', 'in'] as const).map(dir => <label key={dir}>{dir === 'out' ? '起点' : '终点'}<select name={dir === 'out' ? 'from' : 'to'} required>
-        {ports.filter(o => o.p.direction === dir).map(o => <option key={JSON.stringify(o.target)} value={JSON.stringify(o.target)}>{o.label}</option>)}</select></label>)}
-        <button type="submit" disabled={!ports.some(o => o.p.direction === 'in') || !ports.some(o => o.p.direction === 'out')}>添加连线</button></form>
+        {ports.filter(o => supportsDirection(o.p.direction, dir)).map(o => <option key={JSON.stringify(o.target)} value={JSON.stringify(o.target)}>{o.label}</option>)}</select></label>)}
+        <button type="submit" disabled={!ports.some(o => supportsDirection(o.p.direction, 'in')) || !ports.some(o => supportsDirection(o.p.direction, 'out'))}>添加连线</button></form>
     </fieldset>
     <label><input type="checkbox" checked={!!module.physicalEnclosure} onChange={e => change({ ...module,
       physicalEnclosure: e.target.checked ? { widthMm: 440, depthMm: 350, heightMm: 44.45 } : undefined })} />作为机箱</label>

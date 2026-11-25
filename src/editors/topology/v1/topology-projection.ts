@@ -5,14 +5,14 @@ import { defaultTopologyPosition } from '../../../state/v1/topology-position';
 import { blockPortRows } from './block-ports';
 import { fitModuleFrame, keepNodeInside, minimumFrame, moduleExtent } from './frame-geometry';
 import { hierarchyChildren, hierarchyKey } from './hierarchy-view';
-import { frameInsets, framePadding } from './module-frame';
+import { frameInsets, framePadding, type FramePortHeights } from './module-frame';
 
 type Size = { width: number; height: number };
 export const estimatedBlockSize = (ports: readonly PortDefinition[]): Size =>
   ({ width: 202, height: 48 + blockPortRows(ports) * 24 });
 
 export type FrameResizePreview = { key: string; frame: Rect };
-type Frame = { base: Rect; display: Rect; saved: boolean };
+type Frame = { base: Rect; display: Rect; saved: boolean; insets: ReturnType<typeof frameInsets> };
 export type TopologyItem = {
   item: ResolvedInstance;
   key: string;
@@ -29,7 +29,7 @@ export const toLocalPosition = (position: XYPosition, offset: XYPosition): XYPos
 
 export function projectTopology(project: Project, instances: readonly ResolvedInstance[], scope: InstancePath,
   expanded: ReadonlySet<string>, measured: ReadonlyMap<string, Size>, resizePreview?: FrameResizePreview,
-  portHeights?: ReadonlyMap<string, number>) {
+  portHeights?: ReadonlyMap<string, number | FramePortHeights>) {
   const rootKey = hierarchyKey(scope);
   const root = instances.find(item => hierarchyKey(item.instancePath) === rootKey)!;
   const children = hierarchyChildren(instances);
@@ -67,7 +67,7 @@ export function projectTopology(project: Project, instances: readonly ResolvedIn
         : fitModuleFrame(compact, insets);
       const preview = resizePreview?.key === key ? resizePreview.frame : undefined;
       const display = { ...(preview ?? base) };
-      const frame = { base, display, saved: !!saved };
+      const frame = { base, display, saved: !!saved, insets };
       if (current) {
         current.frame = frame;
         if (preview) {

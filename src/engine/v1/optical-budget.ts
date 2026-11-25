@@ -5,13 +5,14 @@ import type { Carrier } from './path-search';
 import { resolveOpticalChannel } from '../../model/v1/channels';
 import type { OpticalChannelId } from '../../model/v1/channels';
 import type { ConversionBoundary, OpticalSource } from '../../model/v1/topology';
-import type { EndpointRef, Project } from '../../model/v1/types';
+import type { EndpointRef, PortFlow, Project } from '../../model/v1/types';
+import { supportsDirection } from '../../model/v1/types';
 import { addGain, budgetValue, checkInputRating, logZero, unavailable } from './budget-metric';
 import type { BudgetMetric, InputRatingCheck } from './budget-metric';
 import { resolveEmpiricalValue } from './empirical-value';
 import { chooseRouteChannel, intersectCarrier, searchSignalPath } from './path-search';
 import type { SearchResult, SignalPath } from './path-search';
-import { buildSignalGraph, channelRoutingPorts, signalPortKey } from './signal-graph';
+import { buildSignalGraph, channelRoutingPorts, portFlowAt, signalPortKey } from './signal-graph';
 import type { SignalEdge, SignalGraph, SignalPort } from './signal-graph';
 
 export type { OpticalSource } from '../../model/v1/topology';
@@ -27,6 +28,7 @@ export type LocalOpticalRequest =
 
 type OpticalStage = {
   endpoint: EndpointRef;
+  flow: PortFlow;
   channelId?: OpticalChannelId;
   powerDbm: BudgetMetric<'dBm'>;
   incoming?: {
@@ -73,13 +75,16 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
   const portAt = (ref: EndpointRef) => graph.ports.get(signalPortKey(ref));
 
   function search(start: SignalPort, target: SignalPort, carrier: Carrier) {
-    return searchSignalPath({ starts: [start], target, adjacent: outgoing, carrier, opticalOnly: true });
+    return searchSignalPath({ starts: [start], startFlow: port => port.modulePort ? 'in' : 'out', target, adjacent: outgoing, carrier, opticalOnly: true });
   }
 
   function stage(port: SignalPort, channelId: OpticalChannelId | undefined, powerDbm: BudgetMetric<'dBm'>,
     incoming?: OpticalStage['incoming']): OpticalStage {
     const endpoint = port.ref;
-    return { endpoint, channelId, powerDbm, incoming, rating: checkInputRating(endpoint, port.definition.inputRating, powerDbm) };
+    const flow = port.definition.direction !== 'bidirectional' ? port.definition.direction
+      : incoming ? portFlowAt(incoming.edge, port) : port.modulePort ? 'in' : 'out';
+    return { endpoint, flow, channelId, powerDbm, incoming,
+      rating: flow === 'in' ? checkInputRating(endpoint, port.definition.inputRating, powerDbm) : undefined };
   }
 
   function finish(stages: OpticalStage[], gainDb: BudgetMetric<'dB'>, pathIssue?: PathIssue, receiverEdge?: SignalEdge): OpticalBudget {
@@ -92,7 +97,7 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
     const last = stages.at(-1);
     let averageCurrent: BudgetMetric<'A'> | undefined;
     let digitalReceiver: OpticalBudget['digitalReceiver'];
-    if (last && !pathIssue) {
+    if (last?.flow === 'in' && !pathIssue) {
       const target = portAt(last.endpoint)!;
       const receivers = (receiverEdge ? [receiverEdge] : outgoing.get(target) ?? []).flatMap(({ source }) =>
         source.kind === 'transfer' && source.transfer.kind === 'digitalRx'
@@ -175,7 +180,7 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
       : source.kind === 'transfer' && 'gainDb' in source.transfer ? source.transfer.gainDb : undefined;
     // Every device route needs an explicit gain, even if its specified gain is zero.
     const value = source.kind === 'switchRoute' || source.kind === 'transfer'
-      ? !previous.channelId && (wavelengthPorts.has(edge.from) || wavelengthPorts.has(edge.to))
+      ? !previous.channelId && (wavelengthPorts.from.has(edge.from) || wavelengthPorts.to.has(edge.to))
         ? unavailable('dB', '该器件按波长选路，请选择光通道。') : resolveEmpiricalValue('dB', declared, query, instance)
       : budgetValue('dB', 0);
     const gain = value.availability === 'unavailable'
@@ -194,7 +199,7 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
     if (source.channelId !== undefined && !resolveOpticalChannel(source.channelId)) return `未知光通道「${source.channelId}」。`;
     const kind = instanceAt(source.endpoint)?.definition.kind;
     if (port?.definition.type !== 'OPTICAL'
-      || port.definition.direction !== (kind === 'module' ? 'in' : 'out')) {
+      || !supportsDirection(port.definition.direction, kind === 'module' ? 'in' : 'out')) {
       return '光源必须位于器件的光输出端口或模块的光输入端口。';
     }
   }

@@ -1,13 +1,15 @@
 import type { OpticalChannelId } from '../../model/v1/channels';
 import type { OpticalRoute, Transfer } from '../../model/v1/device';
 import type { CableCoreRef, Connection, LocalEndpointRef } from '../../model/v1/topology';
-import type { ConnectionRef, EndpointRef, InstancePath, PortDefinition, Project } from '../../model/v1/types';
+import { canConnect, supportsDirection } from '../../model/v1/types';
+import type { ConnectionRef, EndpointRef, InstancePath, PortDefinition, PortFlow, Project } from '../../model/v1/types';
 import { resolveHierarchy } from './hierarchy';
 import type { ResolvedInstance } from './hierarchy';
 
 export type SignalPort = Readonly<{
   ref: EndpointRef;
   definition: PortDefinition;
+  modulePort: boolean;
   unmapped: boolean;
 }>;
 
@@ -39,23 +41,31 @@ export type SignalGraph = Readonly<{
   edges: readonly SignalEdge[];
 }>;
 
+/** A wire leaves an output face and arrives at an input face; a mapping preserves that face. */
+export function portFlowAt(edge: SignalEdge, port: SignalPort): PortFlow {
+  if (edge.source.kind === 'portMapping') return edge.from.ref === edge.source.publicPort ? 'in' : 'out';
+  if (edge.source.kind === 'connection' || edge.source.kind === 'cableCore') return edge.from === port ? 'out' : 'in';
+  return edge.from === port ? 'in' : 'out';
+}
+
 export function isDigitalEdge(edge: SignalEdge) {
   return edge.source.kind === 'transfer' && (edge.source.transfer.kind === 'digitalTx' || edge.source.transfer.kind === 'digitalRx');
 }
 
 /** Identifies mux/demux ports by their channel-specific routes, independent of device names or icons. */
 export function channelRoutingPorts(edges: Iterable<SignalEdge>) {
-  const filters = new Map<SignalPort, string>();
-  const ports = new Set<SignalPort>();
+  const filters = { from: new Map<SignalPort, string>(), to: new Map<SignalPort, string>() };
+  const ports = { from: new Set<SignalPort>(), to: new Set<SignalPort>() };
   for (const edge of edges) {
     if (edge.source.kind !== 'switchRoute' && !(edge.source.kind === 'transfer'
       && (edge.source.transfer.kind === 'optical' || edge.source.transfer.kind === 'wavelengthConversion'))) continue;
-    for (const port of [edge.from, edge.to]) {
-      const filter = edge.channels.kind === 'convert' ? [port === edge.from ? edge.channels.fromChannelId : edge.channels.toChannelId]
+    for (const end of ['from', 'to'] as const) {
+      const port = edge[end];
+      const filter = edge.channels.kind === 'convert' ? [end === 'from' ? edge.channels.fromChannelId : edge.channels.toChannelId]
         : edge.channels.kind === 'preserve' ? edge.channels.channelIds : undefined;
       const key = filter ? [...filter].sort().join(',') : '';
-      if (filters.has(port) && filters.get(port) !== key) ports.add(port);
-      filters.set(port, key);
+      if (filters[end].has(port) && filters[end].get(port) !== key) ports[end].add(port);
+      filters[end].set(port, key);
     }
   }
   return ports;
@@ -83,7 +93,8 @@ export function buildSignalGraph(project: Project): SignalGraph {
     const mappedIds = new Set(definition.kind === 'module' ? definition.portMappings?.map(mapping => mapping.portId) : []);
     for (const port of definition.ports) {
       const ref = { instancePath, portId: port.id };
-      ports.set(signalPortKey(ref), { ref, definition: port, unmapped: definition.kind === 'module' && !mappedIds.has(port.id) });
+      ports.set(signalPortKey(ref), { ref, definition: port, modulePort: definition.kind === 'module',
+        unmapped: definition.kind === 'module' && !mappedIds.has(port.id) });
     }
   }
 
@@ -110,16 +121,22 @@ export function buildSignalGraph(project: Project): SignalGraph {
     edges.push({ from, to, source, channels, ...(supply && { supply }) });
   }
 
+  function addWire(a: SignalPort, b: SignalPort, source: SignalEdgeSource) {
+    if (canConnect(a.definition.direction, b.definition.direction)) addEdge(a, b, source);
+    if (canConnect(b.definition.direction, a.definition.direction)) addEdge(b, a, source);
+  }
+
   for (const { instancePath, definition, switchState } of instances) {
     if (definition.kind === 'module') {
       for (const mapping of definition.portMappings ?? []) {
         const outer = portAt(instancePath, mapping.portId);
         const inner = localPort(instancePath, mapping.target);
-        const [from, to] = outer.definition.direction === 'in' ? [outer, inner] : [inner, outer];
-        addEdge(from, to, { kind: 'portMapping', publicPort: outer.ref });
+        const source = { kind: 'portMapping', publicPort: outer.ref } as const;
+        if (supportsDirection(outer.definition.direction, 'in')) addEdge(outer, inner, source);
+        if (supportsDirection(outer.definition.direction, 'out')) addEdge(inner, outer, source);
       }
       for (const connection of definition.connections ?? []) {
-        addEdge(localPort(instancePath, connection.from), localPort(instancePath, connection.to), {
+        addWire(localPort(instancePath, connection.from), localPort(instancePath, connection.to), {
           kind: 'connection', ref: { scopePath: instancePath, connectionId: connection.id }, mediaKind: connection.mediaKind,
         });
       }
@@ -128,8 +145,7 @@ export function buildSignalGraph(project: Project): SignalGraph {
           if (!core.a.endpoint || !core.b.endpoint) continue;
           const a = localPort(instancePath, core.a.endpoint);
           const b = localPort(instancePath, core.b.endpoint);
-          const [from, to] = a.definition.direction === 'out' ? [a, b] : [b, a];
-          addEdge(from, to, {
+          addWire(a, b, {
             kind: 'cableCore', ref: { scopePath: instancePath, bundleId: bundle.id, coreId: core.id },
             aPin: core.a.pin, bPin: core.b.pin,
           });
