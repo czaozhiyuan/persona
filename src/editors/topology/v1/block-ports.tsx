@@ -6,11 +6,8 @@ import { Handle, Position } from '@xyflow/react';
 import type { PortDefinition } from '../../../model/v1/types';
 
 export const portSides = ['top', 'left', 'right'] as const;
-export const boundaryPortSide = (port: PortDefinition) => port.side ?? (port.direction === 'in' ? 'left' : 'right');
-export const blockPortRows = (ports: readonly PortDefinition[]) => {
-  const count = (side: typeof portSides[number]) => ports.filter(port => boundaryPortSide(port) === side).length;
-  return Math.max(count('left'), count('right')) + Number(count('top') > 0);
-};
+const sideByDirection = { in: 'left', out: 'right', bidirectional: 'top' } as const;
+export const boundaryPortSide = (port: PortDefinition) => sideByDirection[port.direction];
 
 export function PortLabel({ port, ports, open, value, labelContext, wdm }: { labelContext?: PortLabelContext; value?: string; port: PortDefinition; ports: readonly PortDefinition[]; open?: (id: string) => void; wdm?: boolean }) {
   const label = portDisplayName(port, false, ports, labelContext);
@@ -48,7 +45,7 @@ export function BlockPorts({ wdm, labelContext, portValue, ports, highlighted, n
     </div>;
   }
   return <>
-    {ports.some(port => port.side === 'top') && column('top')}
+    {ports.some(port => boundaryPortSide(port) === 'top') && column('top')}
     <div className="v1-block-columns">{column('left')}{column('right')}</div>
   </>;
 }

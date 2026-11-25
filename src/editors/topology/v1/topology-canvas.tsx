@@ -110,7 +110,7 @@ function Device({ id, data, selected }: NodeProps<DeviceNode>) {
   const definition = data.labelContext.definition;
   const wdm = definition.kind === 'component' && definition.wdm;
   const title = wdm ? `WDM · ${data.ports.filter(port => port.id !== 'COM').length}CH` : data.name;
-  return <div data-wdm={wdm || undefined} title={data.notes?.map(n => n.detail).join('\n')} className={`v1-topology-device${data.pathPorts.size ? ' is-on-path' : ''}${selected ? ' is-selected' : ''}${data.foldedPath ? ' has-folded-path' : ''}`}>
+  return <div title={data.notes?.map(n => n.detail).join('\n')} className={`v1-topology-device${data.pathPorts.size ? ' is-on-path' : ''}${selected ? ' is-selected' : ''}${data.foldedPath ? ' has-folded-path' : ''}`}>
     <div className="v1-block-title"><DeviceIcon iconKey={data.iconKey} /><strong title={wdm ? data.name : undefined}>{title}</strong><AddPortButton data={data} /><ExpandButton data={data} expanded={false} /></div>
     {data.foldedPath && <span className="v1-topology-path-label">路径经过内部</span>}
     <NodeCaption notes={data.notes} />

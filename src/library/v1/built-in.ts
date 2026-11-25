@@ -19,7 +19,7 @@ const poweredRfPorts = [...rfPorts, fiveVoltInput];
 const opticalPorts = [port('OPT_IN', '光输入', 'OPTICAL', 'in'), port('OPT_OUT', '光输出', 'OPTICAL', 'out')];
 const dcOutput: PortDefinition = { id: 'DC_OUT', type: 'DC_POWER', direction: 'out', outputVoltageV: fixed(5) };
 const wdmPorts: PortDefinition[] = [
-  { id: 'COM', name: 'COM', type: 'OPTICAL', direction: 'bidirectional', side: 'top' },
+  { id: 'COM', name: 'COM', type: 'OPTICAL', direction: 'bidirectional' },
   wdmPort('CH1', 'CWDM_1311', 'in'), wdmPort('CH2', 'CWDM_1351', 'in'),
   wdmPort('CH3', 'CWDM_1371', 'out'), wdmPort('CH4', 'CWDM_1391', 'out'),
 ];
@@ -63,7 +63,7 @@ export const builtInDefinitions = [
     ports: [{ ...port('OPT_OUT', '光输出', 'OPTICAL', 'out'), opticalEmitter: emitter }, fiveVoltInput] },
   {
     kind: 'component', id: 'library-splitter', iconKey: 'splitter', name: '光分路器（1×2）',
-    ports: [{ ...port('OPT_IN', '公共口', 'OPTICAL', 'bidirectional'), side: 'left' },
+    ports: [port('OPT_IN', '公共口', 'OPTICAL', 'bidirectional'),
       port('OPT_OUT_1', '支路 1', 'OPTICAL', 'bidirectional'), port('OPT_OUT_2', '支路 2', 'OPTICAL', 'bidirectional')],
     parameters: [
       { ...numeric('firstPercent', '支路 1 分光比', '%', { min: 0, max: 100 }), defaultValue: { kind: 'fixed', value: 50 } },
@@ -117,7 +117,7 @@ export const builtInDefinitions = [
   },
   {
     kind: 'component', id: 'library-optical-attenuator', iconKey: 'opticalAttenuator', name: '光衰减器',
-    ports: [{ ...port('OPT_IN', '光口 A', 'OPTICAL', 'bidirectional'), side: 'left' }, port('OPT_OUT', '光口 B', 'OPTICAL', 'bidirectional')],
+    ports: [port('OPT_IN', '光口 A', 'OPTICAL', 'bidirectional'), port('OPT_OUT', '光口 B', 'OPTICAL', 'bidirectional')],
     parameters: [{ ...attenuation, defaultValue: { kind: 'fixed', value: -3 } }],
     transfers: [{ kind: 'optical', fromPortId: 'OPT_IN', toPortId: 'OPT_OUT', gainDb: parameter('gain') },
       { kind: 'optical', fromPortId: 'OPT_OUT', toPortId: 'OPT_IN', gainDb: parameter('gain') }],
@@ -129,7 +129,7 @@ export const builtInDefinitions = [
   },
   {
     kind: 'component', id: 'library-circulator', iconKey: 'circulator', name: '光环形器',
-    ports: [port('P1', 'P1', 'OPTICAL', 'in'), { ...port('P2', 'P2', 'OPTICAL', 'bidirectional'), side: 'top' },
+    ports: [port('P1', 'P1', 'OPTICAL', 'in'), port('P2', 'P2', 'OPTICAL', 'bidirectional'),
       port('P3', 'P3', 'OPTICAL', 'out')],
     parameters: [insertionLoss],
     transfers: [{ kind: 'optical', fromPortId: 'P1', toPortId: 'P2', insertionLossDb: parameter('loss') },

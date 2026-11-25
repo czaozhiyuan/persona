@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { boundaryPortSide } from '../../src/editors/topology/v1/block-ports';
 import { test } from 'node:test';
 import { createOpticalBudget } from '../../src/engine/v1/optical-budget';
 import { createPathResolver } from '../../src/engine/v1/path-resolver';
@@ -108,7 +109,7 @@ test('one MPO fibre or connection carries both directions through public COM map
     instances: [...root.instances, { id: 'spare', name: '备用', definitionId: 'pd' }] }, ...boxes] };
   const grouped = groupModule(withSpare, [['A'], ['spare']], '光模块', 'group', 'group-def');
   const boundary = grouped.moduleDefinitions.find(m => m.id === 'group-def')!.ports[0];
-  assert.deepEqual([boundary.direction, boundary.side], ['bidirectional', 'top']);
+  assert.deepEqual([boundary.direction, boundaryPortSide(boundary)], ['bidirectional', 'top']);
   assert.equal(createPathResolver(parseProjectJson(serializeProjectJson(grouped))).resolveNamedLink(grouped.namedLinks![0]).status, 'resolved');
   let next = 0;
   const copied = pasteModule(fixture, fixture, ['A'], [], 'copy', () => 'copy-' + ++next);

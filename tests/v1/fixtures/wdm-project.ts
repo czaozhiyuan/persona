@@ -45,7 +45,7 @@ export function wdmProject(modulated = false): Project {
       connections.push({ id: 'branch' + i, from: source ? local(emitter, 'OPT_OUT') : branch,
         to: source ? branch : local(key, 'OPT_IN') });
     }
-    return { id, kind: 'module', name: '机箱 ' + id, ports: [{ id: 'COM', name: 'COM', direction: 'bidirectional', type: 'OPTICAL', side: 'top' }],
+    return { id, kind: 'module', name: '机箱 ' + id, ports: [{ id: 'COM', name: 'COM', direction: 'bidirectional', type: 'OPTICAL' }],
       instances, connections, portMappings: [{ portId: 'COM', target: local('wdm', 'COM') }] };
   }
   return { id: 'two-wdm', name: '双机箱 WDM', rootModuleDefinitionId: 'root', namedLinks,

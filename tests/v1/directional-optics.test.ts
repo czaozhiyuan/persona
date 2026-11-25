@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { boundaryPortSide } from '../../src/editors/topology/v1/block-ports';
 import { test } from 'node:test';
 import type { BudgetMetric } from '../../src/engine/v1/budget-metric';
 import { createOpticalBudget } from '../../src/engine/v1/optical-budget';
@@ -59,7 +60,9 @@ test('factory optical devices preserve their exact routes, common parameters, ic
   assert.equal(icons.size, 5);
   assert.deepEqual(device('optical-amplifier').ports.find(p => p.id === 'DC_IN')?.inputVoltageV, fixed(5));
   assert.equal(device('optical-amplifier').dcLoad, undefined);
-  assert.equal(device('circulator').ports[1].side, 'top');
+  assert.deepEqual(device('circulator').ports.map(boundaryPortSide), ['left', 'top', 'right']);
+  assert.deepEqual(device('splitter').ports.map(boundaryPortSide), ['top', 'top', 'top']);
+  assert.deepEqual(device('optical-attenuator').ports.map(boundaryPortSide), ['top', 'top']);
 });
 
 test('the split ratio follows the physical branch in either direction including exact dark channels', () => {

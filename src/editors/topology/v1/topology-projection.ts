@@ -2,14 +2,19 @@ import type { Rect, XYPosition } from '@xyflow/react';
 import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
 import type { InstancePath, ModuleDefinition, PortDefinition, Project } from '../../../model/v1/types';
 import { defaultTopologyPosition } from '../../../state/v1/topology-position';
-import { blockPortRows } from './block-ports';
+import { boundaryPortSide } from './block-ports';
 import { fitModuleFrame, keepNodeInside, minimumFrame, moduleExtent } from './frame-geometry';
 import { hierarchyChildren, hierarchyKey } from './hierarchy-view';
 import { frameInsets, framePadding, type FramePortHeights } from './module-frame';
 
 type Size = { width: number; height: number };
-export const estimatedBlockSize = (ports: readonly PortDefinition[]): Size =>
-  ({ width: 202, height: 48 + blockPortRows(ports) * 24 });
+export const estimatedBlockSize = (ports: readonly PortDefinition[]): Size => {
+  const count = { left: 0, right: 0, top: 0 };
+  for (const port of ports) count[boundaryPortSide(port)]++;
+  const rows = Math.max(count.left, count.right) + Number(count.top > 0);
+  // Each top pin needs a 4rem column before the card is measured.
+  return { width: Math.max(202, count.top * 64 + 26), height: 48 + rows * 24 };
+};
 
 export type FrameResizePreview = { key: string; frame: Rect };
 type Frame = { base: Rect; display: Rect; saved: boolean; insets: ReturnType<typeof frameInsets> };

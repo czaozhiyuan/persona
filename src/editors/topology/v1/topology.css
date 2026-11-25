@@ -52,10 +52,9 @@
   display: flex; flex-direction: column; width: min-content; min-width: calc(var(--v1-block-width-rem) * 1rem);
 }
 .v1-block-column.top { order: -1; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(4rem, 1fr); margin-top: -.7rem; }
-.v1-block-column.top .v1-topology-port { justify-content: center; padding: 4px 2px 0; }
+.v1-block-column.top .v1-topology-port { height: auto; justify-content: center; padding: 4px 2px 0; }
 .v1-block-column.top .react-flow__handle-top { top: 0; }
 .v1-block-column .v1-topology-port { height: 24px; min-height: 24px; }
-.v1-topology-device[data-wdm] .v1-block-column.top .v1-topology-port { height: auto; }
 .v1-block-column.right .v1-topology-port { justify-content: flex-end; }
 .v1-topology-port .v1-port-label {
   border: 0; background: transparent; color: inherit; padding: 0; min-height: 0; min-width: 0; max-width: 100%;

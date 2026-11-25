@@ -1,5 +1,5 @@
 import { readableError } from '../../model/v1/display-names';
-import type { Project } from '../../model/v1/types';
+import type { PortDefinition, Project } from '../../model/v1/types';
 import { validateProject } from '../../model/v1/validate';
 import { assertProjectShape, ProjectStructureError } from './project-schema';
 export { ProjectStructureError } from './project-schema';
@@ -47,6 +47,15 @@ function jsonSyntaxMessage(source: string, error: unknown): string {
   return message;
 }
 
+/** Drops obsolete display preferences only from freshly parsed definitions. */
+export function discardImportedPortSides(definitions: readonly { ports: readonly PortDefinition[] }[]) {
+  for (const definition of definitions) {
+    for (const port of definition.ports) {
+      if ('side' in port) delete port.side;
+    }
+  }
+}
+
 /** Returns a new snapshot only after the whole file passes validation. */
 export function parseProjectJson(source: string): Project {
   let value: unknown;
@@ -74,6 +83,7 @@ export function parseProjectJson(source: string): Project {
   }
   const project = Object.hasOwn(file, 'project') ? file.project : undefined;
   validateProjectSnapshot(project);
+  discardImportedPortSides([...project.componentDefinitions, ...project.moduleDefinitions]);
   return project;
 }
 

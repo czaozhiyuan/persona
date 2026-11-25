@@ -40,7 +40,6 @@ export type PortDefinition = {
   name?: string;
   type: PortType;
   direction: PortDirection;
-  side?: 'top' | 'left';
   channelIds?: readonly OpticalChannelId[];
   opticalEmitter?: OpticalEmitter;
   inputRating?: InputRating;
