@@ -40,7 +40,8 @@ import { handleId, nodeId, portKey, projectWiring, scopedWiringProblem } from '.
 import type { WiringEdge } from './topology-wiring';
 import type { CenterPlacement, Projection } from './topology-layout-edits';
 import { preserveDeletionLayout } from './topology-layout-edits';
-import { planInlineExpansion } from './inline-expansion-layout';
+import { applyExpansionLayout, type ExpansionLayout } from './inline-expansion-layout';
+import { useInlineExpansion } from './use-inline-expansion';
 import { SignalWire, signalColor } from './signal-wire';
 import '@xyflow/react/dist/style.css';
 
@@ -77,6 +78,7 @@ type DropPreview = NonNullable<ReturnType<typeof reparentDropTarget>> & {
 };
 type DragSession = {
   base: Project;
+  displayed: Project;
   preview?: DropPreview;
   anchor: TopologyItem;
   members: readonly TopologyItem[];
@@ -150,6 +152,7 @@ type Props = {
   pathResult?: PathResult;
   budgetHighlight?: BudgetHighlight;
   persistExpansion: boolean;
+  expansionPreview?: ExpansionLayout;
   expanded: ReadonlySet<string>;
   toggleModule: (path: InstancePath) => void;
   openPort: (path: InstancePath, portId: string) => void;
@@ -164,7 +167,7 @@ type Props = {
   restoreView?: CanvasView;
   move: (placements: readonly TopologyPlacement[], frame?: TopologyFrame) => void;
   resize: (frame: TopologyFrame, placementAdjustments: readonly TopologyPlacement[]) => void;
-  saveExpansion: (layout: ReturnType<typeof planInlineExpansion>) => void;
+  finishExpansion: (base: Project, layout: ExpansionLayout, persist: boolean) => void;
   connect: (scope: InstancePath, connection: Omit<Connection, 'id'>) => void;
   mapPort: (scope: InstancePath, mapping: PortMapping) => void;
   placingModule: boolean;
@@ -186,10 +189,10 @@ export function TopologyCanvas(props: Props) {
   return <ReactFlowProvider><EditableTopologyCanvas {...props} /></ReactFlowProvider>;
 }
 
-function EditableTopologyCanvas({ multiplex, project, instances, modulePath, selectedInstance, selectedPaths, pathResult, budgetHighlight, expanded, persistExpansion,
+function EditableTopologyCanvas({ multiplex, project, instances, modulePath, selectedInstance, selectedPaths, pathResult, budgetHighlight, expanded, persistExpansion, expansionPreview,
   toggleModule, selectObject, selectObjects, enterModule, reparent, focusMoved, move, resize, connect, mapPort, add, placingModule, cancelPlacement,
   deleteInstances, deleteWiring, route, rename, copyObjects, pasteObjects, centerPlacement, report, undo, redo, openPort, onAddPort, newPort,
-  depth, fullPage, toggleFullPage, restoreView, viewHost, topologyActive, saveExpansion }: Props) {
+  depth, fullPage, toggleFullPage, restoreView, viewHost, topologyActive, finishExpansion }: Props) {
   const flowStore = useStoreApi<CanvasNode, WiringEdge>();
   const boxSelection = useRef<readonly InstancePath[] | undefined>(undefined);
   const panWithSpace = useKeyPress('Space', { actInsideInputWithModifier: false });
@@ -221,25 +224,13 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
   const draggingTree = useRef(false);
   const flow = useRef<ReactFlowInstance<CanvasNode, WiringEdge>>(null);
 
-  const projection = useMemo(() => projectTopology(project, instances, modulePath, expanded, measured, resizePreview, portHeights),
-    [project, instances, modulePath, expanded, measured, resizePreview, portHeights]);
+  const displayed = useMemo(() => applyExpansionLayout(project, expansionPreview), [project, expansionPreview]);
+  const projection = useMemo(() => ({
+    ...projectTopology(displayed, instances, modulePath, expanded, measured, resizePreview, portHeights), expansionPreview,
+  }), [displayed, expansionPreview, instances, modulePath, expanded, measured, resizePreview, portHeights]);
   const { nodes: items, rootKey, nodeByKey, scopes } = projection;
-  const previousFrames = useRef(new Set<string>());
-  const pendingExpansion = useRef(new Set<string>());
-  useLayoutEffect(() => {
-    const visible = new Set(scopes.keys());
-    visible.delete(rootKey);
-    const pending = pendingExpansion.current;
-    for (const key of visible) if (persistExpansion && !previousFrames.current.has(key)) pending.add(key);
-    for (const key of pending) if (!visible.has(key)) pending.delete(key);
-    previousFrames.current = visible;
-    if (!pending.size || !topologyActive) return;
-    // The newly revealed cards and multiline frame ports need their real canvas dimensions.
-    if (items.some(node => node.frame ? !portHeights.has(node.key) : !measured.has(node.key))) return;
-    const layout = planInlineExpansion(projection, pending);
-    pending.clear();
-    if (layout.moves.length || layout.frames.length) saveExpansion(layout);
-  }, [projection, items, scopes, rootKey, topologyActive, portHeights, measured, saveExpansion, persistExpansion]);
+  const cancelExpansion = useInlineExpansion(canvas, project, displayed, projection, instances, modulePath, expanded,
+    measured, portHeights, topologyActive && !dragSession.current && !resizePreview, persistExpansion, finishExpansion);
   // An empty scope has nothing to fit. A queued fit would zoom to its first insertion.
   const [fitInitialNodes] = useState(() => !initialViewport && items.length > 0);
   useEffect(() => {
@@ -388,7 +379,10 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
       data: { ...data, onPortHeight, outerHandles: !boundary, locations: boundary ? [] : structureScope(instances, definition.id),
         resize: {
           frame: frame.display, insets: frame.insets, originLimit,
-          preview: next => setResizePreview(next && { key, frame: next }),
+          preview: next => {
+            if (next) cancelExpansion();
+            setResizePreview(next && { key, frame: next });
+          },
           childrenBounds: direct.map(child => child.frame ? { ...child.bounds,
             width: child.frame.display.width, height: child.frame.display.height } : child.bounds),
           finish: (next, original) => {
@@ -432,7 +426,8 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
     const ordered = [anchor, ...members.filter(item => item.key !== anchor.key)];
     const bounds = groupDragBounds(ordered);
     const extent = parent && frame ? groupDragExtent(bounds, moduleExtent(frame.base, frame.insets)) : undefined;
-    dragSession.current = { base: project, anchor, members: ordered, keys: new Set(ordered.map(item => item.key)),
+    cancelExpansion();
+    dragSession.current = { base: project, displayed, anchor, members: ordered, keys: new Set(ordered.map(item => item.key)),
       bounds, extent,
       frame: frame && !frame.saved ? { modulePath: parentPath, ...frame.base } : undefined };
     if (!selectedKeys.has(anchor.key)) selectObject(anchor.item.instancePath, false);
@@ -486,7 +481,7 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
       || hierarchyKey(session.preview.destination) !== hierarchyKey(target.destination) || session.preview.problem !== target.problem) {
       const owner = target.node?.item ?? instances.find(item => hierarchyKey(item.instancePath) === hierarchyKey(target.destination));
       const checked = target.problem ? undefined
-        : planInstanceMoves(session.base, session.members.map(item => item.item.instancePath), target.destination);
+        : planInstanceMoves(session.displayed, session.members.map(item => item.item.instancePath), target.destination);
       const name = owner?.instance?.name ?? owner?.definition.name ?? '当前模块';
       session.preview = { ...target, selectedCount: session.members.length, plan: checked?.ok ? checked : undefined,
         error: target.problem ?? (checked?.ok === false ? checked.message : undefined),
@@ -533,7 +528,7 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
         x: point.x - session.anchor.bounds.width / 2, y: point.y - session.anchor.bounds.height / 2,
       } : definition?.kind === 'module' ? defaultTopologyPosition(definition.instances.length, definition.ports.length) : undefined;
       const plan = preview.plan;
-      const saved = session.base.layout?.topologyFrames?.find(frame => hierarchyKey(frame.modulePath) === hierarchyKey(target.destination));
+      const saved = session.displayed.layout?.topologyFrames?.find(frame => hierarchyKey(frame.modulePath) === hierarchyKey(target.destination));
       const dropped = position && placeDropGroup(session.bounds, session.anchor.bounds, position, saved,
         frame?.insets ?? (definition && frameInsets(definition.ports)));
       const layout = dropped && {

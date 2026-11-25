@@ -98,7 +98,6 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     window.matchMedia('(max-width: 48rem)').matches ? undefined : 'structure');
   const [propertiesOpen, setPropertiesOpen] = useState(() => !window.matchMedia('(max-width: 48rem)').matches);
   const [expandedHierarchy, setExpandedHierarchy] = useState<ReadonlySet<string>>(new Set(['[]']));
-  const treeExpansion = useRef<ReadonlySet<string>>(undefined);
   const [expandedCanvas, setExpandedCanvas] = useState<ReadonlySet<string>>(new Set());
   const [presentation, setPresentation] = useState<Presentation>();
   const [restoredView, setRestoredView] = useState<{ scope: string; view: CanvasView }>();
@@ -229,7 +228,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
 
     setLeftTab(presentation.leftTab);
     setPropertiesOpen(presentation.propertiesOpen);
-    setExpandedCanvas(presentation.expandedCanvas);
+    setExpandedCanvas(new Set(presentation.expandedCanvas));
     setExpandedHierarchy(presentation.expandedHierarchy);
     store.selectModule(presentation.scope);
     store.selectInstances(presentation.selected);
@@ -266,7 +265,6 @@ export function Workbench({ store, loadExample, newProject }: Props) {
 
   function selectTreeObject(path: InstancePath, extend: boolean) {
     if (!inHierarchy(selection.modulePath, path)) {
-      treeExpansion.current = expandedCanvas;
       store.selectModule(path.slice(0, -1));
       selectObjects([path]);
       setCopyNotice(extend ? '已切换到目标所在的模块，当前仅选中该对象。' : '');
@@ -274,7 +272,6 @@ export function Workbench({ store, loadExample, newProject }: Props) {
       const next = new Set(expandedCanvas);
       for (let depth = selection.modulePath.length + 1; depth < path.length; depth++) next.add(hierarchyKey(path.slice(0, depth)));
       if (next.size !== expandedCanvas.size) {
-        treeExpansion.current = next;
         setExpandedCanvas(next);
       }
       selectObject(path, extend);
@@ -702,7 +699,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
                     {issue && <small role="status" title={issue}>{issue}</small>}</>}
                 </div>}
                 store={store} state={state} module={active} pathResult={canvasPath} graph={linkOptions.graph} rename={renameSelection}
-                expanded={expandedCanvas} persistExpansion={expandedCanvas !== treeExpansion.current} setExpanded={setExpandedCanvas} budgetHighlight={budgetHighlight}
+                expanded={expandedCanvas} setExpanded={setExpandedCanvas} budgetHighlight={budgetHighlight}
                 canEditLink={category === 'links' && !!savedLink} onPortBudget={selectBudgetPort} onDcBudget={showDc}
                 openPorts={(path, initialMode) => setPortTarget({ path, initialMode })} newPort={newPort}
                 onSelectObject={selectObject} onSelectObjects={selectObjects}

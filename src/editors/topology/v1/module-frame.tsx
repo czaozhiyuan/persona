@@ -15,6 +15,14 @@ const framePortColumn = 64;
 
 export type FramePortHeights = { side: number; top: number };
 
+export function measureFramePorts(columns: readonly HTMLElement[]): FramePortHeights {
+  // offsetHeight is in canvas units even when the viewport is zoomed.
+  return {
+    side: Math.max(0, ...columns.filter(column => !column.classList.contains('top')).map(column => column.offsetHeight)),
+    top: columns.find(column => column.classList.contains('top'))?.offsetHeight ?? 0,
+  };
+}
+
 export function frameInsets(ports: readonly PortDefinition[], measured?: FramePortHeights | number) {
   const onSide = (side: typeof portSides[number]) => ports.filter(port => boundaryPortSide(port) === side);
   const left = onSide('left'), right = onSide('right'), above = onSide('top');
@@ -58,10 +66,7 @@ export function ModuleFrame({ frameKey, insets, onPortHeight, labelContext, icon
   useLayoutEffect(() => {
     const columns = Array.from(frame.current!.querySelectorAll<HTMLElement>('.v1-module-pins'));
     function measure() {
-      // offsetHeight is in canvas units even when the viewport is zoomed.
-      const side = Math.max(0, ...columns.filter(column => !column.classList.contains('top')).map(column => column.offsetHeight));
-      const top = columns.find(column => column.classList.contains('top'))?.offsetHeight ?? 0;
-      onPortHeight(frameKey, { side, top });
+      onPortHeight(frameKey, measureFramePorts(columns));
       updateInternals(id);
     }
     measure();
