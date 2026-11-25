@@ -3,7 +3,7 @@ import { resolveHierarchy } from '../../engine/v1/hierarchy';
 import type { InstancePath, Project, TopologyPlacement } from '../../model/v1/types';
 import { validateProjectSnapshot } from '../../storage/v1/project-json';
 import { remapLinkReferences } from './remap-link-references';
-import { moveLocalWiring, moveParametersDown, moveParametersUp } from './reparent-wiring';
+import { moveLocalWiring, transferMoveParameters, type ModuleHop } from './reparent-wiring';
 
 type OccurrenceMove = { from: InstancePath; to: InstancePath };
 type MoveOptions = { position?: Pick<TopologyPlacement, 'x' | 'y'> };
@@ -32,53 +32,57 @@ function applyMove(project: Project, sources: readonly InstancePath[], destinati
   const moving = new Set(sources.map(path => path.at(-1)!));
   if (moving.size !== sources.length) throw new Error('待移动的实例不能重复。');
   if (sources.some(path => startsWith(destination, path))) throw new Error('不能将实例移入自身或其后代。');
-  const down = destination.length === source.length && startsWith(destination, fromParent);
-  const up = fromParent.length > 0 && samePath(destination, fromParent.slice(0, -1));
-  if (!down && !up) throw new Error('只能移入同层的兄弟模块，或移到直接上一级。');
+  if (samePath(fromParent, destination)) throw new Error('实例已在目标模块内。');
 
   const hierarchy = resolveHierarchy(project);
-  const parentPath = down ? fromParent : destination;
-  const containerPath = down ? destination : fromParent;
-  const parent = hierarchy.resolveInstance(parentPath)?.definition;
-  const container = hierarchy.resolveInstance(containerPath)?.definition;
-  if (parent?.kind !== 'module' || container?.kind !== 'module') throw new Error('源或目标模块已不存在。');
-  const slotId = containerPath.at(-1)!;
-  const from = down ? parent : container;
-  const to = down ? container : parent;
+  const from = hierarchy.resolveInstance(fromParent)?.definition;
+  const to = hierarchy.resolveInstance(destination)?.definition;
+  if (from?.kind !== 'module' || to?.kind !== 'module') throw new Error('源或目标模块已不存在。');
+  let commonDepth = 0;
+  while (commonDepth < Math.min(fromParent.length, destination.length)
+    && fromParent[commonDepth] === destination[commonDepth]) commonDepth++;
+  const common = hierarchy.resolveInstance(fromParent.slice(0, commonDepth))!.definition;
+  const modules = new Map(project.moduleDefinitions.map(module => [module.id, module]));
+
+  function branch(path: InstancePath): ModuleHop[] {
+    let parent = modules.get(common.id)!;
+    return path.slice(commonDepth).map(id => {
+      const slot = parent.instances.find(instance => instance.id === id)!;
+      const child = modules.get(slot.definitionId)!;
+      // Each occurrence below the common ancestor must have exactly one matching source and destination.
+      for (const module of project.moduleDefinitions) {
+        const other = module.instances.find(instance => instance.definitionId === child.id
+          && (module.id !== parent.id || instance.id !== slot.id));
+        if (other) throw new Error(`模块定义「${child.name}」另被「${module.name} / ${other.name}」使用，无法逐一保留移动对象的出现位置。`);
+      }
+      const hop = { parentId: parent.id, childId: child.id, slot };
+      parent = child;
+      return hop;
+    });
+  }
+  const sourceBranch = branch(fromParent), targetBranch = branch(destination);
   const moved = from.instances.filter(instance => moving.has(instance.id));
   if (moved.length !== moving.size) throw new Error('待移动的实例已不存在。');
   const conflict = to.instances.find(instance => moving.has(instance.id));
   if (conflict) throw new Error(`目标模块「${to.name}」已有实例「${conflict.name}」，与移动对象的内部引用冲突。`);
 
-  // A single slot can occur many times through its parents. Another slot would add or lose unmatched occurrences.
-  for (const module of project.moduleDefinitions) {
-    const other = module.instances.find(instance => instance.definitionId === container.id
-      && (module.id !== parent.id || instance.id !== slotId));
-    if (other) throw new Error(`模块定义「${container.name}」另被「${module.name} / ${other.name}」使用，无法逐一保留移动对象的出现位置。`);
+  const sourceScopes = new Map<string, InstancePath>();
+  const affected: OccurrenceMove[] = [];
+  for (const item of hierarchy.walkInstances()) {
+    if (item.definition.id !== common.id) continue;
+    const oldScope = [...item.instancePath, ...fromParent.slice(commonDepth)];
+    const newScope = [...item.instancePath, ...destination.slice(commonDepth)];
+    sourceScopes.set(key(oldScope), newScope);
+    for (const id of moving) affected.push({ from: [...oldScope, id], to: [...newScope, id] });
   }
 
-  const occurrences = [...hierarchy.walkInstances()].filter(item => item.definition.id === parent.id);
-  const sourceScopes = new Map(occurrences.map(({ instancePath }) => {
-    const nested = [...instancePath, slotId];
-    return down ? [key(instancePath), nested] : [key(nested), instancePath];
-  }));
-  const slot = parent.instances.find(instance => instance.id === slotId)!;
-  const perContainerSettings = new Set(project.instanceSettings?.filter(item => !down && sourceScopes.has(key(item.instancePath)))
-    .flatMap(item => Object.keys(item.parameterOverrides ?? {})));
-  const parameters = down ? moveParametersDown(parent, container, slotId, moving)
-    : moveParametersUp(parent, container, slotId, moving,
-      id => Object.hasOwn(slot.parameterOverrides ?? {}, id) || perContainerSettings.has(id));
-  // Unmapped boundary ports remain valid endpoints. Only direct relationships in the source move or break.
-  const wiring = down ? moveLocalWiring(parameters.outer, parameters.inner, moving)
-    : moveLocalWiring(parameters.inner, parameters.outer, moving);
-  const nextFrom = { ...wiring.source, instances: from.instances.filter(item => !moving.has(item.id)) };
-  const nextTo = { ...wiring.destination, instances: [...to.instances, ...moved] };
+  transferMoveParameters(modules, from.id, to.id, moving, sourceBranch, targetBranch, (hop, id) =>
+    Object.hasOwn(hop.slot.parameterOverrides ?? {}, id) || !!project.instanceSettings?.some(setting =>
+      Object.hasOwn(setting.parameterOverrides ?? {}, id) && hierarchy.resolveInstance(setting.instancePath)?.definition.id === hop.childId));
+  const wiring = moveLocalWiring(modules.get(from.id)!, modules.get(to.id)!, moving);
+  modules.set(from.id, { ...wiring.source, instances: from.instances.filter(item => !moving.has(item.id)) });
+  modules.set(to.id, { ...wiring.destination, instances: [...to.instances, ...moved] });
 
-  const affected = occurrences.flatMap(({ instancePath }) => [...moving].map(id => {
-    const sibling = [...instancePath, id];
-    const nested = [...instancePath, slotId, id];
-    return down ? { from: sibling, to: nested } : { from: nested, to: sibling };
-  }));
   const destinations = new Map(affected.map(move => [key(move.from), move.to]));
   function remap(path: InstancePath): InstancePath {
     for (let length = 1; length <= path.length; length++) {
@@ -99,8 +103,7 @@ function applyMove(project: Project, sources: readonly InstancePath[], destinati
   const position = options.position;
   const candidate = retainWireRoutes(project, {
     ...project,
-    moduleDefinitions: project.moduleDefinitions.map(module =>
-      module.id === nextFrom.id ? nextFrom : module.id === nextTo.id ? nextTo : module),
+    moduleDefinitions: [...modules.values()],
     instanceSettings: project.instanceSettings?.map(atInstance),
     namedLinks: project.namedLinks?.map(link => remapLinkReferences(link, remap, atInstance, ref => {
       const destinationScope = sourceScopes.get(key(ref.scopePath));
