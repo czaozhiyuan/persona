@@ -1,245 +1,316 @@
 import type { DcCapacity, DcValue } from '../../model/v1/device';
-import { isSupplyOutput } from '../../model/v1/types';
+import { isPowerPort, isSupplyOutput } from '../../model/v1/types';
 import type { EndpointRef, Project } from '../../model/v1/types';
 import { budgetValue, checkInputRating, unavailable } from './budget-metric';
 import type { BudgetMetric, InputRatingCheck } from './budget-metric';
 import { resolveEmpiricalValue } from './empirical-value';
 import type { ResolvedInstance } from './hierarchy';
-import { buildSignalGraph, signalPortKey } from './signal-graph';
+import { buildSignalGraph } from './signal-graph';
 import type { SignalPort } from './signal-graph';
 
 type Diagnostic = {
-  code: 'open_input' | 'ambiguous_input' | 'feedback' | 'missing_parameter' | 'unknown_load' | 'voltage_conflict';
+  code: 'open_input' | 'feedback' | 'missing_parameter' | 'unknown_load' | 'voltage_conflict';
   endpoint: EndpointRef;
   reason: string;
 };
-
+type Watts = BudgetMetric<'W'>;
+type Volts = BudgetMetric<'V'>;
 type Demand = { knownW: number; reason?: string };
-
 type DcPortBudget = {
-  endpoint: EndpointRef;
-  voltageV: BudgetMetric<'V'>;
-  demandW: BudgetMetric<'W'>;
-  knownDemandW: BudgetMetric<'W'>;
-  rating?: InputRatingCheck;
+  endpoint: EndpointRef; voltageV: Volts; demandW: Watts; knownDemandW: Watts; rating?: InputRatingCheck;
 };
-
-type DcOutputBudget = DcPortBudget & {
-  capacityW: BudgetMetric<'W'>;
-  marginW: BudgetMetric<'W'>;
-  capacityStatus: 'within_capacity' | 'over_capacity' | 'unknown';
+type Capacity = { capacityW: Watts; marginW: Watts; capacityStatus: 'within_capacity' | 'over_capacity' | 'unknown' };
+type DcOutputBudget = DcPortBudget & Capacity;
+type NetworkBudget = DcOutputBudget & {
+  type: 'AC_POWER' | 'DC_POWER'; ports: EndpointRef[]; sources: EndpointRef[]; knownCapacityW: Watts;
 };
-
 export type DcBudget = {
+  networks: readonly NetworkBudget[];
   ports: readonly DcPortBudget[];
   supplies: readonly DcOutputBudget[];
   converters: readonly {
-    input: EndpointRef; output: DcOutputBudget; efficiency: BudgetMetric<'ratio'>; inputDemandW: BudgetMetric<'W'>;
+    input: EndpointRef; output: DcOutputBudget; efficiency: BudgetMetric<'ratio'>; inputDemandW: Watts;
   }[];
-  loads: readonly { endpoint: EndpointRef; powerW: BudgetMetric<'W'> }[];
+  loads: readonly { endpoint: EndpointRef; powerW: Watts }[];
   diagnostics: readonly Diagnostic[];
 };
 
-type Conversion = { efficiency: BudgetMetric<'ratio'>; voltageV: BudgetMetric<'V'>; capacity?: DcCapacity };
-type Arc = { from: Node; to: Node; conversion?: Conversion };
-type ConverterArc = Arc & { conversion: Conversion };
 type Node = {
-  port: SignalPort;
-  instance: ResolvedInstance;
-  incoming: Arc[];
-  outgoing: Arc[];
-  scheduled: boolean;
-  feed: 'open' | 'ambiguous' | 'known';
-  voltageV: BudgetMetric<'V'>;
-  load?: BudgetMetric<'W'>;
-  supply?: { voltageV: BudgetMetric<'V'>; capacity?: DcCapacity };
-  demand: Demand;
+  port: SignalPort; instance: ResolvedInstance; neighbors: Set<Node>; mappedInside: Set<Node>;
+  source: boolean; load?: Watts; ownDemand: Demand;
+};
+type Converter = { input: Node; output: Node; efficiency: BudgetMetric<'ratio'>; capacity?: DcCapacity; inputDemand: Demand };
+type Net = {
+  nodes: Node[]; sources: Node[]; inputs: Converter[]; outputs: Converter[];
+  voltage: Volts; fed: boolean; demand: Demand;
 };
 
-const noFeed = '该端口没有可唯一确定的直流供电。';
-const feedback = '直流供电存在回路，无法计算该端口的供电或需求。';
+const noFeed = '该供电网络尚未接入电源。';
+const feedback = '直流供电存在回路：变换器输出反馈至输入，供电及需求不能确定。';
+const unallocated = '并联输出网按总容量核算，单个电源的实际输出功率未分配。';
+const unmetered = '并联输出网未设置单路分担，无法反推该变换器的输入需求。';
 
-function demandMetric({ knownW, reason }: Demand): BudgetMetric<'W'> {
+function addDemand(total: Demand, item: Demand) {
+  total.knownW += item.knownW;
+  total.reason ??= item.reason;
+}
+function quantity(metric: Watts): Demand {
+  return metric.availability === 'available' ? { knownW: metric.value } : { knownW: 0, reason: metric.reason };
+}
+function demandMetric({ knownW, reason }: Demand): Watts {
   return reason === undefined ? budgetValue('W', knownW) : unavailable('W', reason);
 }
+function convertDemand(demand: Demand, efficiency: BudgetMetric<'ratio'>): Demand {
+  return efficiency.availability === 'unavailable' ? { knownW: 0, reason: efficiency.reason }
+    : { knownW: demand.knownW / efficiency.value, reason: demand.reason };
+}
+function capacityResult(capacityW: Watts, demandW: Watts, voltage: Volts): Capacity {
+  const marginW = capacityW.availability === 'unavailable' ? capacityW : demandW.availability === 'unavailable' ? demandW
+    : voltage.availability === 'unavailable' ? unavailable('W', voltage.reason) : budgetValue('W', capacityW.value - demandW.value);
+  return { capacityW, marginW, capacityStatus: marginW.availability === 'unavailable' ? 'unknown'
+    : marginW.value < 0 ? 'over_capacity' : 'within_capacity' };
+}
 
-/** Budgets the physical DC network once per resolved instance, independently of signal links. */
+/** Physical conductors form equipotential nets. Only a converter introduces a directed dependency. */
 export function calculateDcBudget(project: Project): DcBudget {
   const graph = buildSignalGraph(project);
   const instances = new Map(graph.instances.map(item => [JSON.stringify(item.instancePath), item]));
   const diagnostics: Diagnostic[] = [];
-  const nodes = new Map<SignalPort, Node>();
   const report = (node: Node, code: Diagnostic['code'], reason: string) =>
     diagnostics.push({ code, endpoint: node.port.ref, reason });
-
   function evaluate<Unit extends 'V' | 'W' | 'A' | 'ratio'>(node: Node, unit: Unit, value: DcValue | undefined, label: string) {
     const metric = resolveEmpiricalValue(unit, value, {}, node.instance);
     if (metric.availability === 'available') return metric;
-    const reason = `${label}: ${metric.reason}`;
+    const reason = `${label}：${metric.reason}`;
     report(node, 'missing_parameter', reason);
     return unavailable(unit, reason);
   }
 
+  const nodes = new Map<SignalPort, Node>();
   for (const port of graph.ports.values()) {
-    if (port.definition.type !== 'DC_POWER') continue;
-    const instance = instances.get(JSON.stringify(port.ref.instancePath))!;
-    const node: Node = { port, instance, incoming: [], outgoing: [], scheduled: false, feed: 'open',
-      voltageV: unavailable('V', noFeed), demand: { knownW: 0 } };
+    if (!isPowerPort(port.definition.type)) continue;
+    const instance = instances.get(JSON.stringify(port.ref.instancePath))!, d = instance.definition;
+    const ac = port.definition.type === 'AC_POWER';
+    const node: Node = { port, instance, neighbors: new Set(), mappedInside: new Set(), ownDemand: { knownW: 0 },
+      source: d.kind === 'component' && (isSupplyOutput(d, port.definition) || (ac && port.definition.direction === 'out')) };
     nodes.set(port, node);
-    if (instance.definition.kind !== 'component') continue;
-    const { dcLoad } = instance.definition;
-    if (isSupplyOutput(instance.definition, port.definition)) {
-      node.supply = { voltageV: evaluate(node, 'V', port.definition.outputVoltageV, '供电电压'), capacity: port.definition.supplyCapacity };
+    if (d.kind === 'component' && (d.dcLoad?.portId === port.ref.portId || port.definition.acLoadW !== undefined)) {
+      node.load = evaluate(node, 'W', ac ? port.definition.acLoadW : d.dcLoad?.powerW, '负载需求');
     }
-    if (dcLoad?.portId === port.ref.portId) {
-      node.load = evaluate(node, 'W', dcLoad.powerW, '负载需求');
+  }
+  const converters: Converter[] = [];
+  for (const { from, to, source } of graph.edges) {
+    const a = nodes.get(from), b = nodes.get(to);
+    if (!a || !b) continue;
+    if (source.kind === 'transfer' && source.transfer.kind === 'dc') {
+      converters.push({ input: a, output: b, efficiency: evaluate(a, 'ratio', source.transfer.efficiency, '直流变换效率'),
+        capacity: source.transfer.capacity, inputDemand: { knownW: 0, reason: feedback } });
+    } else if (source.kind === 'connection' || source.kind === 'portMapping') {
+      a.neighbors.add(b);
+      b.neighbors.add(a);
+      if (source.kind === 'portMapping') {
+        if (source.publicPort === from.ref) a.mappedInside.add(b);
+        else b.mappedInside.add(a);
+      }
     }
   }
 
-  const converters: ConverterArc[] = [];
-  for (const edge of graph.edges) {
-    const from = nodes.get(edge.from);
-    const to = nodes.get(edge.to);
-    if (!from || !to) continue;
-    let arc: Arc = { from, to };
-    if (edge.source.kind === 'transfer' && edge.source.transfer.kind === 'dc') {
-      const { efficiency, capacity } = edge.source.transfer;
-      const converter = { from, to, conversion: {
-        efficiency: evaluate(from, 'ratio', efficiency, '直流变换效率'),
-        voltageV: evaluate(to, 'V', to.port.definition.outputVoltageV, '直流变换器输出电压'), capacity,
-      } };
-      arc = converter;
-      converters.push(converter);
+  const nets: Net[] = [], netAt = new Map<Node, Net>();
+  for (const node of nodes.values()) {
+    if (netAt.has(node)) continue;
+    const net: Net = { nodes: [node], sources: [], inputs: [], outputs: [], fed: false,
+      voltage: unavailable('V', noFeed), demand: { knownW: 0 } };
+    nets.push(net);
+    netAt.set(node, net);
+    for (const current of net.nodes) {
+      if (current.source) net.sources.push(current);
+      for (const next of current.neighbors) if (!netAt.has(next)) {
+        netAt.set(next, net);
+        net.nodes.push(next);
+      }
     }
-    from.outgoing.push(arc);
-    to.incoming.push(arc);
   }
-  // Topological order keeps independent feeds evaluable, while cycles and their dependent ports stay unresolved.
-  const pending = new Map([...nodes.values()].map(node => [node, node.incoming.length]));
-  const ordered = [...pending].filter(([, count]) => count === 0).map(([node]) => node);
-  for (const node of ordered) {
-    node.scheduled = true;
-    if (node.supply) {
-      node.feed = 'known';
-      node.voltageV = node.supply.voltageV;
-    } else if (node.incoming.length === 1) {
-      const feed = node.incoming[0];
-      node.feed = feed.from.feed;
-      node.voltageV = feed.from.voltageV;
-      if (feed.conversion) {
-        if (node.voltageV.availability === 'available') node.voltageV = feed.conversion.voltageV;
-      } else if (node.feed === 'known' && node.port.definition.outputVoltageV !== undefined) {
-        // A passive output can declare the voltage of an existing feed, but cannot change a known upstream voltage.
-        const declared = evaluate(node, 'V', node.port.definition.outputVoltageV, '输出电压');
-        if (node.voltageV.availability === 'available' && declared.availability === 'available'
-          && node.voltageV.value !== declared.value) {
-          const reason = `端口声明 ${declared.value} V，与上游供电 ${node.voltageV.value} V 不一致。`;
-          node.feed = 'ambiguous';
-          node.voltageV = unavailable('V', reason);
-          report(node, 'voltage_conflict', reason);
-        } else {
-          node.voltageV = declared;
+  const converterInputs = new Set<Node>();
+  const converterOutputs = new Set<Node>();
+  for (const c of converters) {
+    netAt.get(c.input)!.outputs.push(c);
+    netAt.get(c.output)!.inputs.push(c);
+    converterInputs.add(c.input);
+    converterOutputs.add(c.output);
+  }
+
+  const pending = new Map(nets.map(n => [n, n.inputs.length]));
+  const ordered = nets.filter(n => n.inputs.length === 0);
+  for (const net of ordered) {
+    const declaredVoltages = new Set<number>();
+    let missing: string | undefined;
+    function noteVoltage(v: Volts) {
+      if (v.availability === 'available') declaredVoltages.add(v.value);
+      else missing ??= v.reason;
+    }
+    net.fed = net.sources.length > 0;
+    for (const node of net.sources) noteVoltage(evaluate(node, 'V', node.port.definition.outputVoltageV, '供电电压'));
+    for (const c of net.inputs) {
+      const upstream = netAt.get(c.input)!;
+      if (!upstream.fed) continue;
+      net.fed = true;
+      noteVoltage(upstream.voltage.availability === 'available'
+        ? evaluate(c.output, 'V', c.output.port.definition.outputVoltageV, '直流变换器输出电压') : upstream.voltage);
+    }
+    if (net.fed) {
+      for (const node of net.nodes) {
+        if (!node.source && !converterOutputs.has(node) && node.port.definition.outputVoltageV) {
+          noteVoltage(evaluate(node, 'V', node.port.definition.outputVoltageV, '输出电压'));
         }
       }
-    } else if (node.incoming.length > 1) {
-      const reason = '该端口存在多路直流供电，无法确定负载分配。';
-      node.feed = 'ambiguous';
-      node.voltageV = unavailable('V', reason);
-      report(node, 'ambiguous_input', reason);
+      if (declaredVoltages.size > 1) {
+        const listed = [...declaredVoltages].sort((a, b) => b - a).map(v => v + ' V').join('、');
+        const reason = `网络标称输出电压不一致（${listed}），无法确定有效供电电压。`;
+        net.voltage = unavailable('V', reason);
+        report(net.sources[0] ?? net.nodes[0], 'voltage_conflict', reason);
+      } else if (missing) net.voltage = unavailable('V', missing);
+      else if (declaredVoltages.size) net.voltage = budgetValue('V', [...declaredVoltages][0]);
     }
-    for (const { to } of node.outgoing) {
-      const remaining = pending.get(to)! - 1;
-      pending.set(to, remaining);
-      if (remaining === 0) ordered.push(to);
-    }
-  }
-
-  for (const node of nodes.values()) {
-    if (!node.scheduled) {
-      node.voltageV = unavailable('V', feedback);
-      node.demand = { knownW: node.load?.availability === 'available' ? node.load.value : 0, reason: feedback };
-      report(node, 'feedback', feedback);
-    } else if (node.feed === 'open'
-      && (node.load || node.outgoing.some(edge => edge.conversion) || node.port.definition.inputRating)) {
-      report(node, 'open_input', node.voltageV.availability === 'unavailable' ? node.voltageV.reason : noFeed);
+    for (const c of net.outputs) {
+      const next = netAt.get(c.output)!, remaining = pending.get(next)! - 1;
+      pending.set(next, remaining);
+      if (!remaining) ordered.push(next);
     }
   }
 
-  function contribution(arc: Arc): Demand {
-    const { to, conversion } = arc;
-    if (!to.scheduled) return { knownW: 0, reason: feedback };
-    if (to.incoming.length > 1) return { knownW: 0, reason: '下游负载的供电分配不明确。' };
-    if (conversion === undefined) return to.demand;
-    const { efficiency } = conversion;
-    if (efficiency.availability === 'unavailable') return { knownW: 0, reason: efficiency.reason };
-    return { knownW: to.demand.knownW / efficiency.value, reason: to.demand.reason };
-  }
-
-  for (let i = ordered.length - 1; i >= 0; i--) {
-    const node = ordered[i];
-    let knownW = 0;
-    let reason: string | undefined;
-    if (node.load?.availability === 'available') knownW = node.load.value;
-    else if (node.load?.availability === 'unavailable') reason = node.load.reason;
-    else if (node.port.definition.direction === 'in' && (node.incoming.length || node.instance.definition.kind === 'component') && !node.outgoing.length) {
-      reason = '直流输入未声明负载，也没有后续供电路径。';
-      report(node, 'unknown_load', reason);
+  for (const net of nets) {
+    const cyclic = !!pending.get(net);
+    if (cyclic) {
+      net.voltage = unavailable('V', feedback);
+      net.demand.reason = feedback;
+      report(net.inputs[0].output, 'feedback', feedback);
     }
-    for (const edge of node.outgoing) {
-      const branch = contribution(edge);
-      knownW += branch.knownW;
-      reason ??= branch.reason;
-    }
-    node.demand = { knownW, reason };
-  }
-
-  function portBudget(node: Node): DcPortBudget {
-    const { ref, definition } = node.port;
-    const demandW = demandMetric(node.demand);
-    let rating: InputRatingCheck | undefined;
-    if (definition.inputRating) {
-      const inputPower = node.feed === 'known' ? demandW : unavailable('W',
-        node.voltageV.availability === 'unavailable' ? node.voltageV.reason : noFeed);
-      const current = inputPower.availability === 'available' && node.voltageV.availability === 'available'
-        ? budgetValue('A', inputPower.value / node.voltageV.value) : unavailable('A', '计算直流电流需要已知的电压和输入功率。');
-      const input = definition.inputRating.unit === 'V' ? node.voltageV : definition.inputRating.unit === 'A' ? current : inputPower;
-      rating = checkInputRating(ref, definition.inputRating, input);
-    }
-    return { endpoint: ref, voltageV: node.voltageV, demandW, knownDemandW: budgetValue('W', node.demand.knownW), rating };
-  }
-
-  function outputBudget(node: Node, voltage: BudgetMetric<'V'>, capacity?: DcCapacity): DcOutputBudget {
-    const output = portBudget(node);
-    let capacityW: BudgetMetric<'W'>;
-    if (capacity?.unit === 'A') {
-      const amps = evaluate(node, 'A', capacity.value, '额定输出电流');
-      if (amps.availability === 'unavailable') capacityW = unavailable('W', amps.reason);
-      else if (voltage.availability === 'available') capacityW = budgetValue('W', amps.value * voltage.value);
-      else {
-        const reason = '需要相应的输出电压，才能将额定输出电流换算为功率。';
-        report(node, 'missing_parameter', reason);
-        capacityW = unavailable('W', reason);
+    for (const node of net.nodes) {
+      if (node.load) node.ownDemand = quantity(node.load);
+      else if (node.port.definition.direction === 'in' && !converterInputs.has(node)
+        && (!node.port.modulePort || (node.port.unmapped && node.neighbors.size))) {
+        const reason = node.port.definition.type === 'AC_POWER' ? '交流输入负载功耗未建模。' : '直流输入未声明负载功耗。';
+        node.ownDemand.reason = reason;
+        report(node, 'unknown_load', reason);
       }
-    } else {
-      capacityW = evaluate(node, 'W', capacity?.value, '额定输出功率');
+      if (!cyclic && !net.fed && (node.load || converterInputs.has(node) || node.port.definition.inputRating)) {
+        report(node, 'open_input', net.voltage.availability === 'unavailable' ? net.voltage.reason : noFeed);
+      }
+      if (node.port.definition.inputVoltageV && net.voltage.availability === 'available') {
+        const expected = evaluate(node, 'V', node.port.definition.inputVoltageV, '标称输入电压');
+        if (expected.availability === 'available' && expected.value !== net.voltage.value) {
+          report(node, 'voltage_conflict', `标称输入 ${expected.value} V 与网络供电 ${net.voltage.value} V 不一致。`);
+        }
+      }
+      addDemand(net.demand, node.ownDemand);
     }
-    const { demandW } = output;
-    const marginW = node.incoming.length > 1 ? unavailable('W', '无法将负载分配到单路直流供电。')
-      : capacityW.availability === 'unavailable' ? capacityW : demandW.availability === 'unavailable' ? demandW
-        : budgetValue('W', capacityW.value - demandW.value);
-    const capacityStatus = marginW.availability === 'unavailable' ? 'unknown' : marginW.value < 0 ? 'over_capacity' : 'within_capacity';
-    return { ...output, capacityW, marginW, capacityStatus };
+    if (net.nodes[0].port.definition.type === 'AC_POWER' && net.nodes.every(n => !n.load)) {
+      net.demand.reason ??= '交流负载功耗未建模。';
+    }
   }
 
+  for (const c of converters) if (pending.get(netAt.get(c.output)!)) {
+    netAt.get(c.input)!.demand.reason ??= feedback;
+    c.input.ownDemand.reason ??= feedback;
+  }
+  // Demand crosses a converter once. Parallel converters have no individual load share by default.
+  for (let i = ordered.length - 1; i >= 0; i--) {
+    const net = ordered[i];
+    if (!net.inputs.length) continue;
+    const supplying = net.inputs.filter(c => !net.fed || netAt.get(c.input)!.fed);
+    const only = supplying.length === 1 && !net.sources.length;
+    for (const c of net.inputs) {
+      if ((net.fed && !netAt.get(c.input)!.fed) || (!net.demand.reason && net.demand.knownW === 0)) c.inputDemand = { knownW: 0 };
+      else c.inputDemand = only ? convertDemand(net.demand, c.efficiency) : { knownW: 0, reason: unmetered };
+      addDemand(c.input.ownDemand, c.inputDemand);
+    }
+    if (!supplying.length) continue;
+    const first = supplying[0];
+    const commonInput = netAt.get(first.input)!;
+    const eta = first.efficiency.availability === 'available' ? first.efficiency.value : undefined;
+    const common = !net.sources.length && supplying.every(c => netAt.get(c.input) === commonInput
+      && c.efficiency.availability === 'available' && c.efficiency.value === eta);
+    if (common && !only) addDemand(commonInput.demand, convertDemand(net.demand, first.efficiency));
+    else for (const c of supplying) addDemand(netAt.get(c.input)!.demand, c.inputDemand);
+  }
+
+  function ratedCapacity(node: Node, capacity?: DcCapacity): Watts {
+    if (capacity?.unit !== 'A') return evaluate(node, 'W', capacity?.value, '额定输出功率');
+    const amps = evaluate(node, 'A', capacity.value, '额定输出电流');
+    if (amps.availability === 'unavailable') return unavailable('W', amps.reason);
+    const v = netAt.get(node)!.voltage;
+    if (v.availability === 'available') return budgetValue('W', amps.value * v.value);
+    const reason = '需要相应的输出电压，才能将额定输出电流换算为功率。';
+    report(node, 'missing_parameter', reason);
+    return unavailable('W', reason);
+  }
+
+  const outputs = new Map<Node, DcOutputBudget>();
+  const networks: NetworkBudget[] = nets.map(net => {
+    const sources = new Map(net.sources.map(node => [node, node.port.definition.supplyCapacity as DcCapacity | undefined]));
+    const activeSources = new Set(net.sources);
+    for (const c of net.inputs) {
+      sources.set(c.output, c.capacity);
+      if (netAt.get(c.input)!.fed) activeSources.add(c.output);
+    }
+    const total: Demand = { knownW: 0 }, demandW = demandMetric(net.demand), knownDemandW = budgetValue('W', net.demand.knownW);
+    for (const [node, cap] of sources) {
+      const rating = ratedCapacity(node, cap);
+      const active = activeSources.has(node);
+      if (active) addDemand(total, quantity(rating));
+      const only = active ? activeSources.size === 1 : sources.size === 1;
+      const offline = !active && net.fed;
+      const individual = offline ? budgetValue('W', 0) : only ? demandW : unavailable('W', unallocated);
+      outputs.set(node, { endpoint: node.port.ref, voltageV: net.voltage, demandW: individual,
+        knownDemandW: offline ? individual : only ? knownDemandW : unavailable('W', unallocated),
+        ...capacityResult(rating, individual, offline ? unavailable('V', noFeed) : net.voltage) });
+    }
+    const capacity = net.fed ? demandMetric(total) : unavailable('W', '尚无有效供电来源。');
+    const endpoint = (net.sources[0] ?? net.inputs[0]?.output ?? net.nodes[0]).port.ref;
+    return { endpoint, ports: net.nodes.map(n => n.port.ref), sources: [...activeSources].map(n => n.port.ref),
+      type: net.nodes[0].port.definition.type as NetworkBudget['type'], voltageV: net.voltage, demandW, knownDemandW,
+      knownCapacityW: budgetValue('W', total.knownW), ...capacityResult(capacity, demandW, net.voltage) };
+  });
+
+  function demandAt(node: Node) {
+    if (!node.port.modulePort || !node.mappedInside.size) return node.ownDemand;
+    // A boundary carries its enclosed demand only if the inner side has no other feed or return path.
+    const inside = node.port.ref.instancePath;
+    const seen = new Set([node]), pending = [...node.mappedInside];
+    const sum: Demand = { knownW: 0 };
+    for (const item of pending) {
+      if (seen.has(item)) continue;
+      seen.add(item);
+      const path = item.port.ref.instancePath;
+      if (item.source || outputs.has(item) || path.length < inside.length || !inside.every((id, i) => path[i] === id)) {
+        return { knownW: 0, reason: '并联网络未分配此端口的支路功率。' };
+      }
+      addDemand(sum, item.ownDemand);
+      for (const next of item.neighbors) if (!seen.has(next)) pending.push(next);
+    }
+    return sum;
+  }
+  function portBudget(node: Node): DcPortBudget {
+    const net = netAt.get(node)!;
+    const output = outputs.get(node);
+    if (output) return output;
+    const d = demandAt(node), demandW = demandMetric(d), limits = node.port.definition.inputRating;
+    let rating: InputRatingCheck | undefined;
+    if (limits) {
+      const voltage = net.voltage;
+      const power = net.fed && !pending.get(net) ? demandW : unavailable('W', noFeed);
+      const current = node.port.definition.type === 'DC_POWER' && power.availability === 'available' && voltage.availability === 'available'
+        ? budgetValue('A', power.value / voltage.value) : unavailable('A', '需要已知的有效电压和对应端口的功率；未建模交流电流。');
+      rating = checkInputRating(node.port.ref, limits, limits.unit === 'V' ? voltage : limits.unit === 'A' ? current : power);
+    }
+    return { endpoint: node.port.ref, voltageV: net.voltage, demandW, knownDemandW: budgetValue('W', d.knownW), rating };
+  }
   return {
-    ports: [...nodes.values()].map(portBudget),
-    supplies: [...nodes.values()].flatMap(node => node.supply
-      ? [outputBudget(node, node.supply.voltageV, node.supply.capacity)] : []),
-    converters: converters.map(arc => ({
-      input: arc.from.port.ref, output: outputBudget(arc.to, arc.conversion.voltageV, arc.conversion.capacity),
-      efficiency: arc.conversion.efficiency, inputDemandW: demandMetric(contribution(arc)),
-    })),
-    loads: [...nodes.values()].flatMap(node => node.load ? [{ endpoint: node.port.ref, powerW: node.load }] : []),
+    networks, ports: [...nodes.values()].map(portBudget),
+    supplies: [...nodes.values()].filter(n => n.source).map(n => outputs.get(n)!),
+    converters: converters.map(c => ({ input: c.input.port.ref, output: outputs.get(c.output)!,
+      efficiency: c.efficiency, inputDemandW: demandMetric(c.inputDemand) })),
+    loads: [...nodes.values()].flatMap(n => n.load ? [{ endpoint: n.port.ref, powerW: n.load }] : []),
     diagnostics,
   };
 }
