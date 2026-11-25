@@ -51,14 +51,31 @@ function StandardPortDialog({ initialMode, name, owner, locations, store, added,
   const port = ports.find(item => item.id === selected);
   const form = useRef<HTMLFormElement>(null);
   const initial = useRef('');
+  const draftEdited = useRef(false);
   const selectedRow = useRef<HTMLButtonElement>(null);
   useLayoutEffect(() => {
-    if (form.current) initial.current = signature(form.current);
+    const element = form.current;
+    draftEdited.current = false;
+    if (element) initial.current = signature(element);
     selectedRow.current?.scrollIntoView({ block: 'nearest' });
+    if (!element || selected !== undefined) return;
+
+    const listeners = new AbortController();
+    const options = { capture: true, signal: listeners.signal };
+    const captureDefaults = () => { initial.current = signature(element); };
+    // Text edits emit beforeinput. Radio and select changes start with a pointer or key.
+    for (const event of ['beforeinput', 'pointerdown', 'keydown']) {
+      element.addEventListener(event, captureDefaults, options);
+    }
+    element.addEventListener('input', () => {
+      draftEdited.current = true;
+      listeners.abort();
+    }, options);
+    return () => listeners.abort();
   }, [selected, revision]);
 
   function dirty() {
-    return !!form.current && (signature(form.current) !== initial.current ||
+    return !!form.current && (!!port || draftEdited.current) && (signature(form.current) !== initial.current ||
       Array.from(form.current.querySelectorAll('input')).some(input => input.validity.badInput));
   }
   function discard() {
