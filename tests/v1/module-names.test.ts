@@ -20,7 +20,7 @@ test('module naming checks effective names across scopes and reuses the first fr
     editInstanceSettings(project, [id], previous => ({ ...previous, name })));
   const nameAt = (...path: string[]) => store.resolveInstance(path)?.instance?.name;
   assert.ok(place('a').ok);
-  assert.ok(place('b', 'a', ['a']).ok);
+  assert.ok(place('b', store.resolveInstance(['a'])!.definition.id, ['a']).ok);
   assert.ok(place('c').ok);
   assert.deepEqual([nameAt('a'), nameAt('a', 'b'), nameAt('c')], ['新建模块', '新建模块 2', '新建模块 3']);
   assert.ok(rename('a', ' Rack ').ok);

@@ -46,7 +46,7 @@ export function LibraryManager({ library, project, selected, close }: {
     {draft ? <TemplateEditor key={draft[0].id} initial={draft[0]} hidden={config.hidden} definitions={[...definitions, ...draft.slice(1)]}
       cancel={() => { edit(undefined); report(''); }} report={report} save={definition => run(() => {
         replace([definition, ...draft.slice(1)].reduce(saveDefinition, config));
-        select(definition.id); edit(undefined); report('已保存到器件库。工程内已有独立快照，可主动更新。');
+        select(definition.id); edit(undefined); report('已保存到器件库。之后创建的对象将使用此模板。');
       })} /> : <>
       <div className="actions">{(['component', 'module'] as const).map(kind => <button key={kind} onClick={() => {
         const base = { id: crypto.randomUUID(), name: '', ports: [] };

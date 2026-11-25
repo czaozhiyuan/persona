@@ -7,7 +7,7 @@ import { insertCanvasItem } from '../../editors/topology/v1/topology-layout-edit
 import { PortDeletionDialog } from '../../editors/topology/v1/port-deletion-dialog';
 import { readParameters, resolveHierarchy, withMappedVoltages } from '../../engine/v1/hierarchy';
 import { creationLabels, libraryGroups, templateMatches } from '../../library/v1/categories';
-import { isBlankTemplate } from '../../library/v1/built-in';
+import { blankEnclosureId, isBlankTemplate } from '../../library/v1/built-in';
 import { libraryDragType } from '../../library/v1/insert-library-item';
 import type { LibraryItem } from '../../library/v1/insert-library-item';
 import { previewTemplateUpdate } from '../../library/v1/project-snapshots';
@@ -16,7 +16,7 @@ import type { TemplateChanges } from '../../library/v1/project-snapshots';
 import type { ModuleDefinition, Project } from '../../model/v1/types';
 import type { ProjectStore, ProjectStoreSnapshot } from '../../state/v1/project-store';
 import './library-panel.css';
-import { libraryDefinitions } from '../../library/v1/user-library';
+import { factoryLibrary, libraryDefinitions } from '../../library/v1/user-library';
 import type { LibraryConfig } from '../../library/v1/user-library';
 import type { UserLibrary } from './use-library';
 import { LibraryManager } from './library-manager';
@@ -137,8 +137,7 @@ export function LibraryPanel({ centerPlacement, library, store, state, module }:
   const projectLabels = numberedNamesById(reusable);
   const namedOptions = [
     ...reusable.map(item => ({ key: 'project:' + item.id, item, source: 'project' as const })),
-    ...matchingTemplates.filter(item => isBlankTemplate(item.id) || !definitions.has(item.id))
-      .map(item => ({ key: 'template:' + item.id, item, source: 'template' as const })),
+    ...matchingTemplates.map(item => ({ key: 'template:' + item.id, item, source: 'template' as const })),
   ];
   const namedOption = namedOptions.find(option => option.key === definitionKey) ?? namedOptions[0];
 
@@ -162,14 +161,10 @@ export function LibraryPanel({ centerPlacement, library, store, state, module }:
     event.dataTransfer.setData(libraryDragType, JSON.stringify(item));
   }
   function renderItem(template: (typeof templates)[number]) {
-    const definition = isBlankTemplate(template.id) ? undefined : definitions.get(template.id);
-    const conflict = !!definition && definition.kind !== template.kind;
     const item: LibraryItem = { source: 'template', id: template.id, name: template.name, automaticName: true };
-    return <button key={template.id} type="button" draggable={!conflict} disabled={conflict}
-      title={conflict ? '该模板与工程内已有的类型冲突'
-        : definition ? `点击或拖入框图，沿用工程定义「${definition.name}」` : '点击添加到当前模块，或拖入框图'}
+    return <button key={template.id} type="button" draggable title="点击或拖入框图，创建独立副本"
       onClick={() => add(item)} onDragStart={event => drag(event, item)}>
-      <DeviceIcon iconKey={definitionIcon(conflict ? template : definition ?? template)} size={16} />{creationLabels.get(template.id) ?? labels.get(template.id)}
+      <DeviceIcon iconKey={definitionIcon(template)} size={16} />{creationLabels.get(template.id) ?? labels.get(template.id)}
     </button>;
   }
   return <section className="panel v1-properties" aria-label="离线器件与模块库">
@@ -186,8 +181,8 @@ export function LibraryPanel({ centerPlacement, library, store, state, module }:
     </details>)}
     {!matches.length && !reusable.length && <p className="empty" role="status">没有匹配的器件或模块。</p>}
     {!!installed.length && <details><summary>高级库设置</summary>
-      <p>工程内已有独立快照，可预检并主动更新。</p>
-      <label>工程内的模板<select value={templateId} onChange={event => selectTemplate(event.target.value)}>
+      <p>仅可更新与库模板 ID 相同的旧工程定义。新建的独立副本由工程单独维护。</p>
+      <label>同 ID 的旧工程定义<select value={templateId} onChange={event => selectTemplate(event.target.value)}>
         {installed.map(item => <option key={item.id} value={item.id}>{labels.get(item.id)}</option>)}
       </select></label>
       <button type="button" onClick={prepareUpdate}>预检从库更新</button>
@@ -241,7 +236,7 @@ export function LibraryPanel({ centerPlacement, library, store, state, module }:
         add(selectedItem(event.currentTarget, namedOption.source, namedOption.item.id));
       }}>
         <label>名称<input name="instanceName" defaultValue={namedOption.item.name} required /></label>
-        <button type="submit" draggable title="点击放入，或拖入框图" onDragStart={event => {
+        <button type="submit" draggable title="点击或拖入框图，独立复制此定义" onDragStart={event => {
           const form = event.currentTarget.form;
           if (form) drag(event, selectedItem(form, namedOption.source, namedOption.item.id));
         }}>添加实例</button>
@@ -256,11 +251,12 @@ export function LibraryPanel({ centerPlacement, library, store, state, module }:
         if (!name) { setFeedback({ error: true, text: '名称不能为空。' }); return; }
         const id = crypto.randomUUID();
         const enclosure: ModuleDefinition = {
-          kind: 'module', id, name, ports: [], instances: [],
+          kind: 'module', id: blankEnclosureId, name, ports: [], instances: [],
           physicalEnclosure: { widthMm: Number(data.get('width')), depthMm: Number(data.get('depth')), heightMm: Number(data.get('height')) },
         };
-        const result = store.commit(draft => insertCanvasItem({ ...draft, moduleDefinitions: [...draft.moduleDefinitions, enclosure] },
-          { source: 'project', id, name }, module.id, selection.modulePath, id, centerPlacement, library.config));
+        const result = store.commit(draft => insertCanvasItem(draft,
+          { source: 'template', id: blankEnclosureId, name }, module.id, selection.modulePath, id, centerPlacement,
+          { ...factoryLibrary(), overrides: [enclosure] }));
         if (result.ok) {
           form.reset();
           store.selectInstance([...selection.modulePath, id]);

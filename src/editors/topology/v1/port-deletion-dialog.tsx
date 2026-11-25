@@ -26,7 +26,7 @@ export function PortDeletionDialog({ store, definitionId, portId, close }: {
   }
   return <dialog ref={dialog => { if (dialog && !dialog.open) dialog.showModal(); }}
     className="v1-topology-dialog" aria-labelledby="port-deletion-title" onCancel={close}>
-    <h3 id="port-deletion-title">删除共享端口的影响</h3>
+    <h3 id="port-deletion-title">删除端口的影响</h3>
     {plan ? <ul>{plan.impacts.map((impact, index) => <li key={index}>
       <strong>{impact.kind === '端口映射' ? '内部连接' : impact.kind}</strong> · {impact.name} · 定义 {definitions.get(impact.definitionId) ?? '未找到的定义'}
       {impact.paths.length > 0 && <ul>{impact.paths.map(path =>

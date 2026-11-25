@@ -1,9 +1,8 @@
 import { moduleName } from './module-name';
 import { resolveHierarchy } from '../../engine/v1/hierarchy';
-import type { ComponentDefinition, InstancePath, ModuleDefinition, Project } from '../../model/v1/types';
+import { copyDefinitionTree } from './copy-definition-tree';
+import type { InstancePath, Project } from '../../model/v1/types';
 import { editModule } from './topology-edits';
-
-type Definition = ComponentDefinition | ModuleDefinition;
 
 export function instantiateModule(project: Project, sourcePath: InstancePath, mode: 'reuse' | 'copy',
   instanceId: string, nextDefinitionId: () => string): Project {
@@ -31,30 +30,8 @@ export function pasteModule(project: Project, copiedProject: Project, sourcePath
     throw new Error('请选择一个可复制的模块，并在模块视图中粘贴。');
   }
   const name = moduleName(project, source.instance.name + ' 副本', { automatic: true });
-  const definitions = new Map<string, Definition>([...copiedProject.moduleDefinitions, ...copiedProject.componentDefinitions].map(item => [item.id, item]));
-  const copiedIds = new Map<string, string>();
-  const pending: Definition[] = [source.definition];
-  while (pending.length) {
-    const definition = pending.pop()!;
-    if (copiedIds.has(definition.id)) continue;
-    copiedIds.set(definition.id, nextDefinitionId());
-    if (definition.kind === 'module') {
-      for (const child of definition.instances) pending.push(definitions.get(child.definitionId)!);
-    }
-  }
-
-  const modules = [...project.moduleDefinitions];
-  const components = [...project.componentDefinitions];
-  for (const [oldId, id] of copiedIds) {
-    const definition = definitions.get(oldId)!;
-    const copy = { ...structuredClone(definition), id };
-    if (copy.kind === 'module') {
-      modules.push({ ...copy, name: oldId === source.definition.id ? name : copy.name,
-        instances: copy.instances.map(child => ({ ...child, definitionId: copiedIds.get(child.definitionId)! })),
-      });
-    } else components.push(copy);
-  }
-
+  const copy = copyDefinitionTree(project, [...copiedProject.moduleDefinitions, ...copiedProject.componentDefinitions],
+    source.definition.id, nextDefinitionId, name);
   const contains = (path: InstancePath) => path.length >= sourcePath.length
     && sourcePath.every((part, index) => path[index] === part);
   const remap = (path: InstancePath): InstancePath => [...parentPath, instanceId, ...path.slice(sourcePath.length)];
@@ -73,9 +50,7 @@ export function pasteModule(project: Project, copiedProject: Project, sourcePath
   const physical = copiedLayout?.physical?.filter(item => contains(item.instancePath) && contains(item.enclosurePath))
     .map(item => ({ ...item, instancePath: remap(item.instancePath), enclosurePath: remap(item.enclosurePath) }));
   const candidate: Project = {
-    ...project,
-    moduleDefinitions: modules,
-    componentDefinitions: components,
+    ...copy.project,
     instanceSettings: localSettings.length ? [...settings, ...localSettings] : project.instanceSettings,
     layout: layout || topology?.length || topologyFrames?.length || physical?.length ? {
       ...layout,
@@ -85,6 +60,6 @@ export function pasteModule(project: Project, copiedProject: Project, sourcePath
     } : undefined,
   };
   return editModule(candidate, parent.id, module => ({
-    ...module, instances: [...module.instances, { id: instanceId, name, definitionId: copiedIds.get(source.definition.id)! }],
+    ...module, instances: [...module.instances, { id: instanceId, name, definitionId: copy.root.id }],
   }));
 }

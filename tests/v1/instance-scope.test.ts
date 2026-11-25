@@ -86,7 +86,7 @@ test('reuse takes default settings and a copy owns editable nested definitions a
   const nested = roundTrip(restored);
   const copiedA = nested.resolveInstance(['layout-copy', 'TX_A'])?.definition.id;
   assert.ok(copiedA);
-  assert.equal(nested.resolveInstance(['layout-copy', 'TX_B'])?.definition.id, copiedA);
+  assert.notEqual(nested.resolveInstance(['layout-copy', 'TX_B'])!.definition.id, copiedA);
   assert.notEqual(nested.resolveInstance(['layoutDemo', 'TX_A'])?.definition.id, copiedA);
   const copiedLayout = nested.getSnapshot().project.layout!;
   const original = layout.physical!.find(item => item.instancePath[0] === 'layoutDemo')!;

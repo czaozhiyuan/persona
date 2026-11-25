@@ -1,6 +1,6 @@
 import { moduleName } from '../../state/v1/module-name';
 import type { InstancePath, Project } from '../../model/v1/types';
-import { editModule, moveTopologyNode } from '../../state/v1/topology-edits';
+import { moveTopologyNode } from '../../state/v1/topology-edits';
 import { builtInDefinitions, isBlankTemplate } from './built-in';
 import { factoryLibrary, libraryDefinitions } from './user-library';
 import type { LibraryConfig } from './user-library';
@@ -24,27 +24,13 @@ export function readLibraryItem(data: DataTransfer): LibraryItem | undefined {
 
 export function insertLibraryItem(project: Project, item: LibraryItem, moduleId: string, modulePath: InstancePath,
   instanceId: string, position?: { x: number; y: number }, config: LibraryConfig = factoryLibrary()): Project {
-  const library = item.source === 'blank-module' ? builtInDefinitions : libraryDefinitions(config);
   if (item.source === 'template' && config.hidden.includes(item.id)) throw new Error('此模板已隐藏。');
-  const module = (item.source === 'project' ? project.moduleDefinitions : library)
-    .some(def => def.id === item.id && def.kind === 'module');
-  const name = module ? moduleName(project, item.name, { automatic: item.automaticName }) : item.name;
-  let updated: Project;
-  if (item.source === 'project') {
-    const definition = [...project.moduleDefinitions, ...project.componentDefinitions].find(entry => entry.id === item.id);
-    if (!definition) throw new Error('所选器件或模块已不存在。');
-    updated = editModule(project, moduleId, module => ({
-      ...module, instances: [...module.instances, {
-        id: instanceId, name, definitionId: item.id,
-        switchStateId: definition.kind === 'component' ? definition.switchStates?.[0]?.id : undefined,
-      }],
-    }));
-  } else if (isBlankTemplate(item.id)) {
-    const template = library.find(entry => entry.id === item.id)!;
-    const definition = { ...template, id: instanceId, name };
-    updated = addTemplateInstance(project, [...library, definition], definition.id, moduleId, instanceId, name).project;
-  } else {
-    updated = addTemplateInstance(project, library, item.id, moduleId, instanceId, name).project;
-  }
+  const source = item.source === 'project' ? [...project.moduleDefinitions, ...project.componentDefinitions]
+    : item.source === 'blank-module' ? builtInDefinitions : libraryDefinitions(config);
+  const definition = source.find(def => def.id === item.id);
+  if (!definition) throw new Error('所选器件或模块已不存在。');
+  const name = definition.kind === 'module' ? moduleName(project, item.name, { automatic: item.automaticName }) : item.name;
+  const updated = addTemplateInstance(project, source, item.id, moduleId, instanceId, name,
+    item.source !== 'project' && isBlankTemplate(item.id) ? name : undefined);
   return position ? moveTopologyNode(updated, [...modulePath, instanceId], position) : updated;
 }

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { resolveHierarchy } from '../../src/engine/v1/hierarchy';
 import { wiringProblem } from '../../src/editors/topology/v1/wiring-validation';
 import { blankComponentId, blankEnclosureId, blankModuleId, builtInDefinitions } from '../../src/library/v1/built-in';
 import { insertLibraryItem } from '../../src/library/v1/insert-library-item';
@@ -22,11 +23,14 @@ test('each built-in can be inserted from a blank project and blank containers re
   const second = insertLibraryItem(first, template(blankModuleId, '接收'), root.id, [], 'rx');
   const chassis = insertLibraryItem(second, template(blankEnclosureId, '机箱'), root.id, [], 'box');
   const restored = parseProjectJson(serializeProjectJson(chassis));
-  assert.ok(restored.moduleDefinitions.some(item => item.id === 'tx' && item.name === '发射'));
-  assert.ok(restored.moduleDefinitions.some(item => item.id === 'rx' && item.name === '接收'));
-  assert.ok(restored.moduleDefinitions.find(item => item.id === 'box')?.physicalEnclosure);
+  const tree = resolveHierarchy(restored);
+  assert.equal(tree.resolveInstance(['tx'])?.definition.name, '发射');
+  assert.equal(tree.resolveInstance(['rx'])?.definition.name, '接收');
+  assert.notEqual(tree.resolveInstance(['tx'])?.definition.id, tree.resolveInstance(['rx'])?.definition.id);
+  const box = tree.resolveInstance(['box'])?.definition;
+  assert.ok(box?.kind === 'module' && box.physicalEnclosure);
   assert.deepEqual(restored.layout?.topology, [{ instancePath: ['tx'], x: 12, y: 34 }]);
-  assert.ok(restored.componentDefinitions.find(item => item.id === 'library-rf-amplifier')
+  assert.ok(tree.resolveInstance(['item-' + builtInDefinitions.findIndex(d => d.id === 'library-rf-amplifier')])?.definition
     ?.parameters?.every(parameter => parameter.defaultValue === undefined));
 });
 
@@ -35,12 +39,15 @@ test('blank devices are independent, empty and restored with their nested placem
   const container = { source: 'template', id: blankModuleId, name: '机内模块' } as const;
   const device = { source: 'template', id: blankComponentId, name: '待定义器件' } as const;
   assert.equal(store.commit(draft => insertLibraryItem(draft, container, root.id, [], 'module')).ok, true);
-  assert.equal(store.commit(draft => insertLibraryItem(draft, device, 'module', ['module'], 'first', { x: 105, y: 83 })).ok, true);
+  const moduleId = store.resolveInstance(['module'])!.definition.id;
+  assert.equal(store.commit(draft => insertLibraryItem(draft, device, moduleId, ['module'], 'first', { x: 105, y: 83 })).ok, true);
   const beforeSecond = store.getSnapshot().project;
-  assert.equal(store.commit(draft => insertLibraryItem(draft, device, 'module', ['module'], 'second', { x: 320, y: 83 })).ok, true);
-  assert.deepEqual(store.resolveInstance(['module', 'first'])?.definition,
-    { id: 'first', name: device.name, kind: 'component', ports: [] });
-  assert.equal(store.resolveInstance(['module', 'second'])?.definition.id, 'second');
+  assert.equal(store.commit(draft => insertLibraryItem(draft, device, moduleId, ['module'], 'second', { x: 320, y: 83 })).ok, true);
+  const first = store.resolveInstance(['module', 'first'])!.definition.id;
+  const second = store.resolveInstance(['module', 'second'])!.definition.id;
+  assert.notEqual(first, second);
+  assert.deepEqual(store.resolveInstance(['module', 'first'])!.definition,
+    { id: first, name: device.name, kind: 'component', ports: [] });
   store.undo();
   assert.deepEqual(store.getSnapshot().project, beforeSecond);
   assert.equal(store.resolveInstance(['module', 'second']), undefined);
@@ -51,8 +58,8 @@ test('blank devices are independent, empty and restored with their nested placem
     { instancePath: ['module', 'second'], x: 320, y: 83 },
   ]);
   assert.deepEqual(restored.componentDefinitions.map(({ id, name, ports, transfers }) => ({ id, name, ports, transfers })), [
-    { id: 'first', name: device.name, ports: [], transfers: undefined },
-    { id: 'second', name: device.name, ports: [], transfers: undefined },
+    { id: first, name: device.name, ports: [], transfers: undefined },
+    { id: second, name: device.name, ports: [], transfers: undefined },
   ]);
 });
 

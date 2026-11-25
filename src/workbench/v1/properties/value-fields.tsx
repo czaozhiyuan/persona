@@ -238,7 +238,7 @@ export function QuantityField({ name, label, kinds, value, parameters, minimum, 
       <option value="">请选择</option>
       {options.map(parameter => <option key={parameter.id} value={parameter.id}>{parameter.name}</option>)}
     </select></label> : kind && <EmpiricalField key={kind} kind={kind} name={name} label={`数值 (${unit})`} required
-      title={label} unit={unit} range={{ min: minimum }} scope={onCurveApply ? '共享定义 · 传输参数' : '器件库模板 · 传输参数'} onCurveApply={onCurveApply}
+      title={label} unit={unit} range={{ min: minimum }} scope={onCurveApply ? '当前定义 · 传输参数' : '器件库模板 · 传输参数'} onCurveApply={onCurveApply}
       value={value?.kind === 'parameter' ? undefined : value} />}
   </fieldset>;
 }
