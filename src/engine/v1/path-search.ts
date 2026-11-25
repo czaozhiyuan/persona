@@ -220,10 +220,13 @@ function scanRoutes(query: Search, skip?: (edge: SignalEdge) => boolean, retainA
 }
 
 /** Follow a broken route from its connected end until the next edge can no longer be determined. */
-export function uniqueRoutePrefix(query: Search, skip: (edge: SignalEdge) => boolean): SignalEdge[] {
+export function uniqueRoutePrefix(query: Search, skip: (edge: SignalEdge) => boolean, separateEnds: boolean): SignalEdge[] {
   const scan = scanRoutes(query, skip, true);
   if (!scan || scan.starts.size !== 1) return [];
-  const viable = query.allRequired ? new Set(scan.pending.filter(state => state.required === query.allRequired)) : undefined;
+  // A constraint on the far side of a physical break cannot disambiguate a fork on this side.
+  const required = separateEnds && query.allRequired
+    ? scan.pending.reduce((mask, state) => mask | state.required, 0n) : query.allRequired;
+  const viable = required ? new Set(scan.pending.filter(state => state.required === required)) : undefined;
   if (viable) for (const state of viable) {
     for (const before of state.previous) viable.add(before);
   }
@@ -232,7 +235,7 @@ export function uniqueRoutePrefix(query: Search, skip: (edge: SignalEdge) => boo
   let current = [...scan.starts][0];
   for (;;) {
     visited.add(current.port);
-    const next = current.next.filter(arc => !viable || viable.has(arc.state));
+    const next = viable && (!separateEnds || viable.size > 0) ? current.next.filter(arc => viable.has(arc.state)) : current.next;
     if (next.length !== 1 || visited.has(next[0].state.port)) return edges;
     edges.push(next[0].edge);
     current = next[0].state;

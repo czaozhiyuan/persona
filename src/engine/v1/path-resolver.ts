@@ -66,6 +66,7 @@ export function createPathResolver(project: Project) {
   const getPort = (ref: EndpointRef) => graph.ports.get(signalPortKey(ref));
   const dmlEdges = graph.edges.filter(edge => edge.source.kind === 'transfer' && edge.source.transfer.kind === 'dml');
   const digitalEdges = graph.edges.filter(isDigitalEdge);
+  const digitalOpticalPorts = new Set(digitalEdges.map(edge => edge.to.definition.type === 'OPTICAL' ? edge.to : edge.from));
 
   // A broken optical span can still have uniquely connected control wiring at either end.
   function digitalAccess(ref: EndpointRef, transmit: boolean) {
@@ -112,27 +113,39 @@ export function createPathResolver(project: Project) {
     });
   }
 
-  function partialDigitalSpan(link: NamedLink, access: readonly SignalEdge[], transmit: boolean, options: PathOptions) {
+  function partialDigitalSpan(link: NamedLink, access: readonly SignalEdge[], transmit: boolean, options: PathOptions, opposite?: readonly SignalEdge[]) {
     const boundary = access.find(isDigitalEdge);
     if (!boundary) return [];
     const port = transmit ? boundary.to : boundary.from;
-    const remaining: SignalEdge[] = [];
-    for (const ref of link.via ?? []) {
-      const edge = edgeRefs.get(requiredKey(ref));
-      if (!edge) return [];
-      if (!access.some(known => known.source === edge.source)) remaining.push(edge);
-    }
+    const via = (link.via ?? []).map(ref => edgeRefs.get(requiredKey(ref)));
+    const missingVia = via.includes(undefined);
+    if (missingVia && !opposite) return [];
+    const known = new Set([...access, ...(opposite ?? [])].map(edge => edge.source));
+    const remaining = via.filter((edge): edge is SignalEdge => !!edge && !known.has(edge.source));
     const sources = new Map<SignalPort, Carrier>();
     for (const source of options.opticalSources ?? []) {
       const emitter = getPort(source);
       if (emitter) addSourceCarrier(sources, emitter, source.channelId);
     }
     const allowed = 'channelIds' in boundary.channels ? boundary.channels.channelIds : undefined;
-    return uniqueRoutePrefix({ starts: [port], adjacent: transmit ? outgoing : incoming, reverse: !transmit,
+    const span = uniqueRoutePrefix({ starts: [port], adjacent: transmit ? outgoing : incoming, reverse: !transmit,
+      portType: opposite ? 'OPTICAL' : undefined,
       carrier: intersectCarrier(link.channelId && [link.channelId], allowed), startCarriers: sources,
       startFlow: () => portFlowAt(boundary, port), ...routeConstraints(remaining),
     }, edge => !(edge.from.definition.type === 'OPTICAL' && edge.to.definition.type === 'OPTICAL'
-      || isDigitalEdge(edge) || edge.source.kind === 'portMapping' && edge.from.definition.type === 'CONTROL'));
+      || isDigitalEdge(edge) || edge.source.kind === 'portMapping' && edge.from.definition.type === 'CONTROL'), !!opposite);
+    const end = span.at(-1);
+    const endPort = transmit ? end?.to : end?.from;
+    if (opposite && endPort && digitalOpticalPorts.has(endPort)) {
+      // A physically complete run to a different converter or through the wrong wire is an alternate route.
+      const peer = opposite.find(isDigitalEdge);
+      for (const edge of span) known.add(edge.source);
+      if (endPort !== (transmit ? peer?.from : peer?.to) || missingVia || remaining.some(edge => !known.has(edge.source))) {
+        const firstWire = span.findIndex(edge => edge.source.kind !== 'portMapping');
+        if (firstWire >= 0) return span.slice(0, firstWire);
+      }
+    }
+    return span;
   }
 
   function traceSupplies(path: SignalPath, sources: ReadonlyMap<SignalPort, Carrier>): PathResult {
@@ -306,10 +319,10 @@ export function createPathResolver(project: Project) {
       const tx = link.from && digitalAccess(link.from, true), rx = link.to && digitalAccess(link.to, false);
       if (tx || rx) {
         const access = [...(tx ?? []), ...(rx ?? [])];
-        const opposite = tx ? link.to : link.from;
-        if ((result.status === 'unreachable' || result.status === 'incomplete') && !(tx && rx)
-          && opposite && getPort(opposite)?.definition.type === 'CONTROL') {
-          access.push(...partialDigitalSpan(link, access, !!tx, options));
+        if ((result.status === 'unreachable' || result.status === 'incomplete') && link.from && link.to
+          && getPort(link.from)?.definition.type === 'CONTROL' && getPort(link.to)?.definition.type === 'CONTROL') {
+          if (tx) access.push(...partialDigitalSpan(link, tx, true, options, rx));
+          if (rx) access.push(...partialDigitalSpan(link, rx, false, options, tx));
         }
         return { ...result, digitalAccess: access };
       }

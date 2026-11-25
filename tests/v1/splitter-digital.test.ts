@@ -46,7 +46,7 @@ function near(actual: number, expected: number) {
   assert.ok(actual === expected || Math.abs(actual - expected) < 1e-9, `${actual} != ${expected}`);
 }
 
-test('broken digital links expose only established control access and discriminate channel, mapping and route failures', () => {
+test('broken digital links retain connected mappings and discriminate channel, mapping and route failures', () => {
   const p = digitalControlProject(), [root, box] = p.moduleDefinitions, link = p.namedLinks![0];
   const core = root.cableBundles![0].cores[0];
   const original = core.b.endpoint;
@@ -56,8 +56,8 @@ test('broken digital links expose only established control access and discrimina
   assert.equal(broken.status, 'unreachable');
   assert.equal(broken.trace, undefined);
   assert.deepEqual(projectPathHighlight(broken, []).edges, new Set([canvasEdgeKey('connection', 'tx-a'), canvasEdgeKey('connection', 'rx-b')]));
-  assert.deepEqual(projectPathHighlight(broken, ['a']).edges, new Set([canvasEdgeKey('mapping','DATA_TX_IN')]));
-  assert.deepEqual(projectPathHighlight(broken, ['b']).edges, new Set([canvasEdgeKey('mapping','DATA_RX_OUT')]));
+  assert.deepEqual(projectPathHighlight(broken, ['a']).edges, new Set(['DATA_TX_IN', 'OPT_TX_OUT'].map(id => canvasEdgeKey('mapping', id))));
+  assert.deepEqual(projectPathHighlight(broken, ['b']).edges, new Set(['OPT_RX_IN', 'DATA_RX_OUT'].map(id => canvasEdgeKey('mapping', id))));
   core.b.endpoint = original;
   const pure = createPathResolver(p).resolveNamedLink(p.namedLinks![2]);
   assert.equal(pure.status, 'resolved');
@@ -117,6 +117,51 @@ test('an open control wire keeps the confirmed digital route up to the break fro
       ? ['DATA_TX_IN', 'OPT_TX_OUT'] : ['OPT_RX_IN', 'DATA_RX_OUT']).map(id => canvasEdgeKey('mapping', id))));
     assert.deepEqual(ambiguous.digitalAccess!.filter(isDigitalEdge).map(e => e.from.ref.instancePath[0]), [box]);
   }
+});
+
+test('a middle fibre break retains both confirmed optical spans, with independent route constraints on each side', () => {
+  const p = digitalControlProject(), root = p.moduleDefinitions[0], link = p.namedLinks![0];
+  p.componentDefinitions = [...p.componentDefinitions, { kind: 'component', id: 'pass', name: '直通', ports: [
+    { id: 'i', type: 'OPTICAL', direction: 'in' }, { id: 'o', type: 'OPTICAL', direction: 'out' },
+  ], transfers: [{ kind: 'optical', fromPortId: 'i', toPortId: 'o', gainDb: fixed(0) }] }];
+  root.instances = [...root.instances, ...['left', 'right'].map(id => ({ id, name: id, definitionId: 'pass' }))];
+  const core = root.cableBundles![0].cores[0];
+  core.b.endpoint = { instanceId: 'left', portId: 'i' };
+  root.connections = [...root.connections!, wire('between', 'left', 'o', 'right', 'i'), wire('last-fibre', 'right', 'o', 'b', 'OPT_RX_IN')];
+  const first = { scopePath: [], bundleId: 'mpo', coreId: 'ab' }, last = { scopePath: [], connectionId: 'last-fibre' };
+  link.via = [first];
+  const resolve = () => createPathResolver(p).resolveNamedLink(link);
+  assert.equal(resolve().status, 'resolved');
+  const alternate = createPathResolver(p).resolveNamedLink({ ...link, via: [{ ...first, coreId: 'ba' }] });
+  assert.equal(alternate.status, 'unreachable');
+  assert.deepEqual(projectPathHighlight(alternate, []).edges, new Set(['tx-a', 'rx-b'].map(id => canvasEdgeKey('connection', id))));
+  root.connections = root.connections.filter(c => c.id !== 'between');
+  const check = (left: boolean, right: boolean) => {
+    const broken = resolve();
+    assert.equal(broken.status, 'unreachable');
+    assert.equal(broken.trace, undefined);
+    assert.deepEqual(projectPathHighlight(broken, []).edges, new Set([canvasEdgeKey('connection', 'tx-a'),
+      canvasEdgeKey('connection', 'rx-b'), ...(left ? [canvasEdgeKey('core', 'mpo', 'ab')] : []),
+      ...(right ? [canvasEdgeKey('connection', 'last-fibre')] : [])]));
+    assert.deepEqual(projectPathHighlight(broken, ['a']).edges, new Set(['DATA_TX_IN', 'OPT_TX_OUT'].map(id => canvasEdgeKey('mapping', id))));
+    assert.deepEqual(projectPathHighlight(broken, ['b']).edges, new Set(['OPT_RX_IN', 'DATA_RX_OUT'].map(id => canvasEdgeKey('mapping', id))));
+    assert.deepEqual(broken.digitalAccess!.filter(isDigitalEdge).map(e => e.from.ref.instancePath[0]).sort(), ['a', 'b']);
+  };
+  check(true, true);
+  root.instances = [...root.instances, { id: 'c', name: 'C', definitionId: 'box' }];
+  root.connections = [...root.connections, wire('other-rx', 'a', 'OPT_TX_OUT', 'c', 'OPT_RX_IN'),
+    wire('other-tx', 'c', 'OPT_TX_OUT', 'b', 'OPT_RX_IN')];
+  check(true, false);
+  link.via = [last];
+  check(false, true);
+  link.via = [first, last];
+  check(true, true);
+  link.via = [];
+  check(false, false);
+  delete core.b.endpoint;
+  root.connections = root.connections.filter(c => c.id !== 'last-fibre');
+  // The only intact optical runs now reach the other box C, outside the selected route.
+  check(false, false);
 });
 
 test('digital receiver captions follow only the selected split branch, retaining dark, missing and overloaded states', () => {
