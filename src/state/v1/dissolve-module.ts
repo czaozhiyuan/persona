@@ -2,6 +2,7 @@ import { retainWireRoutes } from './wire-routes';
 import { portDisplayName } from '../../model/v1/display-names';
 import { resolveHierarchy } from '../../engine/v1/hierarchy';
 import type { LocalEndpointRef } from '../../model/v1/topology';
+import { isPowerPort, mappingId, type PortMapping } from '../../model/v1/types';
 import type { EndpointRef, InstancePath, ModuleDefinition, Project, TopologyPlacement } from '../../model/v1/types';
 import { validateProjectSnapshot } from '../../storage/v1/project-json';
 import { availableId, forwardedParameterSource, rewriteBundles, rewriteConnections, unrestrictedAlias } from './reparent-wiring';
@@ -25,6 +26,7 @@ function dissolve(project: Project, source: InstancePath) {
   const occurrences = [...hierarchy.walkInstances()].filter(item => item.definition.id === parent.id);
   const containerScopes = new Map(occurrences.map(({ instancePath }) => [key([...instancePath, slotId]), instancePath]));
   const isContainer = (path: InstancePath) => containerScopes.has(key(path));
+  const parentScopes = new Set(occurrences.map(item => key(item.instancePath)));
   const layout = project.layout;
   const enclosed = layout?.physical?.find(item => isContainer(item.enclosurePath));
   if (enclosed) {
@@ -35,11 +37,16 @@ function dissolve(project: Project, source: InstancePath) {
   const definitions = new Map([...project.moduleDefinitions, ...project.componentDefinitions].map(item => [item.id, item]));
   const children = new Map(container.instances.map(item => [item.id, item]));
   const ports = new Map(container.ports.map(port => [port.id, port]));
-  const mappings = new Map(container.portMappings?.map(mapping => [mapping.portId, mapping.target]));
+  const mappings = new Map<string, PortMapping[]>();
+  for (const mapping of container.portMappings ?? []) {
+    const branches = mappings.get(mapping.portId) ?? [];
+    branches.push(mapping);
+    mappings.set(mapping.portId, branches);
+  }
   const adjustedPorts = new Set<string>();
   function unwrap(ref: LocalEndpointRef): LocalEndpointRef {
     if (ref.instanceId !== slotId) return ref;
-    const target = mappings.get(ref.portId);
+    const target = mappings.get(ref.portId)?.[0].target;
     if (!target) throw new Error(`对外端口「${portDisplayName(ports.get(ref.portId)!, true)}」仍被引用，但没有内部映射，无法解散。`);
     const inner = definitions.get(children.get(target.instanceId)!.definitionId)!.ports.find(port => port.id === target.portId)!;
     if (!unrestrictedAlias(ports.get(ref.portId)!, inner)) {
@@ -76,12 +83,66 @@ function dissolve(project: Project, source: InstancePath) {
     parameterMappings.push({ ...mapping, parameterId });
   }
 
+  // Contract a removed power junction onto its enclosing public port when available.
+  // Without an enclosing mapping the first internal terminal becomes the junction.
+  const endpoint = (ref: LocalEndpointRef) => JSON.stringify([ref.instanceId, ref.portId]);
+  const pair = (a: LocalEndpointRef, b: LocalEndpointRef) => JSON.stringify([endpoint(a), endpoint(b)].sort());
+  const seenTargets = new Set<string>();
+  const parentMappings = parent.portMappings?.flatMap(mapping => {
+    const target = unwrap(mapping.target);
+    const key = JSON.stringify([mapping.portId, endpoint(target)]);
+    if (seenTargets.has(key)) return [];
+    seenTargets.add(key);
+    return [{ ...mapping, target }];
+  });
+  const mappingIds = new Set(parentMappings?.map(mappingId));
+  const removedWires = new Map<string, string | undefined>();
+  const pairs = new Map<string, string>();
+  const powerAliases = new Set(parent.connections?.filter(wire =>
+    [wire.from, wire.to].some(ref => ref.instanceId === slotId && isPowerPort(ports.get(ref.portId)?.type))).map(wire => wire.id));
+  const connections = [...relocate(existingConnections, container.connections ?? [], connectionIds)];
+  // Keep unchanged physical wires in preference to aliases converging onto the same two terminals.
+  for (const wire of connections) {
+    if (!powerAliases.has(wire.id)) pairs.set(pair(wire.from, wire.to), wire.id);
+  }
+  const kept = connections.filter(wire => {
+    if (!powerAliases.has(wire.id)) return true;
+    const key = pair(wire.from, wire.to);
+    if (endpoint(wire.from) === endpoint(wire.to) || pairs.has(key)) {
+      removedWires.set(wire.id, pairs.get(key));
+      return false;
+    }
+    pairs.set(key, wire.id);
+    return true;
+  });
+  const usedWireIds = new Set(connections.map(wire => wire.id));
+  for (const [portId, branches] of mappings) {
+    if (branches.length < 2) continue;
+    const enclosing = parent.portMappings?.find(mapping => mapping.target.instanceId === slotId && mapping.target.portId === portId);
+    const from = unwrap({ instanceId: slotId, portId });
+    for (const branch of branches.slice(1)) {
+      const to = branch.target;
+      if (enclosing && parentMappings) {
+        const key = JSON.stringify([enclosing.portId, endpoint(to)]);
+        if (seenTargets.has(key)) continue;
+        seenTargets.add(key);
+        const id = availableId(mappingId(branch), mappingIds);
+        mappingIds.add(id);
+        parentMappings.push({ id, portId: enclosing.portId, target: to });
+      } else if (!pairs.has(pair(from, to))) {
+        const id = availableId(mappingId(branch), usedWireIds);
+        usedWireIds.add(id);
+        pairs.set(pair(from, to), id);
+        kept.push({ id, from, to });
+      }
+    }
+  }
   const combined: ModuleDefinition = {
     ...parent,
     instances: parent.instances.flatMap(item => item.id === slotId ? container.instances : [item]),
-    connections: parent.connections || container.connections ? relocate(existingConnections, container.connections ?? [], connectionIds) : undefined,
+    connections: parent.connections || container.connections || kept.length ? kept : undefined,
     cableBundles: parent.cableBundles || container.cableBundles ? relocate(existingBundles, container.cableBundles ?? [], bundleIds) : undefined,
-    portMappings: parent.portMappings?.map(mapping => ({ ...mapping, target: unwrap(mapping.target) })),
+    portMappings: parentMappings,
     parameterMappings: parent.parameterMappings || container.parameterMappings ? parameterMappings : undefined,
   };
   const moduleDefinitions = project.moduleDefinitions.map(item => item.id === parent.id ? combined : item);
@@ -136,7 +197,13 @@ function dissolve(project: Project, source: InstancePath) {
     moduleDefinitions: stillUsed ? moduleDefinitions : moduleDefinitions.filter(item => item.id !== container.id),
     namedLinks: project.namedLinks?.map(link => remapLinkReferences(link, remap, atPort, ref => {
       const scopePath = containerScopes.get(key(ref.scopePath));
-      if (!scopePath) return { ...ref, scopePath: remap(ref.scopePath) };
+      if (!scopePath) {
+        if ('connectionId' in ref && parentScopes.has(key(ref.scopePath)) && removedWires.has(ref.connectionId)) {
+          const id = removedWires.get(ref.connectionId);
+          return id === undefined ? undefined : { ...ref, connectionId: id };
+        }
+        return { ...ref, scopePath: remap(ref.scopePath) };
+      }
       return 'bundleId' in ref ? { ...ref, scopePath, bundleId: bundleIds.get(ref.bundleId)! }
         : { ...ref, scopePath, connectionId: connectionIds.get(ref.connectionId)! };
     })),

@@ -51,7 +51,7 @@ export function resizeTopologyFrame(project: Project, frame: TopologyFrame): Pro
   return { ...project, layout: { ...project.layout, topologyFrames: [...topologyFrames, frame] } };
 }
 
-type ImpactKind = '端口' | '连接' | '端口映射' | '纤芯附件' | '器件传输' | '开关路由' | '链路端点' | '链路必经边' | '直流电源' | '直流负载';
+type ImpactKind = '端口' | '连接' | '端口映射' | '纤芯附件' | '器件传输' | '开关路由' | '链路端点' | '链路必经边' | '直流电源' | '直流负载' | '交流电源' | '交流负载';
 export type PortDeletionImpact = {
   kind: ImpactKind;
   name: string;
@@ -109,6 +109,8 @@ export function planPortDeletion(project: Project, definitionId: string, portId:
       path && hierarchy.resolveInstance(path));
     const clearSupply = isSupplyOutput(component, removedPort);
     const clearLoad = component.dcLoad?.portId === portId;
+    if (removedPort.type === 'AC_POWER' && removedPort.direction === 'out') reportEndpoints('交流电源', component.id, removedLabel);
+    if (removedPort.acLoadW) reportEndpoints('交流负载', component.id, removedLabel);
     if (clearSupply) reportEndpoints('直流电源', component.id, removedLabel);
     if (clearLoad) reportEndpoints('直流负载', component.id, removedLabel);
     return {

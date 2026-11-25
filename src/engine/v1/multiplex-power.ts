@@ -26,7 +26,7 @@ export type MultiplexDirection = {
 function physicalWireKey({ source }: SignalEdge) {
   if (source.kind === 'connection') return wireRouteKey(source.ref.scopePath, { kind: 'connection', id: source.ref.connectionId });
   if (source.kind === 'cableCore') return wireRouteKey(source.ref.scopePath, { kind: 'core', bundleId: source.ref.bundleId, id: source.ref.coreId });
-  if (source.kind === 'portMapping') return wireRouteKey(source.publicPort.instancePath, { kind: 'mapping', id: source.publicPort.portId });
+  if (source.kind === 'portMapping') return wireRouteKey(source.publicPort.instancePath, { kind: 'mapping', id: source.mappingId });
 }
 
 function total(powers: readonly BudgetMetric<'dBm'>[]): MultiplexTotal {

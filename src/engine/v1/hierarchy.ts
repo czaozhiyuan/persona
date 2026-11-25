@@ -31,6 +31,7 @@ export type ResolvedInstance = {
 /** The chain starts at the requested port and includes each verified mapping target. */
 export type PortResolution =
   | { status: 'resolved' | 'unmapped'; chain: readonly EndpointRef[] }
+  | { status: 'branched'; chain: readonly EndpointRef[]; branches: readonly PortResolution[] }
   | { status: 'invalid_reference'; chain: readonly EndpointRef[]; endpoint: EndpointRef };
 
 export function readParameters(definition: Definition, instance?: Instance): Map<string, EffectiveParameter> {
@@ -87,25 +88,31 @@ export function withMappedVoltages(item: ResolvedInstance, definitions: Readonly
   }
   return voltages.size ? { ...item, mappedVoltages: voltages } : item;
 
-  function mappedVoltage(portId: string) {
-    let { definition, parameters, instancePath } = item;
-    const visited = new Set<string>();
-    // A library draft can temporarily contain a cycle before validation.
-    while (definition.kind === 'module' && !visited.has(definition.id)) {
-      visited.add(definition.id);
-      const target = definition.portMappings?.find(m => m.portId === portId)?.target;
-      const slot = target && definition.instances.find(i => i.id === target.instanceId);
-      const child = slot && definitions.get(slot.definitionId);
-      const port = child?.ports.find(p => p.id === target?.portId);
-      if (!slot || !child || !port) return;
-      const path = [...instancePath, slot.id];
-      const instance = applySettings(slot, settingsByPath?.get(JSON.stringify(path)));
-      parameters = readChildParameters(child, instance, definition, parameters, () => instancePath);
-      if (port.inputVoltageV || port.outputVoltageV) return portVoltage(port, { parameters });
-      definition = child;
-      instancePath = path;
-      portId = port.id;
+  function mappedVoltage(portId: string): number | undefined {
+    const values = new Set<number | undefined>();
+    const pending = [{ owner: item, portId, ancestors: new Set<string>() }];
+    while (pending.length && values.size <= 1) {
+      const { owner, portId, ancestors } = pending.pop()!;
+      const parent = owner.definition;
+      // Library drafts can contain a cycle before project validation.
+      if (parent.kind !== 'module' || ancestors.has(parent.id)) { values.add(undefined); continue; }
+      ancestors.add(parent.id);
+      const mappings = parent.portMappings?.filter(mapping => mapping.portId === portId) ?? [];
+      if (!mappings.length) values.add(undefined);
+      for (const { target } of mappings) {
+        const slot = parent.instances.find(child => child.id === target.instanceId);
+        const definition = slot && definitions.get(slot.definitionId);
+        const port = definition?.ports.find(child => child.id === target.portId);
+        if (!slot || !definition || !port) { values.add(undefined); continue; }
+        const instancePath = [...owner.instancePath, slot.id];
+        const instance = applySettings(slot, settingsByPath?.get(JSON.stringify(instancePath)));
+        const parameters = readChildParameters(definition, instance, parent, owner.parameters, () => owner.instancePath);
+        if (port.inputVoltageV || port.outputVoltageV) values.add(portVoltage(port, { parameters }));
+        else pending.push({ owner: { definition, parameters, instancePath }, portId: port.id,
+          ancestors: mappings.length === 1 ? ancestors : new Set(ancestors) });
+      }
     }
+    return values.size === 1 ? values.values().next().value : undefined;
   }
 }
 
@@ -173,22 +180,29 @@ export function resolveHierarchy(project: Project) {
   }
 
   function resolvePort(endpoint: EndpointRef): PortResolution {
-    const chain: EndpointRef[] = [];
-    const occurrence = resolveInstance(endpoint.instancePath);
-    let definition = occurrence?.definition;
-    let current: EndpointRef = { instancePath: [...endpoint.instancePath], portId: endpoint.portId };
-    while (definition && definition.ports.some(port => port.id === current.portId)) {
+    const result: PortResolution[] = [];
+    const pending = [{ current: endpoint, definition: resolveInstance(endpoint.instancePath)?.definition, chain: [] as EndpointRef[], result }];
+    while (pending.length) {
+      const { current, definition, chain, result } = pending.pop()!;
+      if (!definition?.ports.some(port => port.id === current.portId)) {
+        result.push({ status: 'invalid_reference', chain, endpoint: current });
+        continue;
+      }
       chain.push(current);
-      if (definition.kind === 'component') return { status: 'resolved', chain };
-      const mapping = definition.portMappings?.find(item => item.portId === current.portId);
-      if (!mapping) return { status: 'unmapped', chain };
-
-      const { instanceId, portId } = mapping.target;
-      const child = definition.instances.find(item => item.id === instanceId);
-      definition = child && definitions.get(child.definitionId);
-      current = { instancePath: [...current.instancePath, instanceId], portId };
+      if (definition.kind === 'component') { result.push({ status: 'resolved', chain }); continue; }
+      const mappings = definition.portMappings?.filter(mapping => mapping.portId === current.portId) ?? [];
+      if (!mappings.length) { result.push({ status: 'unmapped', chain }); continue; }
+      const branches: PortResolution[] = [];
+      if (mappings.length > 1) result.push({ status: 'branched', chain, branches });
+      for (let i = mappings.length - 1; i >= 0; i--) {
+        const { target } = mappings[i];
+        const slot = definition.instances.find(item => item.id === target.instanceId);
+        pending.push({ current: { instancePath: [...current.instancePath, target.instanceId], portId: target.portId },
+          definition: slot && definitions.get(slot.definitionId),
+          chain: mappings.length > 1 ? [...chain] : chain, result: mappings.length > 1 ? branches : result });
+      }
     }
-    return { status: 'invalid_reference', chain, endpoint: current };
+    return result[0];
   }
 
   return { resolveInstance, resolvePort, walkInstances };

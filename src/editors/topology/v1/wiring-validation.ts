@@ -1,7 +1,7 @@
 import { channelSetsOverlap } from '../../../model/v1/validate-device';
 import type { LocalEndpointRef } from '../../../model/v1/topology';
 import type { ModuleDefinition, PortDefinition } from '../../../model/v1/types';
-import { canConnect, canMapDirection } from '../../../model/v1/types';
+import { canConnect, canMapDirection, isPowerPort } from '../../../model/v1/types';
 import { portTypeLabels } from '../../../workbench/v1/labels';
 
 export type CanvasPort = {
@@ -15,9 +15,9 @@ function sameEndpoint(a?: LocalEndpointRef, b?: LocalEndpointRef): boolean {
 }
 
 export function wiringProblem(module: ModuleDefinition, a?: CanvasPort, b?: CanvasPort): string | undefined {
-  if (!a || !b || a === b) return '请选择两个不同的端口。';
+  if (!a || !b || a === b || sameEndpoint(a.endpoint, b.endpoint)) return '请选择两个不同的端口。';
   if (!a.endpoint && !b.endpoint) return '对外端口应连接到模块内的器件或子模块。';
-  if (!canConnect(a.direction, b.direction) && !canConnect(b.direction, a.direction))
+  if (!isPowerPort(a.port.type) && !canConnect(a.direction, b.direction) && !canConnect(b.direction, a.direction))
     return `两个端口都是${a.direction === 'out' ? '输出' : '输入'}，请连接一个输出和一个输入。`;
   if (a.port.type !== b.port.type) {
     return `端口类型不匹配：${portTypeLabels[a.port.type]}不能连接${portTypeLabels[b.port.type]}。`;
@@ -33,7 +33,7 @@ export function wiringProblem(module: ModuleDefinition, a?: CanvasPort, b?: Canv
     if (connected) return '这两个端口已连接。';
   } else {
     const outer = a.endpoint ? b : a;
-    if (!canMapDirection(outer.port.direction, (a.endpoint ? a : b).port.direction)) return '内部端口不支持对外端口的方向。';
+    if (!isPowerPort(outer.port.type) && !canMapDirection(outer.port.direction, (a.endpoint ? a : b).port.direction)) return '内部端口不支持对外端口的方向。';
     if (module.portMappings?.some(item => item.portId === outer.port.id && sameEndpoint(item.target, a.endpoint ?? b.endpoint))) {
       return '这个对外端口已接到所选端口。';
     }

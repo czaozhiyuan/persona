@@ -1,4 +1,5 @@
 import { resolveHierarchy } from '../../engine/v1/hierarchy';
+import { mappingId } from '../../model/v1/types';
 import type { InstancePath, Project, WireRef } from '../../model/v1/types';
 import { outermostPaths } from './object-selection';
 import { editModuleWiring } from './topology-edits';
@@ -8,7 +9,7 @@ export type { WireRef as WiringSelection } from '../../model/v1/types';
 export function removeWiring(project: Project, moduleId: string, wire: WireRef): Project {
   return editModuleWiring(project, moduleId, module => {
     if (wire.kind === 'connection') return { ...module, connections: module.connections?.filter(item => item.id !== wire.id) };
-    if (wire.kind === 'mapping') return { ...module, portMappings: module.portMappings?.filter(item => item.portId !== wire.id) };
+    if (wire.kind === 'mapping') return { ...module, portMappings: module.portMappings?.filter(item => mappingId(item) !== wire.id) };
     return { ...module, cableBundles: module.cableBundles?.map(bundle =>
       bundle.id !== wire.bundleId ? bundle : { ...bundle, cores: bundle.cores.map(core =>
         core.id === wire.id ? { ...core, a: { pin: core.a.pin }, b: { pin: core.b.pin } } : core) }) };

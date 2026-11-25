@@ -1,3 +1,4 @@
+import { mappingId } from './types';
 import type { InstancePath, ModuleDefinition, WireRef } from './types';
 
 export const localWireKey = (kind: WireRef['kind'], id: string, coreId?: string) =>
@@ -11,7 +12,7 @@ export function wireRouteKey(path: InstancePath, wire: WireRef) {
 /** Local endpoints identify whether an existing drawing still describes the same wire. */
 export function wireEndpoints(module: ModuleDefinition, wire: WireRef) {
   if (wire.kind === 'mapping') {
-    const mapping = module.portMappings?.find(m => m.portId === wire.id);
+    const mapping = module.portMappings?.find(m => mappingId(m) === wire.id);
     return mapping && [mapping.target.instanceId, mapping.target.portId];
   }
   if (wire.kind === 'connection') {

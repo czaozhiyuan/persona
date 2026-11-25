@@ -48,6 +48,8 @@ export type PortDefinition = {
   /** Declared output voltage, independent of supply and converter roles. */
   outputVoltageV?: DcValue;
   supplyCapacity?: SupplyCapacity;
+  /** Actual AC input demand in watts, independent of permitted input ratings. */
+  acLoadW?: DcValue;
 };
 
 type DefinitionIdentity = {
@@ -81,6 +83,10 @@ export function isSupplyOutput(definition: ComponentDefinition | ModuleDefinitio
   return definition.kind === 'component' && definition.dcSupply === true && port.type === 'DC_POWER' && port.direction === 'out';
 }
 
+export function canSetSupplyCapacity(definition: ComponentDefinition | ModuleDefinition, port: Pick<PortDefinition, 'type' | 'direction'>) {
+  return isSupplyOutput(definition, port) || (definition.kind === 'component' && port.type === 'AC_POWER' && port.direction === 'out');
+}
+
 /** Structural child slot. Its name and settings are defaults shared by occurrences of the parent. */
 export type Instance = {
   /** Unique within the containing module definition. */
@@ -102,9 +108,13 @@ export type InstanceSettings = Pick<Instance, 'parameterOverrides' | 'switchStat
  * owning definition so the same mapping applies to every instance.
  */
 export type PortMapping = {
+  /** Older single-target mappings use their public port ID as their wire ID. */
+  id?: string;
   portId: string;
   target: LocalEndpointRef;
 };
+
+export const mappingId = (mapping: PortMapping) => mapping.id ?? mapping.portId;
 
 export type PhysicalEnclosure = PhysicalFootprint & { heightMm: number };
 

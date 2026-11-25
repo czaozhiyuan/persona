@@ -1,5 +1,6 @@
 import type { ParameterMapping } from '../../model/v1/parameters';
 import type { CableBundle, LocalEndpointRef } from '../../model/v1/topology';
+import { isPowerPort } from '../../model/v1/types';
 import type { ModuleDefinition, PortDefinition } from '../../model/v1/types';
 
 export function availableId(base: string, used: ReadonlySet<string>): string {
@@ -140,9 +141,14 @@ export function moveLocalWiring(source: ModuleDefinition, destination: ModuleDef
     return [{ ...bundle, cores }];
   });
 
+  const powerPorts = new Set(source.ports.filter(port => isPowerPort(port.type)).map(port => port.id));
+  const portMappings = source.portMappings?.filter(mapping => {
+    if (!isMoving(mapping.target)) return true;
+    if (powerPorts.has(mapping.portId)) disconnected++;
+    return false;
+  });
   return {
-    source: { ...source, connections, cableBundles,
-      portMappings: source.portMappings?.filter(mapping => !isMoving(mapping.target)) },
+    source: { ...source, connections, cableBundles, portMappings },
     destination: { ...destination,
       connections: destinationConnections.length ? destinationConnections : destination.connections,
       cableBundles: destinationBundles.length ? destinationBundles : destination.cableBundles },

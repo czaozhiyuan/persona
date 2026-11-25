@@ -1,20 +1,22 @@
 import { useState } from 'react';
 import type { LocalEndpointRef } from '../../../model/v1/topology';
-import type { InstancePath, ModuleDefinition } from '../../../model/v1/types';
+import { mappingId, type InstancePath, type ModuleDefinition, type WireRef } from '../../../model/v1/types';
+import { removeWiring } from '../../../state/v1/remove-topology-object';
 import { connectBoundaryPort } from '../../../state/v1/module-ports';
 import type { ProjectStore } from '../../../state/v1/project-store';
 import { portDisplayName } from '../../../workbench/v1/labels';
 
-export type BindingPreview = { scope: InstancePath; module: ModuleDefinition; portId: string; target?: LocalEndpointRef };
+export type BindingPreview = { scope: InstancePath; module: ModuleDefinition; portId: string; target?: LocalEndpointRef; wire?: WireRef };
 
 export function PortBindingDialog({ store, preview, locations, close }: {
   store: ProjectStore; preview: BindingPreview; locations: readonly string[]; close: () => void;
 }) {
-  const { scope, module, portId, target } = preview;
+  const { scope, module, portId, target, wire } = preview;
   const [base] = useState(() => store.getSnapshot().project);
   const [error, setError] = useState('');
   const port = module.ports.find(port => port.id === portId)!;
-  const previous = module.portMappings?.find(mapping => mapping.portId === portId)!;
+  const all = module.portMappings?.filter(mapping => mapping.portId === portId) ?? [];
+  const removing = wire ? all.filter(mapping => mappingId(mapping) === wire.id) : all;
   function endpointLabel(ref: LocalEndpointRef) {
     const child = store.resolveInstance([...scope, ref.instanceId]);
     const port = child?.definition.ports.find(item => item.id === ref.portId);
@@ -25,7 +27,7 @@ export function PortBindingDialog({ store, preview, locations, close }: {
       setError('当前工程已变化，请重新预览。');
       return;
     }
-    const result = store.commit(draft => connectBoundaryPort(draft, module.id, portId, target));
+    const result = store.commit(draft => wire ? removeWiring(draft, module.id, wire) : connectBoundaryPort(draft, module.id, portId, target));
     if (result.ok) close();
     else setError(result.message);
   }
@@ -34,9 +36,9 @@ export function PortBindingDialog({ store, preview, locations, close }: {
   return <dialog ref={dialog => { if (dialog && !dialog.open) dialog.showModal(); }}
     className="v1-topology-dialog" aria-labelledby="port-binding-title" onCancel={close}>
     <h3 id="port-binding-title">{target ? '更换内部连接' : '解除内部连接'}</h3>
-    <p>{moduleName} · {portDisplayName(port, true, module.ports, occurrence)} 将断开与「{endpointLabel(previous.target)}」的连接。</p>
+    <p>{moduleName} · {portDisplayName(port, true, module.ports, occurrence)} 将断开与「{removing.map(mapping => endpointLabel(mapping.target)).join('」、「')}」的连接。</p>
     {target && <p>随后连接到「{endpointLabel(target)}」。</p>}
-    <p>对外端口及上层连线保留。{!target && '该端口将处于开放状态。'}</p>
+    <p>对外端口及上层连线保留。{!target && removing.length === all.length && '该端口将处于开放状态。'}</p>
     {locations.length > 0 && <p>编辑共享结构会同时应用到 {locations.join('、')}。</p>}
     {error && <p className="error" role="alert">{error}</p>}
     <div className="actions">

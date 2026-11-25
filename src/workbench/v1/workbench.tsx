@@ -61,7 +61,7 @@ type Presentation = {
   manualFrames: ReadonlySet<string>;
   expandedHierarchy: ReadonlySet<string>;
 };
-const budgetTitles = { links: '链路预算', optical: '局部光功率', dc: '直流供电预算' };
+const budgetTitles = { links: '链路预算', optical: '局部光功率', dc: '供电预算' };
 const defaultTrial: LinkTrial = { frequencyGHz: 1 };
 
 function closeWorkbenchMenu() {
@@ -650,7 +650,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
             <div className="v1-menu-items">
               <button type="button" onClick={() => openBudget('links')}>查看链路预算</button>
               <button type="button" onClick={() => { setOpticalTarget(undefined); openBudget('optical'); }}>局部光功率</button>
-              <button type="button" onClick={() => showDc()}>直流供电预算</button>
+              <button type="button" onClick={() => showDc()}>供电预算</button>
             </div>
           </details>
           <details name="workbench-menu" data-workbench-popup><summary>视图</summary>

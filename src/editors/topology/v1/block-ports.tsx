@@ -5,6 +5,7 @@ import { portPowerLines } from '../../../workbench/v1/budgets/multiplex-details'
 import { signalColor } from './signal-wire';
 import { portDisplayName, portTypeLabels } from '../../../workbench/v1/labels';
 import { Handle, Position } from '@xyflow/react';
+import { isPowerPort } from '../../../model/v1/types';
 import type { PortDefinition } from '../../../model/v1/types';
 
 export const portSides = ['top', 'left', 'right'] as const;
@@ -44,7 +45,7 @@ export function BlockPorts({ wdm, labelContext, portValue, ports, highlighted, n
       {ports.filter(port => boundaryPortSide(port) === side).map(port =>
         <div className={`v1-topology-port${highlighted.has(port.id) ? ' is-on-path' : ''}${port.id === newPortId ? ' is-new-port' : ''}`} key={port.id}
           title={`${portDisplayName(port, false, ports, labelContext)} · ${portTypeLabels[port.type]}`} data-port-direction={port.direction} data-wire={wireState?.(port.id)}>
-          <Handle id={handleId(port.id)} type={port.direction === 'in' ? 'target' : 'source'}
+          <Handle id={handleId(port.id)} type={!isPowerPort(port.type) && port.direction === 'in' ? 'target' : 'source'}
             position={side === 'top' ? Position.Top : side === 'left' ? Position.Left : Position.Right} className={port.type} style={{ background: signalColor(port.type) }} isConnectable={editable} />
           <PortLabel wdm={wdm} labelContext={labelContext} value={portValue?.(port.id)} port={port} ports={ports} open={openPort} />
         </div>)}

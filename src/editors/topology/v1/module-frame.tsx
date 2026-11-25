@@ -89,10 +89,10 @@ export function ModuleFrame({ frameKey, insets, onPortHeight, labelContext, icon
         const input = port.direction === 'in';
         return <div key={port.id} className={`v1-topology-port${highlighted.has(port.id) ? ' is-on-path' : ''}${port.id === newPortId ? ' is-new-port' : ''}`}
           title={`${portDisplayName(port, false, ports, labelContext)} · ${portTypeLabels[port.type]}`} data-port-direction={port.direction}>
-          <Handle id={handleId(port.id, true)} type={port.direction === 'out' ? 'target' : 'source'}
+          <Handle id={handleId(port.id, true)} type={!isPowerPort(port.type) && port.direction === 'out' ? 'target' : 'source'}
             position={side === 'top' ? Position.Bottom : side === 'left' ? Position.Right : Position.Left} className={`${port.type} v1-frame-inner-handle`} style={{ background: signalColor(port.type) }} data-wire={wireState?.(port.id, true)}
             isConnectable={editable} />
-          {outerHandles && <Handle id={handleId(port.id, false)} type={input ? 'target' : 'source'}
+          {outerHandles && <Handle id={handleId(port.id, false)} type={!isPowerPort(port.type) && input ? 'target' : 'source'}
             position={side === 'top' ? Position.Top : side === 'left' ? Position.Left : Position.Right} className={`${port.type} v1-frame-outer-handle`} style={{ background: signalColor(port.type) }} data-wire={wireState?.(port.id, false)}
             isConnectable={editable} />}
           <PortLabel labelContext={labelContext} value={portValue?.(port.id)} port={port} ports={ports} open={openPort} />

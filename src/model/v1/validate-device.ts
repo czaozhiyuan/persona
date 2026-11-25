@@ -61,6 +61,11 @@ export function validatePortConstraints(port: PortDefinition, parameters: Readon
     requireValid(isPowerPort(port.type) && port.direction === 'in', `${context}: 仅供电输入端口可设置标称输入电压`);
     validateDcValue(port.inputVoltageV, 'V', parameters, `${context}的标称输入电压`);
   }
+  validateDcValue(port.acLoadW, 'W', parameters, `${context}的交流负载功耗`);
+  if (port.type === 'AC_POWER' && port.supplyCapacity !== undefined) {
+    requireValid(port.supplyCapacity.unit === 'W' && port.supplyCapacity.value.kind === 'fixed', `${context}的交流额定容量须为固定 W 值`);
+    validateDcValue(port.supplyCapacity.value, 'W', parameters, `${context}的额定容量`);
+  }
   if (port.outputVoltageV !== undefined) {
     requireValid(isPowerPort(port.type) && port.direction === 'out', `${context}: 仅供电输出端口可设置输出电压`);
     validateDcValue(port.outputVoltageV, 'V', parameters, `${context}的输出电压`);

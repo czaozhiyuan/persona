@@ -1,4 +1,4 @@
-import { canMapDirection, supportsDirection } from '../../../model/v1/types';
+import { canMapDirection, isPowerPort, supportsDirection } from '../../../model/v1/types';
 import { wireArrow } from '../../../model/v1/display-names';
 import { mediaLabels, portDisplayName } from '../../../workbench/v1/labels';
 import { useState } from 'react';
@@ -60,8 +60,8 @@ export function ConnectionForm({ module, ports, update }: { module: ModuleDefini
         ...current, connections: [...(current.connections ?? []).filter(item => item.id !== id), next],
       }))) setSelected(id);
     }}>
-      <EndpointSelect name="from" label="连接起点" ports={ports.filter(item => supportsDirection(item.port.direction, 'out'))} value={connection?.from} />
-      <EndpointSelect name="to" label="连接终点" ports={ports.filter(item => supportsDirection(item.port.direction, 'in'))} value={connection?.to} />
+      <EndpointSelect name="from" label="连接起点" ports={ports.filter(item => isPowerPort(item.port.type) || supportsDirection(item.port.direction, 'out'))} value={connection?.from} />
+      <EndpointSelect name="to" label="连接终点" ports={ports.filter(item => isPowerPort(item.port.type) || supportsDirection(item.port.direction, 'in'))} value={connection?.to} />
       <label>介质<select name="media" defaultValue={connection?.mediaKind ?? ''}>
         <option value="">未指定</option>{Object.entries(mediaLabels).map(([type, label]) => <option key={type} value={type}>{label}</option>)}
       </select></label>
@@ -80,23 +80,25 @@ export function MappingForm({ module, ports, connect, labelContext }: {
 }) {
   const [selected, setSelected] = useState('');
   const publicPort = module.ports.find(item => item.id === selected);
-  const mapping = module.portMappings?.find(item => item.portId === selected);
+  const mappings = module.portMappings?.filter(item => item.portId === selected) ?? [];
+  const power = isPowerPort(publicPort?.type);
   const candidates = publicPort ? ports.filter(item => item.port.type === publicPort.type
-    && canMapDirection(publicPort.direction, item.port.direction) && channelSetsOverlap(publicPort, item.port)) : [];
+    && (power || canMapDirection(publicPort.direction, item.port.direction))
+    && (!power || !mappings.some(mapping => endpointKey(mapping.target) === endpointKey(item.ref))) && channelSetsOverlap(publicPort, item.port)) : [];
   return <TopologyTool title="连接到内部端口">
     <label>对外端口<select value={publicPort?.id ?? ''} onChange={event => setSelected(event.target.value)}>
       <option value="">请选择</option>
       {module.ports.map(port => <option key={port.id} value={port.id}>{portDisplayName(port, true, module.ports, labelContext)}{module.portMappings?.some(item => item.portId === port.id) ? '' : '（开放）'}</option>)}
     </select></label>
-    {publicPort && <form key={JSON.stringify([selected, mapping])} onSubmit={event => {
+    {publicPort && <form key={JSON.stringify([selected, mappings])} onSubmit={event => {
       event.preventDefault();
       const target = endpointAt(field(new FormData(event.currentTarget), 'target'), candidates);
       if (!target) return;
       connect(selected, target);
     }}>
-      <EndpointSelect name="target" label="内部端口" ports={candidates} value={mapping?.target} />
-      <button type="submit">保存内部连接</button>
-      {mapping && <button type="button" onClick={() => connect(selected)}>解除内部连接</button>}
+      <EndpointSelect name="target" label="内部端口" ports={candidates} value={power ? undefined : mappings[0]?.target} />
+      <button type="submit">{power ? '添加支路' : '保存内部连接'}</button>
+      {mappings.length > 0 && <button type="button" onClick={() => connect(selected)}>{power ? '解除全部内部支路' : '解除内部连接'}</button>}
     </form>}
   </TopologyTool>;
 }

@@ -297,7 +297,7 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
     const [a, b] = connectionPorts(edge);
     if (!a || !b || scopedWiringProblem(a, b)) return;
     connected.current = true;
-    const [source, target] = canConnect(a.direction, b.direction) ? [a, b] : [b, a];
+    const [source, target] = canConnect(b.direction, a.direction) && !canConnect(a.direction, b.direction) ? [b, a] : [a, b];
     if (source.endpoint && target.endpoint) connect(a.scope, { from: source.endpoint, to: target.endpoint });
     else if (a.endpoint) mapPort(a.scope, { portId: b.port.id, target: a.endpoint });
     else if (b.endpoint) mapPort(a.scope, { portId: a.port.id, target: b.endpoint });

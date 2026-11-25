@@ -3,10 +3,10 @@ import type { DcCapacity, SupplyCapacity } from '../../../model/v1/device';
 import type { ParameterDefinition } from '../../../model/v1/parameters';
 import { numberField, QuantityField, readQuantity } from './value-fields';
 
-export function SupplyCapacityField({ value }: { value?: SupplyCapacity }) {
+export function SupplyCapacityField({ value, wattsOnly }: { value?: SupplyCapacity; wattsOnly?: boolean }) {
   return <fieldset>
     <legend>该路额定输出容量（可选）</legend>
-    <label>单位<select name="supplyUnit" defaultValue={value?.unit ?? 'W'}><option>W</option><option>A</option></select></label>
+    <label>单位<select name="supplyUnit" defaultValue={value?.unit ?? 'W'}><option>W</option>{!wattsOnly && <option>A</option>}</select></label>
     <label>额定值<input name="supplyCapacity" type="number" min={0} step="any" defaultValue={value?.value.value} placeholder="未设置" /></label>
   </fieldset>;
 }
