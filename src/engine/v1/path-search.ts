@@ -33,7 +33,7 @@ type Search = {
   targetFlow?: PortFlow;
   required?: ReadonlyMap<SignalEdge, bigint>;
   allRequired?: bigint;
-  opticalOnly?: boolean;
+  portType?: 'OPTICAL' | 'CONTROL';
   reverse?: boolean;
   splitterRouting?: SplitterRouting;
 };
@@ -202,7 +202,7 @@ function searchRoutes(query: Search, skip?: (edge: SignalEdge) => boolean, allDa
       if (current.flow && current.flow !== portFlowAt(edge, current.port)) continue;
       if (skip?.(edge)) continue;
       const port = reverse ? edge.from : edge.to;
-      if (query.opticalOnly && port.definition.type !== 'OPTICAL') continue;
+      if (query.portType && port.definition.type !== query.portType) continue;
       const emitted = edge.channels.kind === 'enter' && !edge.supply ? query.startCarriers?.get(edge.to) : undefined;
       const requested = intersectCarrier(query.carrier, edge.supply && query.supplyCarrier ? query.supplyCarrier(edge) : emitted);
       const carrier = query.ignoreChannels ? undefined : transition(edge, current.carrier, requested, reverse);

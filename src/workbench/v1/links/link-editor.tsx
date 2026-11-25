@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import type { createLinkBudget, LinkBudgetPoint } from '../../../engine/v1/link-budget';
 import type { OpticalBudget } from '../../../engine/v1/optical-budget';
 import type { PathResult } from '../../../engine/v1/path-resolver';
-import { signalPortKey } from '../../../engine/v1/signal-graph';
+import { isDigitalEdge, signalPortKey } from '../../../engine/v1/signal-graph';
 import { resolveOpticalChannel } from '../../../model/v1/channels';
 import type { LinkTrial, NamedLink } from '../../../model/v1/topology';
 import type { EndpointRef } from '../../../model/v1/types';
@@ -21,6 +21,7 @@ type Props = {
   options: LinkOptions;
   point?: LinkBudgetPoint;
   opticalLink: boolean;
+  signalNotice?: string;
   selected?: NamedLink;
   result?: PathResult;
   budget: ReturnType<typeof createLinkBudget>;
@@ -54,6 +55,7 @@ function Diagnostics({ result, showEndpoint, locate }: {
   result: PathResult; showEndpoint: LinkOptions['showEndpoint']; locate: (endpoint: EndpointRef) => void;
 }) {
   const parallelDark = result.trace?.edges.some(edge => edge.source.kind === 'darkParallelPaths');
+  const boundaries = result.status !== 'resolved' && result.digitalAccess?.filter(isDigitalEdge);
   return <div className="v1-link-diagnostics" role="status" data-path-status={result.status}>
     <strong>{statusLabels[result.status]}</strong>
     {parallelDark && <p>分路后重汇的光路均无光。</p>}
@@ -61,6 +63,10 @@ function Diagnostics({ result, showEndpoint, locate }: {
       {result.status === 'incomplete' ? (result.endpoint ? '对外端口尚未连接到内部' : '缺少起点或终点') : result.reason}
       {result.endpoint && ` · ${showEndpoint(result.endpoint)}`}
     </p>}
+    {boundaries && boundaries.length > 0 && <p>已连接的数字光边界：{boundaries.map(edge => {
+      const ref = (edge.from.definition.type === 'OPTICAL' ? edge.from : edge.to).ref;
+      return <EndpointLocation key={signalPortKey(ref)} endpoint={ref} label={showEndpoint(ref)} locate={locate} />;
+    })}</p>}
     {result.trace && <details>
       <summary>{parallelDark ? '各支路共有的端口' : '查看路径'}</summary>
       <ol>{result.trace.steps.map((step, index) => <li key={index}>
@@ -73,7 +79,7 @@ function Diagnostics({ result, showEndpoint, locate }: {
 }
 
 export function LinkEditor({ store, options, selected, result, budget, point, conditions, setConditions,
-  draft, opticalLink, opticalResult, saveTrial, trialSaved, choose, locate, setDraftChannel }: Props) {
+  draft, opticalLink, signalNotice, opticalResult, saveTrial, trialSaved, choose, locate, setDraftChannel }: Props) {
   const [error, setError] = useState('');
   const [fromKey, setFromKey] = useState(selected?.from ? signalPortKey(selected.from) : '');
   const [toKey, setToKey] = useState(selected?.to ? signalPortKey(selected.to) : '');
@@ -172,7 +178,7 @@ export function LinkEditor({ store, options, selected, result, budget, point, co
         sources={conditions.opticalSources ?? []}
         onChange={opticalSources => setConditions({ ...conditions, opticalSources })} />}
 
-      {opticalLink ? <>{trialControls}{opticalResult && selected.to
+      {signalNotice ? <><p role="status">{signalNotice}</p>{diagnostics}</> : opticalLink ? <>{trialControls}{opticalResult && selected.to
         ? <OpticalResult result={opticalResult} target={opticalResult.stages.at(-1)?.endpoint ?? selected.to} showEndpoint={options.showEndpoint} locate={locate} />
         : <p role="status">请检查光路。</p>}{diagnostics}</>
         : point && <LinkBudgetPanel trialControls={trialControls} diagnostics={diagnostics} single={point} link={selected} budget={budget} conditions={conditions} labels={options} locate={locate}

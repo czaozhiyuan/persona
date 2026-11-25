@@ -7,7 +7,7 @@ import { supportsDirection } from '../../model/v1/types';
 import { validateNamedLinks } from '../../model/v1/validate-topology';
 import { chooseRouteChannel, intersectCarrier, searchSignalPath } from './path-search';
 import type { Carrier, SignalPath } from './path-search';
-import { buildSignalGraph, opticalSourceFlow, signalPortKey } from './signal-graph';
+import { buildSignalGraph, isDigitalEdge, opticalSourceFlow, signalPortKey } from './signal-graph';
 import type { SignalEdge, SignalPort } from './signal-graph';
 
 export type LocalPathRequest = { from: EndpointRef; to: EndpointRef; channelId?: OpticalChannelId };
@@ -30,7 +30,7 @@ export type PathTrace = SignalPath & {
 type FailureStatus = 'incomplete' | 'invalid_reference' | 'unreachable' | 'ambiguous' | 'feedback_loop' | 'search_limit';
 export type PathResult =
   | { status: 'resolved'; trace: PathTrace }
-  | { status: FailureStatus; reason: string; endpoint?: EndpointRef; trace?: PathTrace };
+  | { status: FailureStatus; reason: string; endpoint?: EndpointRef; trace?: PathTrace; digitalAccess?: readonly SignalEdge[] };
 
 type RequiredRef = ConnectionRef | CableCoreRef;
 
@@ -65,7 +65,22 @@ export function createPathResolver(project: Project) {
 
   const getPort = (ref: EndpointRef) => graph.ports.get(signalPortKey(ref));
   const dmlEdges = graph.edges.filter(edge => edge.source.kind === 'transfer' && edge.source.transfer.kind === 'dml');
+  const digitalEdges = graph.edges.filter(isDigitalEdge);
 
+  // A broken optical span can still have uniquely connected control wiring at either end.
+  function digitalAccess(ref: EndpointRef, transmit: boolean) {
+    const target = getPort(ref);
+    if (target?.definition.type !== 'CONTROL') return;
+    const face = (edge: SignalEdge) => transmit ? edge.from : edge.to;
+    const boundaries = digitalEdges.filter(edge => face(edge).definition.type === 'CONTROL');
+    const result = searchSignalPath({ starts: boundaries.map(face), target, carrier: undefined,
+      adjacent: transmit ? incoming : outgoing, reverse: transmit, portType: 'CONTROL' });
+    if (result.status === 'unreachable' || result.status === 'search_limit') return;
+    if (result.status !== 'resolved') return [];
+    const control = (transmit ? result.path.steps.at(-1)! : result.path.steps[0]).port;
+    const matches = boundaries.filter(edge => face(edge) === control);
+    return matches.length === 1 ? [...result.path.edges, matches[0]] : result.path.edges;
+  }
 
   function followBoundary(start: SignalPort, required: SignalEdge[]): SignalPort {
     let port = start;
@@ -202,6 +217,12 @@ export function createPathResolver(project: Project) {
             if (open) return { status: 'incomplete', endpoint: open.ref, reason: '路径所需的模块端口缺少内部映射。' };
           }
         }
+        if (digitalEdges.length && (from.definition.type === 'CONTROL' || to.definition.type === 'CONTROL')) {
+          const physical = searchSignalPath({ ...query, ignoreChannels: true });
+          if (physical.status === 'resolved' && physical.path.edges.some(isDigitalEdge)) return {
+            status: 'unreachable', reason: '数字光路的端口、光源或传输不支持所选光通道。',
+          };
+        }
         const reachedDml = dmlEdges.filter(edge => result.reached.has(edge.from));
         if (reachedDml.length === 1 && from.definition.type === 'RF') {
           const dml = reachedDml[0];
@@ -241,8 +262,14 @@ export function createPathResolver(project: Project) {
     } catch (error) {
       return { status: 'invalid_reference', reason: (error as Error).message };
     }
-    if (!link.from || !link.to) return { status: 'incomplete', reason: '尚未连接：请设置链路起点和终点。' };
-    return resolve({ from: link.from, to: link.to, channelId: link.channelId }, options, link);
+    const result: PathResult = link.from && link.to
+      ? resolve({ from: link.from, to: link.to, channelId: link.channelId }, options, link)
+      : { status: 'incomplete', reason: '尚未连接：请设置链路起点和终点。' };
+    if (result.status !== 'resolved' && digitalEdges.length) {
+      const tx = link.from && digitalAccess(link.from, true), rx = link.to && digitalAccess(link.to, false);
+      if (tx || rx) return { ...result, digitalAccess: [...(tx ?? []), ...(rx ?? [])] };
+    }
+    return result;
   }
 
   function resolveLocalPath(request: LocalPathRequest, options: PathOptions = {}): PathResult {

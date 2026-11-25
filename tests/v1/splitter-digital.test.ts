@@ -12,6 +12,8 @@ import { builtInDefinitions } from '../../src/library/v1/built-in';
 import { factoryLibrary, parseLibrary, saveDefinition } from '../../src/library/v1/user-library';
 import type { ComponentDefinition, Project } from '../../src/model/v1/types';
 import { parseProjectJson, serializeProjectJson } from '../../src/storage/v1/project-json';
+import { digitalControlProject } from './fixtures/digital-control-project';
+import { canvasEdgeKey, projectPathHighlight } from '../../src/editors/topology/v1/path-highlight';
 
 const fixed = (value: number) => ({ kind: 'fixed' as const, value });
 const endpoint = (instance: string, portId: string) => ({ instancePath: [instance], portId });
@@ -43,6 +45,70 @@ function number(metric: BudgetMetric) { assert.equal(metric.availability,'availa
 function near(actual: number, expected: number) {
   assert.ok(actual === expected || Math.abs(actual - expected) < 1e-9, `${actual} != ${expected}`);
 }
+
+test('broken digital links expose only established control access and discriminate channel, mapping and route failures', () => {
+  const p = digitalControlProject(), [root, box] = p.moduleDefinitions, link = p.namedLinks![0];
+  const core = root.cableBundles![0].cores[0];
+  const original = core.b.endpoint;
+  delete core.b.endpoint;
+  const resolve = () => createPathResolver(p).resolveNamedLink(link);
+  const broken = resolve();
+  assert.equal(broken.status, 'unreachable');
+  assert.equal(broken.trace, undefined);
+  assert.deepEqual(projectPathHighlight(broken, []).edges, new Set([canvasEdgeKey('connection', 'tx-a'), canvasEdgeKey('connection', 'rx-b')]));
+  assert.deepEqual(projectPathHighlight(broken, ['a']).edges, new Set([canvasEdgeKey('mapping','DATA_TX_IN')]));
+  assert.deepEqual(projectPathHighlight(broken, ['b']).edges, new Set([canvasEdgeKey('mapping','DATA_RX_OUT')]));
+  core.b.endpoint = original;
+  const pure = createPathResolver(p).resolveNamedLink(p.namedLinks![2]);
+  assert.equal(pure.status, 'resolved');
+  assert.ok(pure.trace.steps.every(s => s.port.definition.type === 'CONTROL'));
+  const sfp = p.componentDefinitions[1];
+  sfp.ports = sfp.ports.map(port => port.type === 'OPTICAL' ? { ...port, channelIds: ['DWDM_CH28'] } : port);
+  const mismatch = resolve();
+  assert.equal(mismatch.status, 'unreachable'); assert.match(mismatch.reason, /光通道/);
+  link.channelId = 'DWDM_CH28';
+  const mappings = box.portMappings!;
+  box.portMappings = mappings.filter(m => m.portId !== 'OPT_RX_IN');
+  const open = resolve();
+  assert.equal(open.status, 'incomplete'); assert.match(open.reason, /映射/);
+  box.portMappings = mappings;
+  root.connections = [...root.connections!, wire('second-rx-a','b','DATA_RX_OUT','ctl-b','aux')];
+  const competing = createPathResolver(p).resolveNamedLink({ ...link, to: endpoint('ctl-b','aux') });
+  assert.equal(competing.status, 'ambiguous');
+  assert.equal(competing.trace, undefined);
+  link.via = [{ scopePath: [], bundleId: 'mpo', coreId: 'ab' }];
+  const saved = parseProjectJson(serializeProjectJson(p));
+  assert.deepEqual(saved.namedLinks, p.namedLinks);
+  assert.equal(createPathResolver(saved).resolveNamedLink({ ...saved.namedLinks![0], to: endpoint('ctl-b','aux') }).status, 'resolved');
+});
+
+test('digital receiver captions follow only the selected split branch, retaining dark, missing and overloaded states', () => {
+  for (const [percent, missing, linkIndex, text] of [[0,false,0,'无光 · 低于灵敏度'], [50,true,0,'接收余量 不可用'],
+    [50,false,1,'超过过载上限']] as const) {
+    const p = opticalNetwork(percent, 0, missing), link = p.namedLinks![linkIndex];
+    const resolver = createPathResolver(p), path = resolver.resolveNamedLink(link);
+    assert.equal(path.status, 'resolved');
+    const optics = createOpticalBudget(p).calculateDigitalPath(path.trace, link.channelId)!;
+    const notes = linkAnnotations(resolver.graph, path, undefined, optics).nodes;
+    assert.ok(notes.get(JSON.stringify(link.to!.instancePath))!.some(n => n.text.includes(text)));
+    assert.ok(!notes.has(JSON.stringify(['pd'])));
+    if (missing) assert.ok(notes.get(JSON.stringify(link.from!.instancePath))!.some(n => n.text === '光出 功率未设置'));
+    if (percent === 0) assert.ok(notes.get(JSON.stringify(['b']))!.some(n => n.text === '光入 −∞ dBm'));
+  }
+  const p = opticalNetwork(75), root = p.moduleDefinitions[0], link = p.namedLinks![0];
+  root.instances = [...root.instances, { id: 'c', definitionId: 'library-sfp', name: '另一个接收端' }];
+  root.connections = root.connections!.map(c => c.id === 'second' ? { ...c, to: { instanceId: 'c', portId: 'OPT_RX_IN' } } : c);
+  const resolver = createPathResolver(p);
+  for (const [id, branch, share] of [['b','first',.75], ['c','second',.25]] as const) {
+    const path = resolver.resolveNamedLink({ ...link, to: endpoint(id,'DATA_RX_OUT'), via: [{ scopePath: [], connectionId: branch }] });
+    assert.equal(path.status, 'resolved');
+    const optics = createOpticalBudget(p).calculateDigitalPath(path.trace, channel)!;
+    near(number(optics.powerDbm), 10 * Math.log10(share));
+    const notes = linkAnnotations(resolver.graph, path, undefined, optics).nodes;
+    assert.ok(notes.has(JSON.stringify([id])) && !notes.has(JSON.stringify([id === 'b' ? 'c' : 'b'])));
+    assert.deepEqual(projectPathHighlight(path, []).edges, new Set(['launch', branch].map(key => canvasEdgeKey('connection', key))));
+  }
+});
 
 test('complementary optical branches conserve power, including fractional and dark outputs', () => {
   for (const [percent, loss] of [[50,0], [99,0], [99.9,2], [100,0], [0,0]]) {

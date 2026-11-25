@@ -91,7 +91,7 @@ export function createOpticalBudgetForGraph(graph: SignalGraph, sharedOrigins?: 
   }
 
   function search(start: SignalPort, target: SignalPort, carrier: Carrier) {
-    return searchSignalPath({ starts: [start], startFlow: opticalSourceFlow, target, adjacent: outgoing, carrier, opticalOnly: true });
+    return searchSignalPath({ starts: [start], startFlow: opticalSourceFlow, target, adjacent: outgoing, carrier, portType: 'OPTICAL' });
   }
 
   function stage(port: SignalPort, channelId: OpticalChannelId | undefined, powerDbm: BudgetMetric<'dBm'>,

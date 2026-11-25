@@ -2,8 +2,8 @@ import type { BudgetMetric } from '../../../engine/v1/budget-metric';
 import type { LinkBudgetPoint } from '../../../engine/v1/link-budget';
 import type { OpticalBudget } from '../../../engine/v1/optical-budget';
 import type { PathResult } from '../../../engine/v1/path-resolver';
-import { signalPortKey } from '../../../engine/v1/signal-graph';
-import type { SignalGraph } from '../../../engine/v1/signal-graph';
+import { isDigitalEdge, signalPortKey } from '../../../engine/v1/signal-graph';
+import type { SignalEdge, SignalGraph } from '../../../engine/v1/signal-graph';
 import type { EndpointRef, PortFlow } from '../../../model/v1/types';
 import { resolveOpticalChannel } from '../../../model/v1/channels';
 import { portDisplayName } from '../../../model/v1/display-names';
@@ -17,6 +17,7 @@ const labels = {
   responsivity: '响应度', slope: 'K', vPi: 'Vπ', depth: '调制深度',
   gain: '增益', opticalGain: '光增益', intrinsicLoss: '最大透过插损', quadratureLoss: '正交损耗',
   averageCurrent: '平均光电流', conversionGain: '转换段增益', linkGain: '链路增益',
+  receiveMargin: '接收余量',
 } as const;
 type Kind = keyof typeof labels | 'power' | 'channel' | 'diagnostic';
 const metricOrder: readonly string[] = ['power', ...Object.keys(labels), 'channel', 'diagnostic'];
@@ -39,6 +40,7 @@ export function captionNotes(notes: readonly Annotation[]) {
 
 export function linkAnnotations(graph: SignalGraph, path?: PathResult, point?: LinkBudgetPoint, optical?: OpticalBudget) {
   const nodes = new Map<string, Annotation[]>();
+  const wireLoss = new Map<SignalEdge, string>();
   const definitions = new Map(graph.instances.map(i => [hierarchyKey(i.instancePath), i.definition]));
   const ports = new Map<string, string>();
   function note(ref: EndpointRef, kind: Kind, role: Role, text: string,
@@ -63,26 +65,37 @@ export function linkAnnotations(graph: SignalGraph, path?: PathResult, point?: L
   function diagnostic(ref: EndpointRef, reason: string) {
     note(ref, 'diagnostic', 'supplemental', reason);
   }
-  function power(ref: EndpointRef, value: BudgetMetric, channel?: string, p0 = false, flow?: PortFlow) {
+  function power(ref: EndpointRef, value: BudgetMetric, channel?: string, p0 = false, flow?: PortFlow, reading = formatMetric(value)) {
     const key = signalPortKey(ref);
     const port = graph.ports.get(key);
     if (!port) return;
     const domain = port.definition.type === 'OPTICAL' ? '光' : 'RF ';
     const role = flow ?? (port.definition.direction === 'out' ? 'out' : 'in');
     const label = domain + (role === 'in' ? '入' : '出') + (p0 ? ' P0' : '');
-    note(ref, 'power', role, label + ' ' + formatMetric(value), { p0, channel,
+    note(ref, 'power', role, label + ' ' + reading, { p0, channel,
       ...(value.availability === 'unavailable' ? { reason: value.reason } : { value: value.value }) });
     if (p0) return;
-    ports.set(key, [domain.trim(), formatMetric(value), channel].filter(Boolean).join(' '));
+    ports.set(key, [domain.trim(), reading, channel].filter(Boolean).join(' '));
     if (channel) {
       const wavelength = resolveOpticalChannel(channel)?.wavelengthNm;
       note(ref, 'channel', 'supplemental', channel, { channel, reason: wavelength && Number.isFinite(wavelength) ? wavelength.toFixed(2) + ' nm' : undefined });
     }
   }
   function opticalStages(result: OpticalBudget) {
+    const digital = path?.trace?.edges.some(isDigitalEdge);
     for (const stage of result.stages) {
       const { endpoint, incoming } = stage;
-      power(endpoint, stage.powerDbm, stage.channelId, false, stage.flow);
+      let reading: string | undefined;
+      if (digital && !incoming && stage.powerDbm.availability === 'unavailable') {
+        const source = graph.ports.get(signalPortKey(endpoint))?.definition.opticalEmitter?.powerDbm;
+        const owner = graph.instances.find(i => hierarchyKey(i.instancePath) === hierarchyKey(endpoint.instancePath));
+        if (!source || (source.kind === 'parameter' && !owner?.parameters.has(source.parameterId))) reading = '功率未设置';
+      }
+      power(endpoint, stage.powerDbm, stage.channelId, false, stage.flow, reading);
+      const wire = incoming?.edge.source;
+      if (digital && incoming && (wire?.kind === 'connection' || wire?.kind === 'cableCore') && wire.lossDb !== undefined) {
+        wireLoss.set(incoming.edge, `插损 ${wire.lossDb} dB`);
+      }
       if (incoming?.opticalLoss) {
         metric(endpoint, 'intrinsicLoss', incoming.opticalLoss.intrinsicLossDb, stage.channelId);
         metric(endpoint, 'quadratureLoss', incoming.opticalLoss.quadratureLossDb, stage.channelId);
@@ -92,6 +105,13 @@ export function linkAnnotations(graph: SignalGraph, path?: PathResult, point?: L
       }
     }
     const last = result.stages.at(-1);
+    if (digital && last && result.digitalReceiver) {
+      const { margin, aboveLimit } = result.digitalReceiver;
+      const states = [last.powerDbm.availability === 'available' && last.powerDbm.value === -Infinity && '无光',
+        margin.availability === 'available' && margin.value < 0 && '低于灵敏度', aboveLimit && '超过过载上限'];
+      note(last.endpoint, 'receiveMargin', 'performance', ['接收余量 ' + formatMetric(margin), ...states].filter(Boolean).join(' · '),
+        { channel: last.channelId, ...(margin.availability === 'available' ? { value: margin.value } : { reason: margin.reason }) });
+    }
     if (last && result.averageCurrent) metric(last.endpoint, 'averageCurrent', result.averageCurrent, last.channelId);
     if (result.pathIssue) diagnostic(result.pathIssue.endpoint, result.pathIssue.reason);
   }
@@ -146,5 +166,5 @@ export function linkAnnotations(graph: SignalGraph, path?: PathResult, point?: L
     for (const problem of point.diagnostics) if (problem.endpoint) diagnostic(problem.endpoint, problem.reason);
   }
   for (const notes of nodes.values()) notes.sort(compare);
-  return { nodes, ports };
+  return { nodes, ports, wireLoss };
 }
