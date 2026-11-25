@@ -54,9 +54,24 @@ function StandardPortDialog({ initialMode, name, owner, locations, store, added,
   const draftEdited = useRef(false);
   const selectedRow = useRef<HTMLButtonElement>(null);
   useLayoutEffect(() => {
+    const element = form.current;
     draftEdited.current = false;
-    if (form.current) initial.current = signature(form.current);
+    if (element) initial.current = signature(element);
     selectedRow.current?.scrollIntoView({ block: 'nearest' });
+    if (!element || selected !== undefined) return;
+
+    const listeners = new AbortController();
+    const options = { capture: true, signal: listeners.signal };
+    const captureDefaults = () => { initial.current = signature(element); };
+    // Text edits emit beforeinput. Radio and select changes start with a pointer or key.
+    for (const event of ['beforeinput', 'pointerdown', 'keydown']) {
+      element.addEventListener(event, captureDefaults, options);
+    }
+    element.addEventListener('input', () => {
+      draftEdited.current = true;
+      listeners.abort();
+    }, options);
+    return () => listeners.abort();
   }, [selected, revision]);
 
   function dirty() {
@@ -91,12 +106,7 @@ function StandardPortDialog({ initialMode, name, owner, locations, store, added,
   return <>
     <dialog ref={dialog => { if (dialog && !dialog.open) dialog.showModal(); }}
       className="v1-topology-dialog v1-add-port-dialog" aria-labelledby="port-manager-title"
-      onCancel={event => { event.preventDefault(); leave(); }}
-      onFocusCapture={() => {
-        // Include defaults populated before the user starts editing the draft.
-        if (!port && !draftEdited.current && form.current) initial.current = signature(form.current);
-      }}
-      onInputCapture={() => { draftEdited.current = true; }}>
+      onCancel={event => { event.preventDefault(); leave(); }}>
       <h3 id="port-manager-title">端口管理 · {name}</h3>
       {locations.length > 0 && <p className="v1-port-scope">共享定义 · 端口变更会应用到 {locations.join('、')}。</p>}
       <div className="v1-port-manager">
