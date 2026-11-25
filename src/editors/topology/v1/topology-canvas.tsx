@@ -38,6 +38,7 @@ import { handleId, nodeId, portKey, projectWiring, scopedWiringProblem } from '.
 import type { WiringEdge } from './topology-wiring';
 import type { CenterPlacement } from './topology-layout-edits';
 import { preserveDeletionLayout } from './topology-layout-edits';
+import { planInlineExpansion } from './inline-expansion-layout';
 import { SignalWire, signalColor } from './signal-wire';
 import '@xyflow/react/dist/style.css';
 
@@ -156,6 +157,7 @@ type Props = {
   restoreView?: CanvasView;
   move: (placements: readonly TopologyPlacement[], frame?: TopologyFrame) => void;
   resize: (frame: TopologyFrame, placementAdjustments: readonly TopologyPlacement[]) => void;
+  saveExpansion: (layout: ReturnType<typeof planInlineExpansion>) => void;
   connect: (scope: InstancePath, connection: Omit<Connection, 'id'>) => void;
   mapPort: (scope: InstancePath, mapping: PortMapping) => void;
   placingModule: boolean;
@@ -180,7 +182,7 @@ export function TopologyCanvas(props: Props) {
 function EditableTopologyCanvas({ project, instances, modulePath, selectedInstance, selectedPaths, pathResult, budgetHighlight, expanded,
   toggleModule, selectObject, selectObjects, enterModule, reparent, focusMoved, move, resize, connect, mapPort, add, placingModule, cancelPlacement,
   deleteInstances, deleteWiring, route, rename, copyModule, pasteModule, centerPlacement, report, undo, redo, openPort, onAddPort, newPort,
-  depth, fullPage, toggleFullPage, restoreView, viewHost, topologyActive }: Props) {
+  depth, fullPage, toggleFullPage, restoreView, viewHost, topologyActive, saveExpansion }: Props) {
   const flowStore = useStoreApi<CanvasNode, WiringEdge>();
   const boxSelection = useRef<readonly InstancePath[] | undefined>(undefined);
   const panWithSpace = useKeyPress('Space', { actInsideInputWithModifier: false });
@@ -213,6 +215,22 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
   const projection = useMemo(() => projectTopology(project, instances, modulePath, expanded, measured, resizePreview, portHeights),
     [project, instances, modulePath, expanded, measured, resizePreview, portHeights]);
   const { nodes: items, rootKey, nodeByKey, scopes } = projection;
+  const previousFrames = useRef(new Set<string>());
+  const pendingExpansion = useRef(new Set<string>());
+  useLayoutEffect(() => {
+    const visible = new Set(scopes.keys());
+    visible.delete(rootKey);
+    const pending = pendingExpansion.current;
+    for (const key of visible) if (!previousFrames.current.has(key)) pending.add(key);
+    for (const key of pending) if (!visible.has(key)) pending.delete(key);
+    previousFrames.current = visible;
+    if (!pending.size || !topologyActive) return;
+    // The newly revealed cards and multiline frame ports need their real canvas dimensions.
+    if (items.some(node => node.frame ? !portHeights.has(node.key) : !measured.has(node.key))) return;
+    const layout = planInlineExpansion(projection, pending);
+    pending.clear();
+    if (layout.moves.length || layout.frames.length) saveExpansion(layout);
+  }, [projection, items, scopes, rootKey, topologyActive, portHeights, measured, saveExpansion]);
   // An empty scope has nothing to fit. A queued fit would zoom to its first insertion.
   const [fitInitialNodes] = useState(() => !initialViewport && items.length > 0);
   useEffect(() => {
