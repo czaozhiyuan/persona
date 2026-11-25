@@ -89,7 +89,7 @@ function ExpandButton({ data, expanded }: { data: NodeData; expanded: boolean })
 }
 
 function AddPortButton({ data }: { data: NodeData }) {
-  const label = `添加端口 · ${data.name}`;
+  const label = `端口管理 · ${data.name}`;
   return data.addPort && <button type="button" className="v1-node-add-port nodrag nopan" aria-label={label} title={label} aria-haspopup="dialog"
     onDoubleClick={event => event.stopPropagation()}
     onClick={event => { event.stopPropagation(); data.addPort?.(); }}>＋端口</button>;

@@ -5,8 +5,8 @@ import type { ProjectStore } from '../../../state/v1/project-store';
 import { planPortDeletion } from '../../../state/v1/topology-edits';
 import './topology.css';
 
-export function PortDeletionDialog({ store, definitionId, portId, close }: {
-  store: ProjectStore; definitionId: string; portId: string; close: () => void;
+export function PortDeletionDialog({ store, definitionId, portId, close, onDeleted }: {
+  store: ProjectStore; definitionId: string; portId: string; close: () => void; onDeleted?: () => void;
 }) {
   const [{ base, plan }] = useState(() => {
     const base = store.getSnapshot().project;
@@ -21,7 +21,10 @@ export function PortDeletionDialog({ store, definitionId, portId, close }: {
       return;
     }
     const result = store.commit(() => plan.project);
-    if (result.ok) close();
+    if (result.ok) {
+      onDeleted?.();
+      close();
+    }
     else setError(result.message);
   }
   return <dialog ref={dialog => { if (dialog && !dialog.open) dialog.showModal(); }}

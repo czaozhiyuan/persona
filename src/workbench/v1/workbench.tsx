@@ -30,8 +30,7 @@ import { useLibrary } from './use-library';
 import { LibraryPanel } from './library-panel';
 import { LinkEditor } from './links/link-editor';
 import { createLinkOptions } from './links/link-options';
-import { addDefinitionPort } from '../../state/v1/module-ports';
-import { AddPortDialog } from './properties/add-port-dialog';
+import { PortManagerDialog } from './properties/add-port-dialog';
 import { structureLocations, structureScope } from './structure-scope';
 import { PropertiesPanel } from './properties/properties-panel';
 import { returnToTopology } from './view-navigation';
@@ -556,13 +555,6 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     });
   }
 
-  function addPort(port: PortDefinition) {
-    if (!targetPortOwner) return '目标对象已不存在。';
-    const result = store.commit(draft => addDefinitionPort(draft, targetPortOwner.definition.id, port));
-    if (!result.ok) return result.message;
-    setNewPort({ instancePath: targetPortOwner.instancePath, portId: port.id });
-  }
-
   function renameSelection() {
     setPropertiesOpen(true);
     requestAnimationFrame(() => {
@@ -840,9 +832,9 @@ export function Workbench({ store, loadExample, newProject }: Props) {
           <button type="button" onClick={() => setMoveUp(undefined)}>取消</button>
         </div>
       </dialog>}
-      {targetPortOwner && <AddPortDialog owner={targetPortOwner} name={targetPortOwner.instance?.name ?? targetPortOwner.definition.name}
+      {targetPortOwner && <PortManagerDialog owner={targetPortOwner} name={targetPortOwner.instance?.name ?? targetPortOwner.definition.name}
         locations={structureScope(linkOptions.graph.instances, targetPortOwner.definition.id)}
-        add={addPort} close={() => setPortTarget(undefined)} />}
+        store={store} added={portId => setNewPort({ instancePath: targetPortOwner.instancePath, portId })} close={() => setPortTarget(undefined)} />}
     </div>
   );
 }

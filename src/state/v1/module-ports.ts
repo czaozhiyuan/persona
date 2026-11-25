@@ -46,6 +46,13 @@ export function addDefinitionPort(project: Project, definitionId: string, port: 
   });
 }
 
+export function updateDefinitionPort(project: Project, definitionId: string, port: PortDefinition): Project {
+  return editDefinitionPorts(project, definitionId, ports => {
+    if (!ports.some(item => item.id === port.id)) throw new Error('目标端口已不存在。');
+    return ports.map(item => item.id === port.id ? port : item);
+  });
+}
+
 export function renamePort(project: Project, definitionId: string, portId: string, name: string): Project {
   return editDefinitionPorts(project, definitionId, ports =>
     ports.map(port => port.id === portId && !isPowerPort(port.type) ? { ...port, name: name.trim() || undefined } : port));
