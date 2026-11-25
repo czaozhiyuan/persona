@@ -5,6 +5,7 @@ import type { PortDefinition } from '../../../model/v1/types';
 import { field } from './wiring-forms';
 
 type PortActions = {
+  readings?: import('react').ReactNode;
   port: PortDefinition;
   name: string;
   label: string;
@@ -17,11 +18,12 @@ type PortActions = {
   budget?: (action: 'optical' | 'from' | 'to') => void;
 };
 
-export function PortActionsDialog({ port, name, label, rename, locations, exposure, disconnect, close, error, budget }: PortActions) {
+export function PortActionsDialog({ port, name, label, rename, locations, exposure, disconnect, close, error, budget, readings }: PortActions) {
   return <dialog ref={dialog => { if (dialog && !dialog.open) dialog.showModal(); }}
     className="v1-topology-dialog v1-port-actions" aria-labelledby="port-actions-title" onCancel={close}>
     <h3 id="port-actions-title">{name} · {label}</h3>
     <p>{portTypeLabels[port.type]} · {portDirectionLabels[port.direction]}</p>
+    {readings}
     {budget && (port.type === 'RF' || port.type === 'OPTICAL') && <div className="actions v1-port-budget-actions">
       {port.type === 'OPTICAL' && port.direction !== 'in' &&
         <button type="button" onClick={() => budget('optical')}>查看此处光功率</button>}

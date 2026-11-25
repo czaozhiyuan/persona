@@ -10,6 +10,7 @@ import { supportsDirection } from '../../model/v1/types';
 import { addGain, budgetValue, checkInputRating, logZero, unavailable } from './budget-metric';
 import type { BudgetMetric, InputRatingCheck } from './budget-metric';
 import { resolveEmpiricalValue } from './empirical-value';
+import { cochannelConflict, createOpticalOrigins } from './optical-origins';
 import { chooseRouteChannel, intersectCarrier, searchSignalPath } from './path-search';
 import type { SearchResult, SignalPath } from './path-search';
 import { buildSignalGraph, channelRoutingPorts, opticalSourceFlow, portFlowAt, signalPortKey } from './signal-graph';
@@ -61,9 +62,14 @@ export function createOpticalBudget(project: Project) {
   return createOpticalBudgetForGraph(buildSignalGraph(project));
 }
 
-export function createOpticalBudgetForGraph(graph: SignalGraph) {
+export function createOpticalBudgetForGraph(graph: SignalGraph, origins?: ReturnType<typeof createOpticalOrigins>) {
   const { showPath } = createPathNames(graph.instances);
   const wavelengthPorts = channelRoutingPorts(graph.edges);
+  const commonPorts = new Map(graph.instances.flatMap(({ instancePath, definition }) => {
+    if (definition.kind !== 'component' || !definition.wdm) return [];
+    const key = signalPortKey({ instancePath, portId: 'COM' });
+    return [[key, graph.ports.get(key)!] as const];
+  }));
   const instances = new Map(graph.instances.map(item => [JSON.stringify(item.instancePath), item]));
   const outgoing = new Map<SignalPort, SignalEdge[]>();
   for (const edge of graph.edges) {
@@ -88,6 +94,8 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
   }
 
   function finish(stages: OpticalStage[], gainDb: BudgetMetric<'dB'>, pathIssue?: PathIssue, receiverEdge?: SignalEdge): OpticalBudget {
+    const clash = stages.find(s => s.incoming?.gainDb.availability === 'unavailable' && s.incoming.gainDb.reason === cochannelConflict);
+    if (!pathIssue && clash) pathIssue = { status: 'ambiguous', endpoint: clash.endpoint, reason: cochannelConflict };
     const powerDbm = pathIssue ? unavailable('dBm', pathIssue.reason) : stages.at(-1)!.powerDbm;
     const status = powerDbm.availability === 'available' && gainDb.availability === 'available' ? 'valid'
       : gainDb.availability === 'available' || stages.some(item => item.powerDbm.availability === 'available'
@@ -145,6 +153,16 @@ export function createOpticalBudgetForGraph(graph: SignalGraph) {
 
   function advance(stages: OpticalStage[], edge: SignalEdge, gainDb: BudgetMetric<'dB'>) {
     const previous = stages.at(-1)!;
+    const common = commonPorts.size ? commonPorts.get(signalPortKey(edge.to.ref)) : undefined;
+    if (previous.channelId && common) {
+      origins ??= createOpticalOrigins(graph);
+      const carriers = origins(common, previous.channelId, portFlowAt(edge, edge.to));
+      if (carriers.unresolved.length || carriers.paths.length > 1) {
+        const gain = unavailable('dB', cochannelConflict);
+        stages.push(stage(edge.to, previous.channelId, unavailable('dBm', cochannelConflict), { edge, gainDb: gain }));
+        return gain;
+      }
+    }
     const source = edge.source;
     const query = { channelId: previous.channelId };
     const instance = instanceAt(edge.from.ref);
