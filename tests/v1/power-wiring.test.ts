@@ -10,7 +10,7 @@ import { connectBoundaryPort } from '../../src/state/v1/module-ports';
 import { createProjectStore } from '../../src/state/v1/project-store';
 import { removeWiring } from '../../src/state/v1/remove-topology-object';
 import { planInstanceMove } from '../../src/state/v1/reparent-instance';
-import { editModule, planPortDeletion } from '../../src/state/v1/topology-edits';
+import { editModule, editModuleWiring, planPortDeletion } from '../../src/state/v1/topology-edits';
 import { setWireRoute } from '../../src/state/v1/wire-routes';
 import { parseProjectJson, serializeProjectJson } from '../../src/storage/v1/project-json';
 
@@ -42,6 +42,9 @@ test('shared fanout wires keep distinct references through JSON, single-wire rem
     assert.deepEqual(sources.filter(s => s.publicPort.instancePath[0] === path).map(s => s.mappingId), ids);
   }
   const routed = ids.reduce((p, id, index) => setWireRoute(p, ['left'], { kind: 'mapping', id }, { x: 45, y: 20 + index }), wired);
+  const reattached = editModuleWiring(routed, 'box', m => ({ ...m, ports: [...m.ports, { ...port, id: 'Q' }],
+    portMappings: m.portMappings?.map(mapping => mappingId(mapping) === ids[1] ? { ...mapping, portId: 'Q' } : mapping) }));
+  assert.deepEqual(round(reattached).layout?.topologyWireRoutes?.map(route => route.wire.id), [ids[0], ids[2]]);
   const store = createProjectStore(round(routed));
   assert.equal(store.commit(p => connectBoundaryPort(p, 'box', 'P', target('B'))).ok, false);
   assert.deepEqual(store.commit(p => removeWiring(p, 'box', { kind: 'mapping', id: ids[1] })), { ok: true });

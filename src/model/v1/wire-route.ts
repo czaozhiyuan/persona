@@ -13,7 +13,7 @@ export function wireRouteKey(path: InstancePath, wire: WireRef) {
 export function wireEndpoints(module: ModuleDefinition, wire: WireRef) {
   if (wire.kind === 'mapping') {
     const mapping = module.portMappings?.find(m => mappingId(m) === wire.id);
-    return mapping && [mapping.target.instanceId, mapping.target.portId];
+    return mapping && [mapping.portId, mapping.target.instanceId, mapping.target.portId];
   }
   if (wire.kind === 'connection') {
     const c = module.connections?.find(c => c.id === wire.id);
