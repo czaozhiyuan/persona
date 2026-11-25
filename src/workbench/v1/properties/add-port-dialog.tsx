@@ -51,14 +51,16 @@ function StandardPortDialog({ initialMode, name, owner, locations, store, added,
   const port = ports.find(item => item.id === selected);
   const form = useRef<HTMLFormElement>(null);
   const initial = useRef('');
+  const draftEdited = useRef(false);
   const selectedRow = useRef<HTMLButtonElement>(null);
   useLayoutEffect(() => {
+    draftEdited.current = false;
     if (form.current) initial.current = signature(form.current);
     selectedRow.current?.scrollIntoView({ block: 'nearest' });
   }, [selected, revision]);
 
   function dirty() {
-    return !!form.current && (signature(form.current) !== initial.current ||
+    return !!form.current && (!!port || draftEdited.current) && (signature(form.current) !== initial.current ||
       Array.from(form.current.querySelectorAll('input')).some(input => input.validity.badInput));
   }
   function discard() {
@@ -89,7 +91,12 @@ function StandardPortDialog({ initialMode, name, owner, locations, store, added,
   return <>
     <dialog ref={dialog => { if (dialog && !dialog.open) dialog.showModal(); }}
       className="v1-topology-dialog v1-add-port-dialog" aria-labelledby="port-manager-title"
-      onCancel={event => { event.preventDefault(); leave(); }}>
+      onCancel={event => { event.preventDefault(); leave(); }}
+      onFocusCapture={() => {
+        // Include defaults populated before the user starts editing the draft.
+        if (!port && !draftEdited.current && form.current) initial.current = signature(form.current);
+      }}
+      onInputCapture={() => { draftEdited.current = true; }}>
       <h3 id="port-manager-title">端口管理 · {name}</h3>
       {locations.length > 0 && <p className="v1-port-scope">共享定义 · 端口变更会应用到 {locations.join('、')}。</p>}
       <div className="v1-port-manager">
