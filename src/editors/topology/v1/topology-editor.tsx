@@ -32,7 +32,7 @@ import './topology.css';
 
 import type { LibraryConfig } from '../../../library/v1/user-library';
 
-export function TopologyEditor({ multiplex, centerPlacement, linkControls, library, store, state, module, pathResult, graph, rename, expanded, persistExpansion, setExpanded, budgetHighlight, onPortBudget, onDcBudget, onAddPort, newPort, onSelectObject, onSelectObjects, moveAcrossLevels, focusMoved, copyObjects, pasteObjects, copyNotice, fullPage, toggleFullPage, restoreView, placingModule, setPlacingModule, toolsHost, viewHost, topologyActive }: {
+export function TopologyEditor({ multiplex, centerPlacement, linkControls, library, store, state, module, pathResult, graph, rename, expanded, persistExpansion, setExpanded, budgetHighlight, canEditLink, onPortBudget, onDcBudget, onAddPort, newPort, onSelectObject, onSelectObjects, moveAcrossLevels, focusMoved, copyObjects, pasteObjects, copyNotice, fullPage, toggleFullPage, restoreView, placingModule, setPlacingModule, toolsHost, viewHost, topologyActive }: {
   multiplex: MultiplexPower;
   linkControls: import('react').ReactNode;
   library: LibraryConfig;
@@ -40,7 +40,8 @@ export function TopologyEditor({ multiplex, centerPlacement, linkControls, libra
   persistExpansion: boolean;
   expanded: ReadonlySet<string>; setExpanded: (value: ReadonlySet<string>) => void;
   budgetHighlight?: BudgetHighlight;
-  onPortBudget: (action: 'optical' | 'from' | 'to', ref: EndpointRef) => void;
+  canEditLink: boolean;
+  onPortBudget: (action: 'optical' | 'from' | 'to', ref: EndpointRef, editCurrent?: boolean) => void;
   onDcBudget: (scope: InstancePath) => void;
   onAddPort: (path: InstancePath) => void;
   onSelectObject: (path: InstancePath, extend: boolean) => void;
@@ -209,7 +210,8 @@ export function TopologyEditor({ multiplex, centerPlacement, linkControls, libra
     return <PortActionsDialog port={port} label={portDisplayName(port, false, definition.ports, item)} name={instance?.name ?? definition.name} exposure={exposure}
       readings={<MultiplexDetails power={multiplex} endpoints={[{ instancePath: path, portId }]} />}
       locations={structureScope(graph.instances, definition.id)} error={message}
-      budget={action => { setPortAction(undefined); onPortBudget(action, { instancePath: path, portId }); }}
+      canEditLink={canEditLink}
+      budget={(action, editCurrent) => { setPortAction(undefined); onPortBudget(action, { instancePath: path, portId }, editCurrent); }}
       rename={name => {
         if (name === editablePortName(port) || commit(draft => renamePort(draft, definition.id, portId, name))) setPortAction(undefined);
       }}
