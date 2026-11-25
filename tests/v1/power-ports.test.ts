@@ -16,7 +16,7 @@ const root: ModuleDefinition = { kind: 'module', id: 'root', name: 'root', ports
 const base: Project = { id: 'test', name: 'Test', rootModuleDefinitionId: root.id, moduleDefinitions: [root], componentDefinitions: [] };
 
 test('factory power inputs are explicit, optional and confined to the active templates', () => {
-  const powered = ['rf-gain', 'rf-amplifier', 'laser', 'optical-source', 'dml', 'pcb', 'sfp', 'optical-switch', 'pd', 'mzm', 'rf-stage'];
+  const powered = ['rf-gain', 'rf-amplifier', 'laser', 'optical-source', 'dml', 'pcb', 'sfp', 'optical-switch', 'optical-amplifier', 'pd', 'mzm', 'rf-stage'];
   const found = [...factory.values()].filter(d => d.ports.some(p => p.id === 'DC_IN' && p.inputVoltageV)).map(d => d.id);
   assert.deepEqual(found.sort(), powered.map(id => 'library-' + id).sort());
   for (const id of found) {

@@ -30,8 +30,9 @@ test('each built-in can be inserted from a blank project and blank containers re
   const box = tree.resolveInstance(['box'])?.definition;
   assert.ok(box?.kind === 'module' && box.physicalEnclosure);
   assert.deepEqual(restored.layout?.topology, [{ instancePath: ['tx'], x: 12, y: 34 }]);
-  assert.ok(tree.resolveInstance(['item-' + builtInDefinitions.findIndex(d => d.id === 'library-rf-amplifier')])?.definition
-    ?.parameters?.every(parameter => parameter.defaultValue === undefined));
+  const amplifier = tree.resolveInstance(['item-' + builtInDefinitions.findIndex(d => d.id === 'library-rf-amplifier')]);
+  assert.deepEqual(amplifier?.parameters.get('gain')?.value, { kind: 'fixed', value: 5 });
+  assert.deepEqual(amplifier?.parameters.get('nf')?.value, { kind: 'fixed', value: 3 });
 });
 
 test('blank devices are independent, empty and restored with their nested placement in one history entry', () => {
