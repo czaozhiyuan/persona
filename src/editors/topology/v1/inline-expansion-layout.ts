@@ -1,9 +1,9 @@
-import type { CoordinateExtent, Rect } from '@xyflow/react';
+import type { CoordinateExtent, Rect, XYPosition } from '@xyflow/react';
 import type { Project, TopologyFrame, TopologyPlacement } from '../../../model/v1/types';
 import { moveTopologyNodes, resizeTopologyFrame } from '../../../state/v1/topology-edits';
 import { keepNodeInside, moduleExtent } from './frame-geometry';
 import { framePadding } from './module-frame';
-import type { projectTopology } from './topology-projection';
+import { projectTopology } from './topology-projection';
 
 const right = (r: Rect) => r.x + r.width;
 const bottom = (r: Rect) => r.y + r.height;
@@ -12,15 +12,20 @@ const overlaps = (a: Rect, b: Rect) =>
 
 export type ExpansionLayout = { moves: TopologyPlacement[]; frames: TopologyFrame[] };
 
-export function applyExpansionLayout(project: Project, layout?: ExpansionLayout) {
-  return layout ? layout.frames.reduce(resizeTopologyFrame, moveTopologyNodes(project, layout.moves)) : project;
+export function applyExpansionLayout(project: Project, layout: ExpansionLayout) {
+  return layout.frames.reduce(resizeTopologyFrame, moveTopologyNodes(project, layout.moves));
 }
 
-export function extendExpansionLayout(previous: ExpansionLayout | undefined, next: ExpansionLayout): ExpansionLayout {
-  if (!previous) return next;
-  const moves = new Map([...previous.moves, ...next.moves].map(item => [JSON.stringify(item.instancePath), item]));
-  const frames = new Map([...previous.frames, ...next.frames].map(item => [JSON.stringify(item.modulePath), item]));
-  return { moves: [...moves.values()], frames: [...frames.values()] };
+export function projectInlineExpansion(...args: [...Parameters<typeof projectTopology>, anchors?: ReadonlyMap<string, XYPosition>]) {
+  const [project, instances, scope, expanded, measured, resizePreview, portHeights, anchors] = args;
+  const manual = projectTopology(project, instances, scope, expanded, measured, undefined, portHeights);
+  const opened = new Set(manual.scopes.keys());
+  opened.delete(manual.rootKey);
+  const layout = planInlineExpansion(manual, opened, undefined, anchors);
+  const displayed = applyExpansionLayout(project, layout);
+  const view = displayed === project && !resizePreview ? manual
+    : projectTopology(displayed, instances, scope, expanded, measured, resizePreview, portHeights);
+  return { manual, view, layout };
 }
 
 function nearestSlot(card: Rect, obstacles: readonly Rect[], extent: CoordinateExtent): Rect {
@@ -57,23 +62,31 @@ function nearestSlot(card: Rect, obstacles: readonly Rect[], extent: CoordinateE
 }
 
 export function planInlineExpansion(projection: ReturnType<typeof projectTopology>, opened: ReadonlySet<string>,
-  beforeEdit?: ReturnType<typeof projectTopology>) {
+  beforeEdit?: ReturnType<typeof projectTopology>, anchors?: ReadonlyMap<string, XYPosition>) {
   const moves: TopologyPlacement[] = [];
   const frames: TopologyFrame[] = [];
-  const growing = new Set(opened);
+  const enlarged = new Set<string>();
+  const priority = (key: string) => {
+    if (anchors?.has(key)) return 3;
+    if (enlarged.has(key)) return 2;
+    return Number(opened.has(key));
+  };
   const resized = new Map<string, Rect>();
   for (const [key, scope] of [...projection.scopes].reverse()) {
     const members = scope.members.map(node => {
       const frame = resized.get(node.key) ?? node.frame?.display;
-      const bounds = frame ? { ...node.bounds, width: frame.width, height: frame.height } : node.bounds;
+      const anchor = anchors?.get(node.key);
+      const position = anchor ?? node.bounds;
+      const size = frame ?? node.bounds;
+      const bounds = { x: position.x, y: position.y, width: size.width, height: size.height };
       return { node, bounds };
     });
-    if (!opened.has(key) && !members.some(({ node }) => growing.has(node.key))) continue;
+    if (!opened.has(key) && !members.some(({ node }) => priority(node.key) > 0)) continue;
 
     const owner = projection.nodeByKey.get(key)?.frame;
     const extent: CoordinateExtent = owner ? moduleExtent(owner.display, owner.insets) : [[-Infinity, -Infinity], [Infinity, Infinity]];
     // Reserve clear positions before finding slots so a displaced sibling cannot displace a distant one.
-    members.sort(({ node: a }, { node: b }) => Number(growing.has(b.key)) - Number(growing.has(a.key))
+    members.sort(({ node: a }, { node: b }) => priority(b.key) - priority(a.key)
       || a.preferred.y - b.preferred.y || a.preferred.x - b.preferred.x || (a.key < b.key ? -1 : Number(a.key > b.key)));
     const occupied: Rect[] = [];
     const moving = new Set<typeof members[number]>();
@@ -84,7 +97,10 @@ export function planInlineExpansion(projection: ReturnType<typeof projectTopolog
     for (const member of moving) {
       member.bounds = nearestSlot(member.bounds, occupied, extent);
       occupied.push(member.bounds);
-      moves.push({ instancePath: member.node.item.instancePath, x: member.bounds.x, y: member.bounds.y });
+    }
+    const repositioned = members.filter(({ node, bounds }) => bounds.x !== node.bounds.x || bounds.y !== node.bounds.y);
+    for (const { node, bounds } of repositioned) {
+      moves.push({ instancePath: node.item.instancePath, x: bounds.x, y: bounds.y });
     }
 
     if (!owner) continue;
@@ -95,17 +111,17 @@ export function planInlineExpansion(projection: ReturnType<typeof projectTopolog
     // The compact minimum itself may have grown with a measured port row or child card.
     const previous = owner.saved ?? beforeEdit?.nodeByKey.get(key)?.frame?.display ?? owner.base;
     const grew = width > previous.width + 1e-6 || height > previous.height + 1e-6;
-    if (!grew && (owner.saved || !moving.size)) continue;
+    if (!grew && (owner.saved || !repositioned.length)) continue;
 
     // Saving an automatic frame also keeps its origin fixed if a moved card defined its old left/top edge.
     const frame = { x, y, width, height };
     frames.push({ modulePath: scope.path, ...frame });
     resized.set(key, frame);
-    if (grew) growing.add(key);
+    if (grew) enlarged.add(key);
     const nextExtent = moduleExtent(frame, insets);
     for (const member of members) {
       const { node, bounds } = member;
-      if (moving.has(member)) continue;
+      if (bounds.x !== node.bounds.x || bounds.y !== node.bounds.y) continue;
       const next = keepNodeInside({ ...node.bounds, ...node.preferred }, nextExtent);
       if (next.x === bounds.x && next.y === bounds.y) continue;
       moves.push({ instancePath: node.item.instancePath, x: next.x !== bounds.x ? bounds.x : node.preferred.x,
