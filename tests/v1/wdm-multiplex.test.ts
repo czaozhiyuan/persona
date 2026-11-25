@@ -136,3 +136,56 @@ test('each common segment reports power at its own end after attenuation and spl
   near(mux.at(endpoint('B','wdm','COM'))!.in.known, .010299956639812 + 10 * Math.log10(.75) - 1);
   assert.equal(mux.at(endpoint('A','wdm','COM'))!.in.known.availability, 'unavailable');
 });
+
+test('trial carrier changes and clears apply to both COMs and the originating named path', () => {
+  const p = wdmProject(), resolver = createPathResolver(p), link = p.namedLinks![0];
+  for (const [channelId, active] of [['CWDM_1391', false], ['CWDM_1311', true], [undefined, true]] as const) {
+    const trials = channelId ? [{ endpoint: link.from!, channelId, powerDbm: 0 }] : [];
+    const graph = createMultiplexPower(resolver.graph, trials);
+    const a = graph.at(endpoint('A', 'wdm', 'COM'))!, b = graph.at(endpoint('B', 'wdm', 'COM'))!;
+    assert.equal(resolver.resolveNamedLink(link, { opticalSources: trials.map(t => ({...t.endpoint, channelId: t.channelId})) }).status,
+      active ? 'resolved' : 'unreachable');
+    near(a.out.known, active ? 2.010299956639812 : -1);
+    near(b.in.known, active ? .010299956639812 : -3);
+    near(a.in.known, .010299956639812);
+    near(b.out.known, 2.010299956639812);
+  }
+});
+
+test('trial-only cochannel injection blocks MZM and DML PD/RF power until it moves or clears', () => {
+  for (const i of [0, 2]) {
+    const p = wdmProject(true), tx = i === 0 ? 'A' : 'B', box = p.moduleDefinitions[i === 0 ? 1 : 2];
+    p.componentDefinitions = [...p.componentDefinitions, { kind: 'component', id: 'external', name: 'External',
+      ports: [{id: 'OUT', direction: 'out', type: 'OPTICAL'}] }];
+    box.instances = [...box.instances,{id: 'external', name: 'External', definitionId: 'external'}];
+    box.connections = [...box.connections!, {id: 'inject', from: local('external','OUT'), to: local('wdm','CH' + (i+1))}];
+    const link = p.namedLinks![i], other = p.namedLinks![i === 0 ? 2 : 0];
+    const budget = createLinkBudget(p), resolver = createPathResolver(p);
+    if (i === 2) {
+      const changedDml = [{ endpoint: endpoint('B', 'wave2', 'OPT_OUT'), channelId: 'CWDM_1391' as const, powerDbm: 0 }];
+      const com = createMultiplexPower(resolver.graph, changedDml).at(endpoint('B', 'wdm', 'COM'))!;
+      near(com.out.known, -1);
+      const rf = budget.calculateNamedLink(link, { frequencyGHz: 15, inputPowerDbm: -20, opticalSources: changedDml });
+      assert.equal(rf.powerDbm.availability, 'unavailable');
+    }
+    for (const [channelId, conflict] of [[link.channelId, true], ['CWDM_1391', false], [undefined, false]] as const) {
+      const trials = channelId ? [{endpoint: endpoint(tx,'external','OUT'), channelId, powerDbm: 0}] : [];
+      const input = {frequencyGHz: 15, inputPowerDbm: -20, opticalSources: trials};
+      const point = budget.calculateNamedLink(link, input);
+      assert.equal(point.kind, 'conversion');
+      const com = createMultiplexPower(resolver.graph, trials).at(endpoint(tx, 'wdm', 'COM'))!;
+      assert.equal(com.out.partial, conflict);
+      if (conflict) {
+        near(com.out.known, -1);
+        assert.equal(point.segments[0].pdPowerDbm.availability, 'unavailable');
+        assert.equal(point.powerDbm.availability, 'unavailable');
+        assert.match(point.powerDbm.reason, /同方向、同波长/);
+      } else {
+        near(point.segments[0].pdPowerDbm, i === 0 ? -4 - 10 * Math.log10(2) : -4);
+        near(point.powerDbm, i === 0 ? -66.01580271955808 : -29.938200260161125);
+      }
+      const opposite = budget.calculateNamedLink(other, input);
+      near(opposite.powerDbm, i === 0 ? -29.938200260161125 : -66.01580271955808);
+    }
+  }
+});

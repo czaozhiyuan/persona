@@ -33,7 +33,7 @@ export function createOpticalOrigins(graph: SignalGraph, trials: readonly Optica
     function trace(start: SignalPort, eo?: SignalEdge) {
       const carrier = eo?.channels.kind === 'enter' ? eo.channels.channelIds : undefined;
       const result = searchSignalPath({ starts: [start], startFlow: opticalSourceFlow, target, targetFlow: flow,
-        targetCarrier: [channel], startCarriers: !eo && !start.definition.opticalEmitter ? selected : undefined,
+        targetCarrier: [channel], startCarriers: eo ? undefined : selected,
         carrier, adjacent, opticalOnly: true });
       if (result.status === 'unreachable') return;
       if (result.status !== 'resolved') {
