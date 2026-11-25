@@ -231,7 +231,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
       <section className="v1-object-ports">
         <div className="v1-object-ports-heading">
           <h3>端口</h3>
-          <button type="button" className="primary" aria-haspopup="dialog" onClick={() => onAddPort(instancePath)}>＋ 添加端口</button>
+          <button type="button" className="primary" aria-haspopup="dialog" onClick={() => onAddPort(instancePath)}>端口管理</button>
         </div>
         <p className="v1-property-effective">编辑目标 · {instance?.name ?? definition.name}{definition.kind === 'module' && '（模块对外端口）'}</p>
         {sharedLocations.length > 0 && <p className="v1-property-effective">共享定义 · 影响 {sharedLocations.join('、')}</p>}

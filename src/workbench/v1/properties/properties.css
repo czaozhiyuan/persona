@@ -3,6 +3,24 @@
 .v1-properties h3 { margin: 1rem 0 .6rem; font-size: .95rem; color: #275d56; }
 .v1-object-ports-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; }
 .v1-object-ports-heading h3 { margin: 0; }
+.v1-topology-dialog.v1-add-port-dialog { width: min(67rem, 94vw); max-height: 90vh; box-sizing: border-box; }
+.v1-add-port-dialog[open] { display: flex; flex-direction: column; }
+.v1-port-scope { flex: none; max-height: 12vh; overflow: auto; margin: 0 0 .75rem; }
+.v1-port-manager { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); min-height: 0; gap: 1rem; }
+.v1-port-manager h4 { margin: 0 0 .5rem; color: #275d56; }
+.v1-port-list, .v1-port-manager form { display: flex; flex-direction: column; min-height: 0; min-width: 0; margin: 0; }
+.v1-port-list { border-right: 1px solid #d2dfdb; padding-right: 1rem; }
+.v1-port-rows, .v1-port-detail-fields { overflow: auto; min-height: 0; }
+.v1-port-rows, .v1-port-detail-fields { flex: 1 1 auto; }
+.v1-port-rows button { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center;
+  gap: .4rem; text-align: left; padding: .5rem; border: 1px solid transparent; border-radius: .35rem; background: transparent; }
+.v1-port-rows strong { overflow-wrap: anywhere; }
+.v1-port-rows span { color: #445e5a; font-size: .8rem; }
+.v1-port-rows button[aria-pressed="true"] { background: #e2f2eb; border-color: #6d9d8d; }
+.v1-port-new { border-top: 1px solid #d2dfdb; padding-top: .5rem; margin-top: .5rem; }
+.v1-port-manager .actions { flex-wrap: wrap; margin-top: .6rem; }
+.v1-port-manager .v1-port-delete { color: #88483f; border: 1px solid #bc877f; background: #fff; }
+.v1-port-manager .error { overflow: auto; max-height: 12vh; }
 .v1-add-port-dialog h3, .v1-add-port-dialog p { overflow-wrap: anywhere; }
 .v1-add-port-dialog form label { display: grid; min-width: 0; gap: .25rem; margin: .6rem 0; }
 .v1-add-port-dialog input:not([type="radio"]), .v1-add-port-dialog select { width: 100%; min-width: 0; }
@@ -17,9 +35,15 @@
 }
 .v1-port-radio-group input { margin: .18em 0 0; accent-color: #267e73; }
 .v1-port-parameters summary { cursor: pointer; }
-@media (max-width: 36rem) {
+@media (max-width: 52rem) {
   .v1-port-choices { grid-template-columns: minmax(0, 1fr) minmax(0, .65fr); }
   .v1-port-parameters { grid-column: 1 / -1; }
+}
+@media (max-width: 36rem) {
+  .v1-port-manager { grid-template-columns: minmax(0, 1fr); overflow: auto; }
+  .v1-port-list { border-right: 0; padding-right: 0; }
+  .v1-port-rows { max-height: 18vh; flex: auto; }
+  .v1-port-detail-fields { max-height: 38vh; }
 }
 .v1-enclosure-dimensions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .35rem; }
 .v1-property-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .85rem; }

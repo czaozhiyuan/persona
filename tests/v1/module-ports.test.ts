@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { buildSignalGraph, signalPortKey } from '../../src/engine/v1/signal-graph';
-import { addDefinitionPort, connectBoundaryPort, exposeModulePort, renamePort } from '../../src/state/v1/module-ports';
+import { addDefinitionPort, connectBoundaryPort, exposeModulePort, renamePort, updateDefinitionPort } from '../../src/state/v1/module-ports';
 import { createProjectStore } from '../../src/state/v1/project-store';
 import { editModule, planPortDeletion } from '../../src/state/v1/topology-edits';
 import { parseProjectJson, serializeProjectJson } from '../../src/storage/v1/project-json';
@@ -102,4 +102,27 @@ test('declaring a port edits the shared definition and preserves wiring, transfe
   assert.equal(buildSignalGraph(module).ports.get(signalPortKey({
     instancePath: ['TX_A'], portId: 'module-output',
   }))?.unmapped, true);
+});
+
+test('editing a shared boundary port keeps its references and rejects incompatible changes atomically', () => {
+  const base = exposeModulePort(addSource(sample()), ['TX_A'], target, '调制器射频口');
+  const wired = editModule(base, base.rootModuleDefinitionId, module => ({
+    ...module, connections: [...(module.connections ?? []), incoming],
+  }));
+  const store = createProjectStore(wired);
+  const port = store.resolveInstance(['TX_A'])!.definition.ports.find(port => port.id === 'RF_IN')!;
+  const edited = { ...port, name: '额定输入', inputRating: { unit: 'dBm' as const, max: 12 } };
+  assert.equal(store.commit(project => updateDefinitionPort(project, 'tx', edited)).ok, true);
+  const saved = store.getSnapshot().project;
+  assert.deepEqual(store.resolveInstance(['TX_B'])!.definition.ports.find(p => p.id === port.id), edited);
+  assert.deepEqual(saved.namedLinks, wired.namedLinks);
+  assert.deepEqual(saved.moduleDefinitions.map(d => [d.connections, d.portMappings]),
+    wired.moduleDefinitions.map(d => [d.connections, d.portMappings]));
+  assert.equal(store.commit(project => updateDefinitionPort(project, 'tx', { ...edited, direction: 'out', inputRating: undefined })).ok, false);
+  assert.equal(store.getSnapshot().project, saved);
+  store.undo();
+  assert.deepEqual(store.getSnapshot().project, wired);
+  assert.equal(store.getSnapshot().canUndo, false);
+  store.redo();
+  assert.deepEqual(parseProjectJson(serializeProjectJson(store.getSnapshot().project)), saved);
 });

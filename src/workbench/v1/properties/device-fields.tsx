@@ -59,7 +59,6 @@ export function PortFields({ port, occurrence, save, remove }: {
 
 function PortControls({ port, occurrence, remove }: { port: PortDefinition; occurrence: ResolvedInstance; remove: () => void }) {
   const { type, direction } = port;
-  const ratings = ratingUnits(type, direction);
   return <>
     {!isPowerPort(type) && <label>显示名称<input name="name" defaultValue={editablePortName(port)} placeholder={portDisplayName(port)} /></label>}
     <label>端口类型<select name="type" value={type} onChange={() => { /* Saved by the form's change handler. */ }}>
@@ -68,35 +67,55 @@ function PortControls({ port, occurrence, remove }: { port: PortDefinition; occu
     <label>方向<select name="direction" value={direction} onChange={() => { /* Saved by the form's change handler. */ }}>
       <option value="in">输入</option><option value="out">输出</option>
     </select></label>
-    {type === 'OPTICAL' && <ChannelField name="channels" label="适用通道（未选择表示不限）" value={port.channelIds} multiple />}
-    {type === 'OPTICAL' && direction === 'out' && occurrence.definition.kind === 'component' && <>
-      <label>光源端口<select name="emitter" defaultValue={port.opticalEmitter ? 'yes' : ''}>
-        <option value="">普通光输出</option><option value="yes">连续光源输出</option>
-      </select></label>
-      {port.opticalEmitter && <QuantityField name="sourcePower" label="平均信号光功率" unit="dBm" kinds={opticalKinds}
-        value={port.opticalEmitter.powerDbm} parameters={occurrence.definition.parameters ?? []} />}
-    </>}
-    {ratings.length > 0 && <InputRatingField key={type} units={ratings} rating={port.inputRating} />}
-    {isSupplyOutput(occurrence.definition, port) ? <>
-      <PortVoltageField type={type} direction={direction} value={port.outputVoltageV?.kind === 'fixed' ? port.outputVoltageV.value : undefined} />
-      <SupplyCapacityField value={port.supplyCapacity} />
-    </> : isPowerPort(type) && <PortVoltage key={type + direction} port={port} occurrence={occurrence} />}
+    <PortParameterFields port={port} occurrence={occurrence} />
     <div className="actions">
       <button type="button" onClick={remove}>预览删除端口</button>
     </div>
   </>;
 }
 
-function PortVoltage({ port, occurrence }: { port: PortDefinition; occurrence: ResolvedInstance }) {
+export function PortParameterFields({ port, occurrence, draft = false }: {
+  port: PortDefinition; occurrence: ResolvedInstance; draft?: boolean;
+}) {
+  const { type, direction } = port;
+  const ratings = ratingUnits(type, direction);
+  return <>
+    {type === 'OPTICAL' && <ChannelField name="channels" label="适用通道（未选择表示不限）" value={port.channelIds} multiple />}
+    {type === 'OPTICAL' && direction === 'out' && occurrence.definition.kind === 'component' &&
+      <EmitterFields port={port} occurrence={occurrence} draft={draft} />}
+    {ratings.length > 0 && <InputRatingField key={draft ? ratings.join('/') : type} units={ratings} rating={port.inputRating} />}
+    {isPowerPort(type) && <PortVoltage key={draft ? direction : type + direction} port={port} occurrence={occurrence} draft={draft} />}
+    {isSupplyOutput(occurrence.definition, port) && <SupplyCapacityField value={port.supplyCapacity} />}
+    {draft && !isPowerPort(type) && type !== 'OPTICAL' && !ratings.length && <p className="v1-property-effective">无需额外参数</p>}
+  </>;
+}
+
+function EmitterFields({ port, occurrence, draft }: { port: PortDefinition; occurrence: ResolvedInstance; draft: boolean }) {
+  const [enabled, setEnabled] = useState(!!port.opticalEmitter);
+  const active = draft ? enabled : !!port.opticalEmitter;
+  return <>
+    <label>光源端口<select name="emitter" value={active ? 'yes' : ''} onChange={event => setEnabled(event.target.value === 'yes')}>
+      <option value="">普通光输出</option><option value="yes">连续光源输出</option>
+    </select></label>
+    {active && <QuantityField name="sourcePower" label="平均信号光功率" unit="dBm" kinds={opticalKinds}
+      value={port.opticalEmitter?.powerDbm} parameters={occurrence.definition.parameters ?? []} />}
+  </>;
+}
+
+function PortVoltage({ port, occurrence, draft }: { port: PortDefinition; occurrence: ResolvedInstance; draft: boolean }) {
   const value = port.direction === 'in' ? port.inputVoltageV : port.outputVoltageV;
-  const parameters = voltageParameters(occurrence.definition.parameters);
-  const parameterId = value?.kind === 'parameter' ? value.parameterId : '';
-  const effective = parameterId ? resolveEmpiricalValue('V', value, {}, occurrence) : undefined;
-  const mapped = !value ? occurrence.mappedVoltages?.get(port.id) : undefined;
+  const supply = isSupplyOutput(occurrence.definition, port);
+  const parameters = supply ? [] : voltageParameters(occurrence.definition.parameters);
+  const saved = value?.kind === 'parameter' ? value.parameterId : '';
+  const [reference, setReference] = useState(saved);
+  if (supply && reference) setReference('');
+  const parameterId = draft ? reference : saved;
+  const effective = parameterId ? resolveEmpiricalValue('V', { kind: 'parameter', parameterId }, {}, occurrence) : undefined;
+  const mapped = !supply && !value ? occurrence.mappedVoltages?.get(port.id) : undefined;
   return <>
     {mapped !== undefined && <p className="v1-property-effective">内部端口电压 · {mapped} {port.type === 'AC_POWER' ? 'V RMS' : 'V'}</p>}
     {!!parameters.length && <label>{port.direction === 'in' ? '标称输入电压来源' : '输出电压来源'}
-      <select name={port.direction === 'in' ? 'inputVoltageParameter' : 'outputVoltageParameter'} value={parameterId} onChange={() => { /* Saved by the form's change handler. */ }}>
+      <select name={port.direction === 'in' ? 'inputVoltageParameter' : 'outputVoltageParameter'} value={parameterId} onChange={event => setReference(event.target.value)}>
         <option value="">固定值或留空</option>
         {parameters.map(parameter => <option key={parameter.id} value={parameter.id}>{parameter.name}</option>)}
       </select>

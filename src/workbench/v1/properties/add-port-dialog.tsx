@@ -1,80 +1,155 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
+import type { RefObject } from 'react';
+import { PortDeletionDialog } from '../../../editors/topology/v1/port-deletion-dialog';
 import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
 import { isPowerPort, isSupplyOutput } from '../../../model/v1/types';
 import type { PortDefinition, PortDirection, PortType } from '../../../model/v1/types';
-import { portTypeLabels } from '../labels';
-import { ChannelField } from './channel-field';
-import { InputRatingField, ratingUnits, readInputRating } from './input-rating-field';
-import { PortVoltageField, readPortVoltage, voltageParameters, voltageTitle } from './port-voltage-field';
-import { readSupplyCapacity, SupplyCapacityField } from './dc-fields';
-import { channelList } from './value-fields';
+import { addDefinitionPort, updateDefinitionPort } from '../../../state/v1/module-ports';
+import type { ProjectStore } from '../../../state/v1/project-store';
+import { editablePortName, portDisplayName, portTypeLabels } from '../labels';
+import { PortParameterFields, readPort } from './device-fields';
+import { ratingUnits } from './input-rating-field';
 
-export function AddPortDialog({ name, owner, locations, add, close }: {
-  owner: ResolvedInstance;
-  name: string;
-  locations: readonly string[];
-  add: (port: PortDefinition) => string | undefined;
-  close: () => void;
+function signature(form: HTMLFormElement) {
+  return JSON.stringify(Array.from(new FormData(form).entries()));
+}
+
+export function PortManagerDialog({ name, owner, locations, store, added, close }: {
+  owner: ResolvedInstance; name: string; locations: readonly string[]; store: ProjectStore;
+  added: (id: string) => void; close: () => void;
 }) {
+  const { ports, id: definitionId } = owner.definition;
+  const [selected, setSelected] = useState<string | undefined>(ports[0]?.id);
+  const [revision, setRevision] = useState(0);
+  const [deletion, setDeletion] = useState<string>();
+  const port = ports.find(item => item.id === selected);
+  const form = useRef<HTMLFormElement>(null);
+  const initial = useRef('');
+  const selectedRow = useRef<HTMLButtonElement>(null);
+  useLayoutEffect(() => {
+    if (form.current) initial.current = signature(form.current);
+    selectedRow.current?.scrollIntoView({ block: 'nearest' });
+  }, [selected, revision]);
+
+  function dirty() {
+    return !!form.current && (signature(form.current) !== initial.current ||
+      Array.from(form.current.querySelectorAll('input')).some(input => input.validity.badInput));
+  }
+  function discard() {
+    return !dirty() || window.confirm('放弃尚未保存的端口修改？');
+  }
+  function leave() {
+    if (discard()) close();
+  }
+  function select(id?: string) {
+    if (!discard()) return;
+    setSelected(id);
+    setRevision(value => value + 1);
+  }
+  function save(next: PortDefinition) {
+    if (port && !dirty()) return;
+    if (port && JSON.stringify(next) === JSON.stringify(port)) {
+      setRevision(value => value + 1);
+      return;
+    }
+    const result = store.commit(project => port
+      ? updateDefinitionPort(project, definitionId, next) : addDefinitionPort(project, definitionId, next));
+    if (!result.ok) throw new Error(result.message);
+    if (!port) added(next.id);
+    setSelected(next.id);
+    setRevision(value => value + 1);
+  }
+
+  return <>
+    <dialog ref={dialog => { if (dialog && !dialog.open) dialog.showModal(); }}
+      className="v1-topology-dialog v1-add-port-dialog" aria-labelledby="port-manager-title"
+      onCancel={event => { event.preventDefault(); leave(); }}>
+      <h3 id="port-manager-title">端口管理 · {name}</h3>
+      {locations.length > 0 && <p className="v1-port-scope">共享定义 · 端口变更会应用到 {locations.join('、')}。</p>}
+      <div className="v1-port-manager">
+        <section className="v1-port-list">
+          <h4>当前端口</h4>
+          <div className="v1-port-rows">
+            {ports.map(item => <button key={item.id} type="button" aria-pressed={item.id === selected}
+              ref={item.id === selected ? selectedRow : undefined}
+              onClick={() => { if (item.id !== selected) select(item.id); }}>
+              <strong>{portDisplayName(item, false, ports, owner)}</strong>
+              <span>{portTypeLabels[item.type]}</span><span>{item.direction === 'in' ? '输入' : '输出'}</span>
+            </button>)}
+            {!ports.length && <p className="empty">暂无端口</p>}
+          </div>
+          <div className="v1-port-new"><button type="button" onClick={() => select()}>＋ 新建端口</button></div>
+        </section>
+        <PortDetail key={revision} form={form} port={port} owner={owner} save={save} close={leave} remove={() => {
+          if (port && discard()) {
+            setRevision(value => value + 1);
+            setDeletion(port.id);
+          }
+        }} />
+      </div>
+    </dialog>
+    {deletion && <PortDeletionDialog store={store} definitionId={definitionId} portId={deletion}
+      close={() => setDeletion(undefined)} onDeleted={() => {
+        const index = ports.findIndex(item => item.id === deletion);
+        setSelected((ports[index + 1] ?? ports[index - 1])?.id);
+        setRevision(value => value + 1);
+      }} />}
+  </>;
+}
+
+function PortDetail({ form, port, owner, save, remove, close }: {
+  form: RefObject<HTMLFormElement | null>; port?: PortDefinition; owner: ResolvedInstance;
+  save: (next: PortDefinition) => void; remove: () => void; close: () => void;
+}) {
+  const [seed, setSeed] = useState<PortDefinition>(() => port ?? { id: crypto.randomUUID(), type: 'RF', direction: 'in' });
   const [error, setError] = useState('');
-  const [type, setType] = useState<PortType>('RF');
-  const [direction, setDirection] = useState<PortDirection>('in');
-  const optical = type === 'OPTICAL';
-  const ratings = ratingUnits(type, direction);
-  const [reference, setReference] = useState('');
-  const supply = isSupplyOutput(owner.definition, { type, direction });
-  const voltageOptions = supply ? [] : voltageParameters(owner.definition.parameters);
-  const power = isPowerPort(type);
-  return <dialog ref={dialog => { if (dialog && !dialog.open) dialog.showModal(); }}
-    className="v1-topology-dialog v1-add-port-dialog" aria-labelledby="add-port-title" onCancel={close}>
-    <h3 id="add-port-title">添加端口 · {name}</h3>
-    {locations.length > 0 && <p>端口属于共享定义，以下实例将同时新增端口：{locations.join('、')}。</p>}
-    <form onChange={() => { if (error) setError(''); }} onSubmit={event => {
-      event.preventDefault();
-      const data = new FormData(event.currentTarget);
-      const result = add({ id: crypto.randomUUID(), name: power ? undefined : String(data.get('name')),
-        type, direction,
-        channelIds: optical ? channelList(data, 'channels') : undefined,
-        inputRating: readInputRating(data, ratings),
-        supplyCapacity: supply ? readSupplyCapacity(data) : undefined,
-        inputVoltageV: power && direction === 'in' ? readPortVoltage(data, direction) : undefined,
-        outputVoltageV: power && direction === 'out' ? readPortVoltage(data, direction) : undefined,
-      });
-      if (result) setError(result);
-      else close();
-    }}>
-      {!power && <label>端口名称<input name="name" required autoFocus /></label>}
+  const { type, direction } = seed;
+  function change(nextType: PortType, nextDirection: PortDirection) {
+    const power = isPowerPort(nextType);
+    const ratings = ratingUnits(nextType, nextDirection);
+    setSeed({ ...seed, type: nextType, direction: nextDirection,
+      name: power ? undefined : seed.name,
+      channelIds: nextType === 'OPTICAL' ? seed.channelIds : undefined,
+      opticalEmitter: nextType === 'OPTICAL' && nextDirection === 'out' ? seed.opticalEmitter : undefined,
+      inputRating: seed.inputRating && ratings.includes(seed.inputRating.unit) ? seed.inputRating : undefined,
+      inputVoltageV: power && nextDirection === 'in' ? seed.inputVoltageV : undefined,
+      outputVoltageV: power && nextDirection === 'out' ? seed.outputVoltageV : undefined,
+      supplyCapacity: isSupplyOutput(owner.definition, { type: nextType, direction: nextDirection }) ? seed.supplyCapacity : undefined,
+    });
+  }
+  return <form ref={form} onChange={() => setError('')} onSubmit={event => {
+    event.preventDefault();
+    try { save(readPort(new FormData(event.currentTarget), seed)); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
+  }}>
+    <h4>{port ? '端口详情' : '新建端口'}</h4>
+    <div className="v1-port-detail-fields">
+      {!isPowerPort(type) && <label>端口名称<input name="name" required={!port} defaultValue={editablePortName(seed)}
+        placeholder={port ? portDisplayName(seed) : undefined} /></label>}
       <div className="v1-port-choices">
         <fieldset className="v1-port-radio-group">
           <legend>类型</legend>
           {Object.entries(portTypeLabels).map(([value, label]) => <label key={value}>
-            <input type="radio" name="type" value={value} checked={type === value} onChange={() => { setType(value as PortType); setReference(''); }} />{value} · {label}
+            <input type="radio" name="type" value={value} checked={type === value} onChange={() => change(value as PortType, direction)} />{value} · {label}
           </label>)}
         </fieldset>
         <fieldset className="v1-port-radio-group">
           <legend>方向</legend>
-          <label><input type="radio" name="direction" value="in" checked={direction === 'in'} onChange={() => { setDirection('in'); setReference(''); }} />输入</label>
-          <label><input type="radio" name="direction" value="out" checked={direction === 'out'} onChange={() => { setDirection('out'); setReference(''); }} />输出</label>
+          {(['in', 'out'] as const).map(value => <label key={value}>
+            <input type="radio" name="direction" value={value} checked={direction === value}
+              onChange={() => change(type, value)} />{value === 'in' ? '输入' : '输出'}
+          </label>)}
         </fieldset>
         <fieldset className="v1-port-parameters">
-          <legend>端口参数</legend>
-          {optical && <ChannelField name="channels" label="适用通道（未选择表示不限）" multiple />}
-          {ratings.length > 0 && <InputRatingField key={ratings.join('/')} units={ratings} />}
-          {power && !!voltageOptions.length && <label>{voltageTitle(type, direction)}来源
-            <select name={direction === 'in' ? 'inputVoltageParameter' : 'outputVoltageParameter'} value={reference} onChange={e => setReference(e.target.value)}>
-              <option value="">固定值或留空</option>{voltageOptions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          </label>}
-          {power && !reference && <PortVoltageField key={type + direction} type={type} direction={direction} />}
-          {supply && <SupplyCapacityField />}
-          {!optical && !ratings.length && !power && <p className="v1-property-effective">无需额外参数</p>}
+          <legend>端口参数</legend><PortParameterFields port={seed} occurrence={owner} draft />
         </fieldset>
       </div>
-      {error && <p className="error" role="alert">{error}</p>}
-      <div className="actions">
-        <button type="submit">添加端口</button>
-        <button type="button" onClick={close}>取消</button>
-      </div>
-    </form>
-  </dialog>;
+    </div>
+    {error && <p className="error" role="alert">{error}</p>}
+    <div className="actions">
+      <button type="submit" className="primary">{port ? '保存修改' : '添加端口'}</button>
+      {port && <button type="button" className="v1-port-delete" onClick={remove}>删除端口</button>}
+      <button type="button" onClick={close}>取消</button>
+    </div>
+  </form>;
 }
