@@ -4,7 +4,10 @@ import type { BudgetMetric } from '../../src/engine/v1/budget-metric';
 import { createConversionBudget } from '../../src/engine/v1/conversion-budget';
 import { calculateDcBudget } from '../../src/engine/v1/dc-budget';
 import { createOpticalBudget } from '../../src/engine/v1/optical-budget';
+import { createMultiplexPower } from '../../src/engine/v1/multiplex-power';
+import { buildSignalGraph } from '../../src/engine/v1/signal-graph';
 import { createPathResolver } from '../../src/engine/v1/path-resolver';
+import { createRfBudget } from '../../src/engine/v1/rf-budget';
 import { insertLibraryItem } from '../../src/library/v1/insert-library-item';
 import type { Connection } from '../../src/model/v1/topology';
 import type { Project } from '../../src/model/v1/types';
@@ -89,4 +92,34 @@ test('factory power budgets keep the single supply rating and converter capacity
   assert.equal(budget.supplies.find(item => item.endpoint.portId === 'extra')!.capacityW.availability, 'unavailable');
   near(budget.converters[0].efficiency, 0.9); near(budget.converters[0].output.capacityW, 10);
   near(budget.converters[0].output.voltageV, 5);
+});
+
+test('factory WDM combines the launched 16 dBm carriers after one shared insertion loss', () => {
+  const project = network({ a: 'laser', b: 'laser', mux: 'wdm' }, [
+    wire('a', 'OPT_OUT', 'mux', 'CH1'), wire('b', 'OPT_OUT', 'mux', 'CH2'),
+  ]);
+  const result = createMultiplexPower(buildSignalGraph(project)).at(endpoint('mux', 'COM'))!;
+  assert.deepEqual(result.waves.map(w => [w.flow, w.channelId]), [['out', 'CWDM_1311'], ['out', 'CWDM_1351']]);
+  result.waves.forEach(w => near(w.power, 15));
+  near(result.out.known, 15 + 10 * Math.log10(2));
+  assert.equal(result.in.known.availability, 'unavailable');
+});
+
+test('factory RF and optical stages apply signed gains and split only the transmitted light', () => {
+  const rf = createRfBudget(network({ amp: 'rf-amplifier', pad: 'rf-attenuator' }, [wire('amp', 'RF_OUT', 'pad', 'RF_IN')]));
+  for (const frequencyGHz of [0, 67]) {
+    const input = { frequencyGHz, inputPowerDbm: 0 };
+    const from = endpoint('amp', 'RF_IN');
+    near(rf.calculateLocal({ from, to: endpoint('amp', 'RF_OUT') }, input).nfDb, 3);
+    near(rf.calculateLocal({ from, to: endpoint('pad', 'RF_OUT') }, input).powerDbm, 2);
+  }
+  const project = network({ laser: 'laser', sw: 'optical-switch', pad: 'optical-attenuator', split: 'splitter' },
+    [wire('laser', 'OPT_OUT', 'sw', 'OPT_IN'), wire('sw', 'OPT_OUT', 'pad', 'OPT_IN'), wire('pad', 'OPT_OUT', 'split', 'OPT_IN')]);
+  const source = { endpoint: endpoint('laser', 'OPT_OUT'), channelId: 'DWDM_CH28' as const };
+  const open = createOpticalBudget(project);
+  for (const output of ['OPT_OUT_1', 'OPT_OUT_2']) {
+    near(open.calculateLocal({ source, to: endpoint('split', output) }).powerDbm, 16 - 1 - 3 - 10 * Math.log10(2));
+  }
+  const blocked = createOpticalBudget({ ...project, instanceSettings: [{ instancePath: ['sw'], switchStateId: 'block' }] });
+  assert.equal(blocked.calculateLocal({ source, to: endpoint('split', 'OPT_OUT_1') }).pathIssue?.status, 'unreachable');
 });
