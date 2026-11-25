@@ -86,7 +86,8 @@ export function TemplateEditor({ initial, definitions, hidden, save, cancel, rep
     <label>模板名称<input value={draft.name} onChange={e => edit({ ...draft, name: e.target.value })} /></label>
     <section className="template-ports"><h3>端口</h3>{draft.ports.map(p => <details key={p.id}>
       <summary>{portDisplayName(p, false, draft.ports, occurrence)}</summary>
-      <PortFields port={p} occurrence={occurrence} save={updatePort} remove={() => edit({ ...draft,
+      <PortFields port={p} occurrence={occurrence} newPort={!initial.ports.some(port => port.id === p.id)}
+        save={updatePort} remove={() => edit({ ...draft,
         ports: draft.ports.filter(other => other.id !== p.id),
         ...(draft.kind === 'module' && { portMappings: draft.portMappings?.filter(m => m.portId !== p.id) }) })} />
     </details>)}<button onClick={() => edit({ ...draft, ports: [...draft.ports, {
