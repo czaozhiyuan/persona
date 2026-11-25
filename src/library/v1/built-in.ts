@@ -25,6 +25,7 @@ const wdmPorts: PortDefinition[] = [
 ];
 const gain = numeric('gain', '增益', 'dB');
 const attenuation = numeric('gain', '净增益（带符号）', 'dB', { max: 0 });
+const insertionLoss = { ...numeric('loss', '插入损耗', 'dB', { min: 0 }), defaultValue: { kind: 'fixed', value: 1 } } as const;
 const capacity = numeric('capacity', '额定输出功率', 'W', { min: 0 });
 
 const emitter = { powerDbm: parameter('power') };
@@ -62,9 +63,10 @@ export const builtInDefinitions = [
     ports: [{ ...port('OPT_OUT', '光输出', 'OPTICAL', 'out'), opticalEmitter: emitter }, fiveVoltInput] },
   {
     kind: 'component', id: 'library-splitter', iconKey: 'splitter', name: '光分路器（1×2）',
-    ports: [opticalPorts[0], port('OPT_OUT_1', '光输出 1', 'OPTICAL', 'out'), port('OPT_OUT_2', '光输出 2', 'OPTICAL', 'out')],
+    ports: [{ ...port('OPT_IN', '公共口', 'OPTICAL', 'bidirectional'), side: 'left' },
+      port('OPT_OUT_1', '支路 1', 'OPTICAL', 'bidirectional'), port('OPT_OUT_2', '支路 2', 'OPTICAL', 'bidirectional')],
     parameters: [
-      { ...numeric('firstPercent', '输出 1 分光比', '%', { min: 0, max: 100 }), defaultValue: { kind: 'fixed', value: 50 } },
+      { ...numeric('firstPercent', '支路 1 分光比', '%', { min: 0, max: 100 }), defaultValue: { kind: 'fixed', value: 50 } },
       { ...numeric('loss', '额外插损', 'dB', { min: 0 }), defaultValue: { kind: 'fixed', value: 0 } },
     ],
     transfers: [{ kind: 'splitter', fromPortId: 'OPT_IN', toPortId: 'OPT_OUT_1', secondPortId: 'OPT_OUT_2',
@@ -114,9 +116,29 @@ export const builtInDefinitions = [
     ],
   },
   {
-    kind: 'component', id: 'library-optical-attenuator', iconKey: 'opticalAttenuator', name: '光衰减器', ports: opticalPorts,
-    parameters: [{ ...attenuation, valueKind: 'opticalValue', defaultValue: fixed(-3) }],
+    kind: 'component', id: 'library-optical-attenuator', iconKey: 'opticalAttenuator', name: '光衰减器',
+    ports: [{ ...port('OPT_IN', '光口 A', 'OPTICAL', 'bidirectional'), side: 'left' }, port('OPT_OUT', '光口 B', 'OPTICAL', 'bidirectional')],
+    parameters: [{ ...attenuation, defaultValue: { kind: 'fixed', value: -3 } }],
+    transfers: [{ kind: 'optical', fromPortId: 'OPT_IN', toPortId: 'OPT_OUT', gainDb: parameter('gain') },
+      { kind: 'optical', fromPortId: 'OPT_OUT', toPortId: 'OPT_IN', gainDb: parameter('gain') }],
+  },
+  {
+    kind: 'component', id: 'library-optical-amplifier', iconKey: 'opticalAmplifier', name: '光放大器', ports: [...opticalPorts, fiveVoltInput],
+    parameters: [{ ...numeric('gain', '光增益', 'dB'), defaultValue: { kind: 'fixed', value: 5 } }],
     transfers: [{ kind: 'optical', fromPortId: 'OPT_IN', toPortId: 'OPT_OUT', gainDb: parameter('gain') }],
+  },
+  {
+    kind: 'component', id: 'library-circulator', iconKey: 'circulator', name: '光环形器',
+    ports: [port('P1', 'P1', 'OPTICAL', 'in'), { ...port('P2', 'P2', 'OPTICAL', 'bidirectional'), side: 'top' },
+      port('P3', 'P3', 'OPTICAL', 'out')],
+    parameters: [insertionLoss],
+    transfers: [{ kind: 'optical', fromPortId: 'P1', toPortId: 'P2', insertionLossDb: parameter('loss') },
+      { kind: 'optical', fromPortId: 'P2', toPortId: 'P3', insertionLossDb: parameter('loss') }],
+  },
+  {
+    kind: 'component', id: 'library-isolator', iconKey: 'isolator', name: '光隔离器', ports: opticalPorts,
+    parameters: [insertionLoss],
+    transfers: [{ kind: 'optical', fromPortId: 'OPT_IN', toPortId: 'OPT_OUT', insertionLossDb: parameter('loss') }],
   },
   {
     kind: 'component', id: 'library-rf-amplifier', iconKey: 'amplifier', name: '射频放大器', ports: poweredRfPorts,

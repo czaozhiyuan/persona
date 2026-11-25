@@ -81,9 +81,11 @@ export function createOpticalBudgetForGraph(graph: SignalGraph, sharedOrigins?: 
   }
   const instanceAt = (ref: EndpointRef) => instances.get(JSON.stringify(ref.instancePath));
   const portAt = (ref: EndpointRef) => graph.ports.get(signalPortKey(ref));
+  const hasCombiner = graph.edges.some(e => e.source.kind === 'transfer' && e.source.transfer.kind === 'splitter'
+    && e.to.ref.portId === e.source.transfer.fromPortId);
   let defaultOrigins: OriginLookup | undefined;
   function originsFor(sources: readonly OpticalSource[]) {
-    if (sharedOrigins || !commonPorts.size) return sharedOrigins;
+    if (sharedOrigins || (!commonPorts.size && !hasCombiner)) return sharedOrigins;
     if (sources.length) return createOpticalOrigins(graph, sources);
     return defaultOrigins ??= createOpticalOrigins(graph);
   }
@@ -161,6 +163,11 @@ export function createOpticalBudgetForGraph(graph: SignalGraph, sharedOrigins?: 
 
   function advance(stages: OpticalStage[], edge: SignalEdge, gainDb: BudgetMetric<'dB'>, origins?: OriginLookup) {
     const previous = stages.at(-1)!;
+    if (edge.source.kind === 'darkParallelPaths') {
+      const gain = logZero('dB');
+      stages.push(stage(edge.to, previous.channelId, logZero('dBm'), { edge, gainDb: gain }));
+      return gain;
+    }
     const common = commonPorts.size ? commonPorts.get(signalPortKey(edge.to.ref)) : undefined;
     if (previous.channelId && common && origins) {
       const carriers = origins(common, previous.channelId, portFlowAt(edge, edge.to));
@@ -185,18 +192,33 @@ export function createOpticalBudgetForGraph(graph: SignalGraph, sharedOrigins?: 
     }
     if (source.kind === 'transfer' && source.transfer.kind === 'splitter') {
       const split = source.transfer;
-      const percent = resolveEmpiricalValue('%', split.firstPercent, {}, instance);
+      const percent = edge.splitterPercent!;
       const loss = split.excessLossDb ? resolveEmpiricalValue('dB', split.excessLossDb, {}, instance) : budgetValue('dB', 0);
       let gain: BudgetMetric<'dB'>;
       if (percent.availability === 'unavailable') gain = unavailable('dB', percent.reason);
       else {
-        const outputPercent = edge.to.ref.portId === split.toPortId ? percent.value : 100 - percent.value;
+        const outputPercent = percent.value;
         if (outputPercent === 0) {
           const zeroGain = logZero('dB');
           stages.push(stage(edge.to, previous.channelId, logZero('dBm'), { edge, gainDb: zeroGain }));
           return zeroGain;
         }
         gain = loss.availability === 'unavailable' ? loss : budgetValue('dB', 10 * (Math.log10(outputPercent) - 2) - loss.value);
+        const darkInput = previous.powerDbm.availability === 'available' && previous.powerDbm.value === -Infinity;
+        if (origins && !darkInput && edge.to.ref.portId === split.fromPortId && outputPercent < 100) {
+          const otherId = edge.from.ref.portId === split.toPortId ? split.secondPortId : split.toPortId;
+          const other = portAt({ instancePath: edge.from.ref.instancePath, portId: otherId })!;
+          const channels = previous.channelId ? [previous.channelId] : stages.reduce<Carrier>((carrier, stage) => {
+            const rule = stage.incoming?.edge.channels;
+            return intersectCarrier(carrier, rule?.kind === 'preserve' ? rule.channelIds : portAt(stage.endpoint)?.definition.channelIds);
+          }, edge.channels.kind === 'preserve' ? edge.channels.channelIds : undefined);
+          if (other.definition.direction === 'bidirectional' && (channels ?? [undefined]).some(channel => {
+            const light = origins(other, channel, 'in');
+            return light.paths.length > 0 || light.unresolved.length > 0;
+          })) {
+            gain = unavailable('dB', cochannelConflict);
+          }
+        }
       }
       stages.push(stage(edge.to, previous.channelId, addGain(previous.powerDbm, gain), { edge, gainDb: gain }));
       return addGain(gainDb, gain);

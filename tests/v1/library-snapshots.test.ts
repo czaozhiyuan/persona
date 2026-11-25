@@ -27,6 +27,7 @@ test('factory templates use the confirmed component, module and enclosure symbol
     'library-rf-amplifier': 'amplifier', 'library-rf-attenuator': 'rfAttenuator',
     'library-dc-supply': 'dcSupply', 'library-dc-converter': 'dcConverter', 'library-pcb': 'controlCircuit',
     'library-splitter': 'splitter', 'library-sfp': 'sfp', 'library-wdm': 'component',
+    'library-optical-amplifier': 'opticalAmplifier', 'library-circulator': 'circulator', 'library-isolator': 'isolator',
   });
 });
 

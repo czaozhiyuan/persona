@@ -34,8 +34,9 @@ export function readPort(data: FormData, port: PortDefinition): PortDefinition {
   const editedName = choice(data, 'name').trim();
   const name = isPowerPort(type) || isPowerPort(port.type) ? undefined
     : editedName === editablePortName(port) ? port.name : editedName || undefined;
+  const side = data.get('side');
   return {
-    ...port, name, type, direction, channelIds, side: data.get('side') === 'top' ? 'top' : undefined,
+    ...port, name, type, direction, channelIds, side: side === 'top' || (side === 'left' && direction === 'bidirectional') ? side : undefined,
     inputRating: sameRating ? previousRating : inputRating,
     opticalEmitter: type === 'OPTICAL' && supportsDirection(direction, 'out') && data.get('emitter') === 'yes'
       ? { powerDbm: readQuantity(data, 'sourcePower', opticalKinds) } : undefined,
@@ -84,6 +85,7 @@ export function PortParameterFields({ port, occurrence, draft = false }: {
   return <>
     <label>画布位置<select name="side" defaultValue={port.side ?? ''}>
       <option value="">按方向放置</option><option value="top">上侧</option>
+      {direction === 'bidirectional' && <option value="left">左侧</option>}
     </select></label>
     {type === 'OPTICAL' && <ChannelField name="channels" label="适用通道（未选择表示不限）" value={port.channelIds} multiple />}
     {type === 'OPTICAL' && supportsDirection(direction, 'out') && occurrence.definition.kind === 'component' &&

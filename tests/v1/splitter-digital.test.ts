@@ -68,7 +68,7 @@ test('zero-share branches stay dark with unknown launch power only on reachable 
   for (const firstPercent of [0, 100]) {
     const base = opticalNetwork(firstPercent, 0, true);
     const project: Project = { ...base, componentDefinitions: base.componentDefinitions.map(d => d.id !== 'library-splitter' ? d : {
-      ...d, ports: d.ports.map(p => p.direction === 'out' ? { ...p, channelIds: ['DWDM_CH30'] } : p),
+      ...d, ports: d.ports.map(p => ['OPT_OUT_1', 'OPT_OUT_2'].includes(p.id) ? { ...p, channelIds: ['DWDM_CH30'] } : p),
     }) };
     const optics = createOpticalBudget(project);
     const source = { endpoint: endpoint('a', 'OPT_TX_OUT'), channelId: 'DWDM_CH30' as const };

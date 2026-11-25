@@ -5,6 +5,8 @@ import { canConnect, supportsDirection } from '../../model/v1/types';
 import type { ConnectionRef, EndpointRef, InstancePath, PortDefinition, PortFlow, Project } from '../../model/v1/types';
 import { resolveHierarchy } from './hierarchy';
 import type { ResolvedInstance } from './hierarchy';
+import { budgetValue, type BudgetMetric } from './budget-metric';
+import { resolveEmpiricalValue } from './empirical-value';
 
 export type SignalPort = Readonly<{
   ref: EndpointRef;
@@ -20,6 +22,7 @@ export type SignalChannels =
   | { kind: 'convert'; fromChannelId: OpticalChannelId; toChannelId: OpticalChannelId };
 
 export type SignalEdgeSource =
+  | { kind: 'darkParallelPaths'; fromFlow: PortFlow; toFlow: PortFlow }
   | { kind: 'portMapping'; publicPort: EndpointRef }
   | { kind: 'connection'; ref: ConnectionRef; mediaKind?: Connection['mediaKind']; lossDb?: number }
   | { kind: 'cableCore'; ref: CableCoreRef; aPin: number; bPin: number; lossDb?: number }
@@ -33,6 +36,8 @@ export type SignalEdge = Readonly<{
   source: SignalEdgeSource;
   /** A separate optical input required by an EO transfer. */
   supply?: SignalPort;
+  /** Effective share of this physical branch in either direction of a splitter transfer. */
+  splitterPercent?: BudgetMetric<'%'>;
 }>;
 
 export type SignalGraph = Readonly<{
@@ -47,6 +52,7 @@ export function opticalSourceFlow(port: SignalPort): PortFlow {
 
 /** A wire leaves an output face and arrives at an input face; a mapping preserves that face. */
 export function portFlowAt(edge: SignalEdge, port: SignalPort): PortFlow {
+  if (edge.source.kind === 'darkParallelPaths') return edge.from === port ? edge.source.fromFlow : edge.source.toFlow;
   if (edge.source.kind === 'portMapping') return edge.from.ref === edge.source.publicPort ? 'in' : 'out';
   if (edge.source.kind === 'connection' || edge.source.kind === 'cableCore') return edge.from === port ? 'out' : 'in';
   return edge.from === port ? 'in' : 'out';
@@ -54,6 +60,10 @@ export function portFlowAt(edge: SignalEdge, port: SignalPort): PortFlow {
 
 export function isDigitalEdge(edge: SignalEdge) {
   return edge.source.kind === 'transfer' && (edge.source.transfer.kind === 'digitalTx' || edge.source.transfer.kind === 'digitalRx');
+}
+
+export function isDarkSplitterEdge(edge: SignalEdge) {
+  return edge.splitterPercent?.availability === 'available' && edge.splitterPercent.value === 0;
 }
 
 /** Identifies mux/demux ports by their channel-specific routes, independent of device names or icons. */
@@ -107,7 +117,7 @@ export function buildSignalGraph(project: Project): SignalGraph {
   const localPort = (scopePath: InstancePath, { instanceId, portId }: LocalEndpointRef) =>
     portAt([...scopePath, instanceId], portId);
 
-  function addEdge(from: SignalPort, to: SignalPort, source: SignalEdgeSource, supply?: SignalPort) {
+  function addEdge(from: SignalPort, to: SignalPort, source: SignalEdgeSource, supply?: SignalPort, splitterPercent?: BudgetMetric<'%'>) {
     const transfer = source.kind === 'transfer' ? source.transfer : undefined;
     const declared = source.kind === 'switchRoute' ? source.route.channelIds
       : transfer && 'channelIds' in transfer ? transfer.channelIds : undefined;
@@ -122,7 +132,7 @@ export function buildSignalGraph(project: Project): SignalGraph {
     } else if (from.definition.type === 'OPTICAL') {
       channels = { kind: 'preserve', channelIds };
     }
-    edges.push({ from, to, source, channels, ...(supply && { supply }) });
+    edges.push({ from, to, source, channels, ...(supply && { supply }), ...(splitterPercent && { splitterPercent }) });
   }
 
   function addWire(a: SignalPort, b: SignalPort, source: SignalEdgeSource) {
@@ -130,7 +140,8 @@ export function buildSignalGraph(project: Project): SignalGraph {
     if (canConnect(b.definition.direction, a.definition.direction)) addEdge(b, a, source);
   }
 
-  for (const { instancePath, definition, switchState } of instances) {
+  for (const instance of instances) {
+    const { instancePath, definition, switchState } = instance;
     if (definition.kind === 'module') {
       for (const mapping of definition.portMappings ?? []) {
         const outer = portAt(instancePath, mapping.portId);
@@ -161,11 +172,20 @@ export function buildSignalGraph(project: Project): SignalGraph {
       definition.transfers?.forEach((transfer, index) => {
         const supply = transfer.kind === 'eo' && transfer.supplyPortId !== undefined
           ? portAt(instancePath, transfer.supplyPortId) : undefined;
-        addEdge(portAt(instancePath, transfer.fromPortId), portAt(instancePath, transfer.toPortId),
-          { kind: 'transfer', index, transfer }, supply);
+        const from = portAt(instancePath, transfer.fromPortId);
+        const to = portAt(instancePath, transfer.toPortId);
+        const source = { kind: 'transfer', index, transfer } as const;
         if (transfer.kind === 'splitter') {
-          addEdge(portAt(instancePath, transfer.fromPortId), portAt(instancePath, transfer.secondPortId), { kind: 'transfer', index, transfer });
-        }
+          const second = portAt(instancePath, transfer.secondPortId);
+          const firstShare = resolveEmpiricalValue('%', transfer.firstPercent, {}, instance);
+          const secondShare = firstShare.availability === 'available' ? budgetValue('%', 100 - firstShare.value) : firstShare;
+          for (const [branch, share] of [[to, firstShare], [second, secondShare]] as const) {
+            addEdge(from, branch, source, undefined, share);
+            if (from.definition.direction === 'bidirectional' && branch.definition.direction === 'bidirectional') {
+              addEdge(branch, from, source, undefined, share);
+            }
+          }
+        } else addEdge(from, to, source, supply);
       });
       switchState?.routes.forEach((route, index) => {
         addEdge(portAt(instancePath, route.fromPortId), portAt(instancePath, route.toPortId),

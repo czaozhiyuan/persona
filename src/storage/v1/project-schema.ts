@@ -116,7 +116,7 @@ const parameter = byKind({
   enum: shape({ ...identity, kind: oneOf('enum'), options: list(text) }, { overridable: boolean, defaultValue: text }),
 });
 const port = shape({ id: text, type: oneOf('RF', 'OPTICAL', 'DC_POWER', 'AC_POWER', 'CONTROL'), direction: oneOf('in', 'out', 'bidirectional') }, {
-  side: oneOf('top'),
+  side: oneOf('top', 'left'),
   name: text, channelIds: channels, opticalEmitter: shape({}, { powerDbm: opticalQuantity }), inputVoltageV: dcQuantity, outputVoltageV: dcQuantity,
   supplyCapacity: shape({ unit: oneOf('W', 'A'), value: fixed }), inputRating: shape({ unit: oneOf('dBm', 'V', 'A', 'W') }, limits),
 });
