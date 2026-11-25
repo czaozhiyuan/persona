@@ -109,12 +109,12 @@ export function LinkEditor({ store, options, selected, result, budget, point, co
   const crossesOptical = useMemo(() => {
     const control = domain(fromKey) === 'CONTROL' || domain(toKey) === 'CONTROL';
     if (!control && (domain(fromKey) !== 'RF' || domain(toKey) !== 'RF')) return false;
-    if (fromKey === (selected?.from && signalPortKey(selected.from)) && toKey === (selected?.to && signalPortKey(selected.to))) {
-      return !!result?.trace?.edges.some(edge => edge.channels.kind === 'enter' || edge.channels.kind === 'exit') || conversions.length > 0 || (result?.status === 'ambiguous' && options.eo.length > 0);
-    }
-    const path = budget.resolveNamedLink({ id: 'preview', name: '预览', from: options.graph.ports.get(fromKey)?.ref,
-      to: options.graph.ports.get(toKey)?.ref });
-    return !!path.trace?.edges.some(edge => edge.channels.kind === 'enter' || edge.channels.kind === 'exit') || (path.status === 'ambiguous' && options.eo.length > 0);
+    const savedEnds = fromKey === (selected?.from && signalPortKey(selected.from)) && toKey === (selected?.to && signalPortKey(selected.to));
+    const path = savedEnds ? result : budget.resolveNamedLink({ id: 'preview', name: '预览',
+      from: options.graph.ports.get(fromKey)?.ref, to: options.graph.ports.get(toKey)?.ref });
+    return !!(path && path.status !== 'resolved' && path.digitalAccess)
+      || !!path?.trace?.edges.some(edge => edge.channels.kind === 'enter' || edge.channels.kind === 'exit')
+      || (path?.status === 'ambiguous' && options.eo.length > 0);
   }, [budget, options, selected, fromKey, toKey, result]);
   const showOptical = channel || crossesOptical || domain(fromKey) === 'OPTICAL' || domain(toKey) === 'OPTICAL' || conversions.length > 0;
 
@@ -202,7 +202,7 @@ export function LinkEditor({ store, options, selected, result, budget, point, co
       </form>
     </details>
     {selected && <>
-      {(hasEo || fromDomain === 'OPTICAL' || !!conditions.opticalSources?.length) && <LinkSupplyFields
+      {(!signalNotice || opticalLink) && (hasEo || fromDomain === 'OPTICAL' || !!conditions.opticalSources?.length) && <LinkSupplyFields
         options={opticalLink && selected.from ? options.opticalSources.filter(item => item.key === signalPortKey(selected.from!)) : options.opticalSources}
         sources={conditions.opticalSources ?? []}
         onChange={opticalSources => setConditions({ ...conditions, opticalSources })} />}
