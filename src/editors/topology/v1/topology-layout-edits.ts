@@ -49,7 +49,7 @@ export function preserveDeletionLayout(project: Project, parentIds: ReadonlySet<
   return moveTopologyNodes(preserved, moves);
 }
 
-export type CenterPlacement = (definition: { id: string; ports: readonly PortDefinition[] }, name: string) => {
+export type CenterPlacement = (definition: { ports: readonly PortDefinition[] }, name: string) => {
   position: XYPosition; projection: Projection;
 } | undefined;
 

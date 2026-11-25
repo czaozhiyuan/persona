@@ -1,3 +1,4 @@
+import { copyDefinitionTree } from '../../state/v1/copy-definition-tree';
 import type { ComponentDefinition, Instance, ModuleDefinition, Project } from '../../model/v1/types';
 import { projectErrorMessage, validateProjectSnapshot } from '../../storage/v1/project-json';
 import { describeDefinitionChanges } from './definition-changes';
@@ -9,7 +10,7 @@ export type TemplateChanges = Readonly<{
   reused: readonly LibraryDefinition[];
 }>;
 
-function installDefinitions(project: Project, library: readonly LibraryDefinition[], id: string, replace: boolean) {
+function updateSnapshot(project: Project, library: readonly LibraryDefinition[], id: string) {
   const templates = new Map(library.map(item => [item.id, item]));
   const components = new Map(project.componentDefinitions.map(item => [item.id, item]));
   const modules = new Map(project.moduleDefinitions.map(item => [item.id, item]));
@@ -28,7 +29,7 @@ function installDefinitions(project: Project, library: readonly LibraryDefinitio
     if (template && current && template.kind !== current.kind) {
       throw new Error(`定义 ID 冲突：「${current.name}」的工程定义类型与库模板不同。`);
     }
-    if (current && !(replace && key === id)) {
+    if (current && key !== id) {
       // The existing snapshot already owns its dependency closure.
       reused.push(current);
       continue;
@@ -60,19 +61,15 @@ function installDefinitions(project: Project, library: readonly LibraryDefinitio
 }
 
 export function addTemplateInstance(project: Project, library: readonly LibraryDefinition[], templateId: string,
-  parentId: string, instanceId: string, name: string) {
-  if (!library.some(item => item.id === templateId)) throw new Error('所选库模板不存在。');
+  parentId: string, instanceId: string, name: string, definitionName?: string) {
   if (!project.moduleDefinitions.some(item => item.id === parentId)) throw new Error('当前模块已不存在。');
-  const plan = installDefinitions(project, library, templateId, false);
+  const plan = copyDefinitionTree(project, library, templateId, () => crypto.randomUUID(), definitionName);
   const instance: Instance = { id: instanceId, name, definitionId: plan.root.id,
     switchStateId: plan.root.kind === 'component' ? plan.root.switchStates?.[0]?.id : undefined };
   return {
-    changes: plan.changes,
-    project: {
-      ...plan.project,
-      moduleDefinitions: plan.project.moduleDefinitions.map(module =>
-        module.id === parentId ? { ...module, instances: [...module.instances, instance] } : module),
-    },
+    ...plan.project,
+    moduleDefinitions: plan.project.moduleDefinitions.map(module =>
+      module.id === parentId ? { ...module, instances: [...module.instances, instance] } : module),
   };
 }
 
@@ -85,7 +82,7 @@ export function previewTemplateUpdate(project: Project, library: readonly Librar
     ? current.ports.filter(port => !template.ports.some(item => item.id === port.id)).map(port => port.id)
     : [];
   try {
-    const candidate = installDefinitions(project, library, templateId, true);
+    const candidate = updateSnapshot(project, library, templateId);
     validateProjectSnapshot(candidate.project);
     return { ok: true as const, project: candidate.project, changes: candidate.changes,
       definitionChanges: describeDefinitionChanges(current, candidate.root) };

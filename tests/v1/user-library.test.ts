@@ -26,7 +26,9 @@ test('edited, hidden and custom templates survive migration without changing ins
   assert.throws(() => add(empty, config, gain.id, 'hidden'), /隐藏/);
   const fromModule = add(empty, config, stage.id, 'module');
   assert.equal(fromModule.componentDefinitions[0].name, 'Updated');
-  assert.equal(add(original, config, stage.id, 'module').componentDefinitions[0].name, gain.name);
+  const both = resolveHierarchy(add(original, config, stage.id, 'module'));
+  assert.equal(both.resolveInstance(['before'])!.definition.name, gain.name);
+  assert.equal(both.resolveInstance(['module', 'amplifier'])!.definition.name, 'Updated');
   assert.equal(parseProjectJson(serializeProjectJson(original)).componentDefinitions[0].name, gain.name);
   assert.equal(add(empty, restoreDefinition(config, gain.id), gain.id, 'after').componentDefinitions[0].name, gain.name);
   assert.equal(add(empty, config, libraryCopy.id, 'copy').componentDefinitions[0].name, 'Copy');
@@ -80,10 +82,10 @@ test('blank module variants install dependencies and the toolbar can create a bl
   assert.equal(stage.kind, 'module');
   const config = saveDefinition(factoryLibrary(), { ...stage, id: blankModuleId });
   const first = add(empty, config, blankModuleId, 'one');
-  assert.ok(first.componentDefinitions.some(d => d.id === gain.id));
-  assert.equal(first.moduleDefinitions.find(d => d.id === 'one')?.instances.length, 1);
+  assert.equal(resolveHierarchy(first).resolveInstance(['one', 'amplifier'])?.definition.name, gain.name);
   const hidden = removeDefinition(config, blankModuleId);
   assert.throws(() => add(empty, hidden, blankModuleId, 'no'));
   const fresh = insertLibraryItem(empty, { source: 'blank-module', id: blankModuleId, name: 'Module' }, 'root', [], 'yes', undefined, hidden);
-  assert.equal(fresh.moduleDefinitions.find(d => d.id === 'yes')?.instances.length, 0);
+  const blank = resolveHierarchy(fresh).resolveInstance(['yes'])?.definition;
+  assert.ok(blank?.kind === 'module' && blank.instances.length === 0);
 });

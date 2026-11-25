@@ -207,7 +207,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
         <h3>模块操作</h3>
         {onDissolve && <button type="button" onClick={() => onDissolve(instancePath)}>解散模块（保留内部对象）</button>}
         {parentLocations.length > 0 && <p className="v1-property-effective">在上级模块添加后，以下位置都会新增此对象：{parentLocations.join('、')}。</p>}
-        <button type="button" onClick={reuseModule}>再次使用此模块</button>
+        <button type="button" title="共用此模块定义，结构修改会应用到所有复用位置" onClick={reuseModule}>再次使用此模块</button>
         <button type="button" onClick={() => onCopyModule(instancePath)}>复制为独立模块</button>
       </section>}
       {definition.kind === 'module' && enclosure && <section>
@@ -240,7 +240,6 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
           <summary>{portDisplayName(port, false, definition.ports, occurrence)}<span className="v1-parameter-value">
             {portTypeLabels[port.type]} · {port.direction === 'in' ? '输入' : '输出'}
           </span></summary>
-          <p className="v1-property-effective">端口属于共享结构。{sharedLocations.length > 0 && ` 影响 ${sharedLocations.join('、')}。`}</p>
           <PortFields port={port} occurrence={occurrence} remove={() => { setError(''); setDeletion(port.id); }}
             save={next => changeDefinition(() => ({ ...definition,
               ports: definition.ports.map(item => item.id === port.id ? next : item),
@@ -248,8 +247,8 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
         </details>)}
       </section>
       <details className="v1-advanced-properties">
-        <summary>高级设置 · 共享定义</summary>
-        <p className="v1-property-effective">这里编辑共享定义。{sharedLocations.length > 0 && ` 改动会应用到 ${sharedLocations.join('、')}。`}</p>
+        <summary>高级设置 · {sharedLocations.length ? '共享定义' : '当前定义'}</summary>
+        {sharedLocations.length > 0 && <p className="v1-property-effective">改动会应用到 {sharedLocations.join('、')}。</p>}
         {definition.kind === 'component' && <label>框图图标
           <select value={definition.iconKey ?? ''} onChange={event => {
             const iconKey = componentIconKeys.find(key => key === event.currentTarget.value);
@@ -265,7 +264,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
           if (!name) { setError('定义名称不能为空。'); return; }
           changeDefinition(() => ({ ...definition, name }));
         }}>
-          <label>共享定义名称<input name="name" defaultValue={definition.name} required /></label>
+          <label>定义名称<input name="name" defaultValue={definition.name} required /></label>
           <button type="submit">保存定义名称</button>
         </form>}
         {definition.parameters?.map(parameter => <details key={parameter.id} data-definition-parameter={parameter.id}>
@@ -283,7 +282,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
             }
           }}>
             <label>参数名称<input name="name" defaultValue={parameter.name} required /></label>
-            <ParameterField parameter={parameter} value={parameter.defaultValue} label="共享定义默认值" autosave />
+            <ParameterField parameter={parameter} value={parameter.defaultValue} label="定义默认值" autosave />
             {parameter.kind === 'numeric' && <div className="v1-property-pair">
               <label>允许下限<input type="number" step="any" name="min" defaultValue={parameter.range?.min} /></label>
               <label>允许上限<input type="number" step="any" name="max" defaultValue={parameter.range?.max} /></label>

@@ -532,12 +532,12 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
 
   useImperativeHandle(centerPlacement, () => (definition, name) => {
     if (!topologyActive) return;
-    const position = viewportPosition(definition.ports, definition.id, name);
+    const position = viewportPosition(definition.ports, name);
     return position && { position, projection };
   });
 
-  function viewportPosition(ports: readonly PortDefinition[], definitionId?: string, name?: string) {
-    const inserting = definitionId !== undefined;
+  function viewportPosition(ports: readonly PortDefinition[], name?: string) {
+    const inserting = name !== undefined;
     if (!canvas.current || !flow.current) return;
     const screen = canvas.current.getBoundingClientRect();
     const left = inserting ? Math.max(0, screen.left) : screen.left;
@@ -559,7 +559,7 @@ function EditableTopologyCanvas({ project, instances, modulePath, selectedInstan
     const members = scopes.get(rootKey)?.members ?? [];
     // A rendered copy accounts for wrapping in the selected card's title and controls.
     const height = inserting ? members.reduce((height, node) =>
-      !node.frame && node.item.definition.id === definitionId && node.item.instance?.name === name
+      !node.frame && node.item.instance?.name === name && node.item.definition.ports.length === ports.length
         ? Math.max(height, node.bounds.height) : height, size.height) : size.height;
     const center = { x: (topLeft.x + bottomRight.x - width) / 2, y: (topLeft.y + bottomRight.y - height) / 2 };
     const occupied = members.map(item => ({
