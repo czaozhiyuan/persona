@@ -22,7 +22,7 @@ export const componentIconLabels = {
   opticalSwitch: '光开关',
   dcSupply: '直流电源',
   dcConverter: 'DC/DC 变换器',
-  controlCircuit: '控制电路', splitter: '光分路器', sfp: '数字光模块（SFP）',
+  controlCircuit: '控制电路', splitter: '光分路器', sfp: '数字光模块',
 } satisfies Record<ComponentIconKey, string>;
 
 export const transferLabels = {

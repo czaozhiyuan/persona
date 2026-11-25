@@ -73,9 +73,9 @@ export const builtInDefinitions = [
       firstPercent: parameter('firstPercent'), excessLossDb: parameter('loss') }],
   },
   {
-    kind: 'component', id: 'library-sfp', iconKey: 'sfp', name: '数字光模块（SFP）',
-    ports: [port('DATA_TX_IN', '数字发送输入', 'CONTROL', 'in'), { ...port('OPT_TX_OUT', '发送光输出', 'OPTICAL', 'out'), opticalEmitter: emitter },
-      port('OPT_RX_IN', '接收光输入', 'OPTICAL', 'in'), port('DATA_RX_OUT', '数字接收输出', 'CONTROL', 'out'), fiveVoltInput],
+    kind: 'component', id: 'library-sfp', iconKey: 'sfp', name: '数字光模块',
+    ports: [port('DATA_TX_IN', 'TX', 'CONTROL', 'in'), { ...port('OPT_TX_OUT', 'OPT OUT', 'OPTICAL', 'out'), opticalEmitter: emitter },
+      port('OPT_RX_IN', 'OPT IN', 'OPTICAL', 'in'), port('DATA_RX_OUT', 'RX', 'CONTROL', 'out'), fiveVoltInput],
     parameters: [ { ...laserPower, name: '发射光功率', defaultValue: fixed(0) },
       { ...numeric('sensitivity', '接收灵敏度', 'dBm'), valueKind: 'opticalValue', defaultValue: fixed(-20) },
       { ...numeric('overload', '接收过载上限（可选）', 'dBm'), valueKind: 'opticalValue', defaultValue: fixed(0) } ],
