@@ -35,6 +35,19 @@ test('saved link trials persist inputs and recalculate using the current project
   assert.equal(deleted.trial?.frequencyGHz, 1);
 });
 
+test('reopened RF trials use the default only when input power is omitted', () => {
+  const project = example();
+  const rf = project.namedLinks!.find(link => link.id === 'pure-rf')!;
+  for (const inputPowerDbm of [undefined, -7.5, 4.5, 0]) {
+    const trial = { frequencyGHz: 1, inputPowerDbm };
+    const restored = parseProjectJson(serializeProjectJson({ ...project, namedLinks: [{ ...rf, trial }] }));
+    const link = restored.namedLinks![0];
+    assert.equal(link.trial!.inputPowerDbm, inputPowerDbm);
+    const result = createLinkBudget(restored).calculateNamedLink(link, link.trial!);
+    assert.deepEqual(result.powerDbm, { availability: 'available', value: (inputPowerDbm ?? 0) + 15, unit: 'dBm' });
+  }
+});
+
 test('saved filenames preserve the project name and avoid invalid filename characters', () => {
   assert.equal(projectFileName('光链路/验收'), '光链路_验收.json');
   assert.equal(projectFileName('project.json'), 'project.json');

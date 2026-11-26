@@ -81,12 +81,13 @@ test('a local or named RF budget uses actual instance gain, linear Friis weighti
   assert.deepEqual(result.stages.flatMap(item => item.incoming?.device ? [value(item.incoming.device.nfDb)] : []), [3, 6]);
   assert.deepEqual(result.stages[1].rating, { endpoint: endpoint(['chain', 'a'], 'IN'),
     limits: { unit: 'dBm', max: -21 }, status: 'above_max', value: -20, excess: 1 });
-  const withoutPower = calculator.calculateLocal(request, { frequencyGHz: 10 });
-  assert.equal(withoutPower.status, 'partial');
-  assert.equal(value(withoutPower.gainDb), 15);
-  assert.equal(value(withoutPower.nfDb), value(result.nfDb));
-  assert.equal(withoutPower.stages[1].rating?.status, 'unknown');
-  missing(withoutPower.powerDbm, /未提供射频输入功率/);
+  const defaultDrive = calculator.calculateLocal(request, { frequencyGHz: 10 });
+  assert.equal(defaultDrive.status, 'valid');
+  assert.equal(value(defaultDrive.gainDb), 15);
+  assert.equal(value(defaultDrive.nfDb), value(result.nfDb));
+  assert.equal(defaultDrive.stages[1].rating?.status, 'above_max');
+  assert.equal(value(defaultDrive.stages[0].powerDbm), 0);
+  assert.equal(value(defaultDrive.powerDbm), 15);
 });
 
 test('missing NF or out-of-range gain only affects dependent metrics and preserves upstream results', () => {

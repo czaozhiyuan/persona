@@ -48,7 +48,7 @@ test('canvas annotates the selected optical supply, mapped chassis and MPO core 
   const details = (path: string[]) => annotations.nodes.get(JSON.stringify(path))!.map(n => n.detail).join(' / ');
   assert.match(details(from.instancePath), /光出 5.0 dBm/);
   assert.match(details(['TX_A', 'mzm']), /Vπ 5 V/);
-  assert.match(details(['TX_A', 'mzm']), /RF 入 不可用.*未提供射频输入功率/);
+  assert.match(details(['TX_A', 'mzm']), /RF 入 0\.0 dBm/);
   assert.match(details(['RX_A', 'pd']), /响应度 0.8 A.W/);
   assert.doesNotMatch(details(['RX_A', 'pd']), /增益/);
   assert.ok(!annotations.nodes.has(JSON.stringify(['RX_B', 'pd'])));
@@ -67,14 +67,14 @@ test('canvas annotates the selected optical supply, mapped chassis and MPO core 
   assert.deepEqual(projectPathHighlight(path, []).edges, root.edges);
 });
 
-test('RF readings show relative gain without an input level and remove old values for incomplete links', () => {
+test('RF readings show absolute power at the default drive and remove old values for incomplete links', () => {
   const link = project.namedLinks!.find(l => l.id === 'pure-rf')!;
   const path = budget.resolveNamedLink(link);
   const annotate = (frequencyGHz: number, inputPowerDbm?: number) =>
     linkAnnotations(graph, path, budget.calculatePath(path, { frequencyGHz, inputPowerDbm }));
   const rf5 = JSON.stringify(['TX_A', 'rf5']);
   const labels = annotate(1).nodes.get(rf5)!.map(n => n.text);
-  assert.ok(labels.includes('RF 出 不可用') && labels.includes('增益 5.0 dB'));
+  assert.ok(labels.includes('RF 出 15.0 dBm') && labels.includes('增益 5.0 dB'));
   assert.ok(annotate(1, -20).nodes.get(rf5)!.some(n => n.text === 'RF 出 -5.0 dBm'));
   assert.equal(annotate(68).nodes.size, 0);
   const invalid = budget.resolveNamedLink({ ...link, to: undefined });

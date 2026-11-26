@@ -199,6 +199,7 @@ export function LinkEditor({ store, options, selected, result, budget, point, co
         ? <OpticalResult result={opticalResult} target={opticalResult.stages.at(-1)?.endpoint ?? selected.to} showEndpoint={options.showEndpoint} locate={locate} />
         : <p role="status">请检查光路。</p>}{diagnostics}</>
         : point && <LinkBudgetPanel trialControls={trialControls} diagnostics={diagnostics} single={point} link={selected} budget={budget} conditions={conditions} labels={options} locate={locate}
+          hasRfInput={fromDomain === 'RF'}
           frequency={conditions.frequencyGHz} setFrequency={frequencyGHz => setConditions({ ...conditions, frequencyGHz })}
           setInputPower={inputPowerDbm => setConditions({ ...conditions, inputPowerDbm })} />}
     </>}

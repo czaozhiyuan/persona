@@ -13,7 +13,7 @@ import { createPathResolver } from './path-resolver';
 import type { PathResult, PathTrace } from './path-resolver';
 import { selectOpticalSource } from './optical-supply';
 import { chooseRouteChannel } from './path-search';
-import { isRfFrequency, resolveRfStage } from './rf-budget';
+import { DEFAULT_RF_INPUT_POWER_DBM, isRfFrequency, resolveRfStage } from './rf-budget';
 import type { RfBudgetInput } from './rf-budget';
 import type { SignalGraph, SignalPort } from './signal-graph';
 
@@ -163,8 +163,9 @@ export function createConversionPathBudget(graph: SignalGraph) {
     }
 
     let gainDb = budgetValue('dB', 0);
-    let powerDbm = inputPowerDbm === undefined ? unavailable('dBm', '未提供射频输入功率。')
-      : inputPowerDbm === -Infinity ? logZero('dBm') : budgetValue('dBm', inputPowerDbm);
+    const drive = inputPowerDbm ?? (first.port.definition.type === 'RF' ? DEFAULT_RF_INPUT_POWER_DBM : undefined);
+    let powerDbm = drive === undefined ? unavailable('dBm', '未提供射频输入功率。')
+      : drive === -Infinity ? logZero('dBm') : budgetValue('dBm', drive);
 
     function recordRfPower(port: SignalPort) {
       if (port.definition.type === 'RF') rfPorts.push({ endpoint: port.ref, powerDbm });

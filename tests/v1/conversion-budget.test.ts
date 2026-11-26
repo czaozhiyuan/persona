@@ -114,13 +114,14 @@ test('optical loss, drive, Vπ, receiver response and downstream RF gains scale 
   assert.equal(active.segments[0].averageCurrent.availability, 'unavailable');
 });
 
-test('Vπ interpolates in volts, preserves partial results at uncovered points and works without drive', () => {
+test('Vπ interpolates in volts, preserves partial results at uncovered points and uses the default RF drive', () => {
   const { project, link } = fixture(false, {}, { vPi: { kind: 'rfCurve', points: [[1, 4], [3, 6]] } });
   const calc = createConversionBudget(project).calculateNamedLink;
-  const relative = calc(link, { frequencyGHz: 2 });
-  near(numeric(relative.gainDb), -31.995203 + 10);
-  assert.equal(relative.powerDbm.availability, 'unavailable');
-  assert.equal(relative.segments[0].modulationDepth.availability, 'unavailable');
+  const defaultDrive = calc(link, { frequencyGHz: 2 });
+  near(numeric(defaultDrive.gainDb), -31.995203 + 10);
+  near(numeric(defaultDrive.powerDbm), numeric(defaultDrive.gainDb));
+  near(numeric(defaultDrive.segments[0].modulationDepth), Math.PI * Math.sqrt(100 * 10 ** ((5 - 30) / 10)) / 5);
+  assert.deepEqual(defaultDrive, calc(link, { frequencyGHz: 2, inputPowerDbm: 0 }));
   for (const frequencyGHz of [0, 4]) {
     const outside = calc(link, { frequencyGHz, inputPowerDbm: -5 });
     near(numeric(outside.segments[0].pdPowerDbm), 0);
