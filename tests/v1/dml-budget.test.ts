@@ -91,9 +91,10 @@ test('loaded DML link separates average light and modulation through a hierarchi
 
 test('DML missing inputs, K interpolation, CW, blocked switch and zero drive preserve independent metrics', () => {
   const project = fixture(values);
-  const absent = calculate(project, link, { frequencyGHz: 2 });
-  near(absent.gainDb, -20);
-  for (const metric of [absent.powerDbm, absent.segments[0].modulationDepth]) assert.equal(metric.availability, 'unavailable');
+  const defaultDrive = calculate(project, link, { frequencyGHz: 2 });
+  near(defaultDrive.gainDb, -20);
+  near(defaultDrive.powerDbm, -20);
+  near(defaultDrive.segments[0].modulationDepth, 0.158113883);
   const noMean = calculate(fixture({ slope: values.slope }));
   near(noMean.powerDbm, -20);
   assert.deepEqual(noMean.segments[0].pdPowerDbm.availability, 'unavailable');
@@ -103,7 +104,7 @@ test('DML missing inputs, K interpolation, CW, blocked switch and zero drive pre
   assert.match(JSON.stringify(noSlope.gainDb), /直调系数/);
   const curve = fixture({ power: { kind: 'channelTable', values: { DWDM_CH28: 10 } },
     slope: { kind: 'rfCurve', points: [[1,0.002],[3,0.008]] } });
-  const scan = createLinkBudget(curve).scanNamedLink(link, { startGHz: 0, stopGHz: 4 }, { inputPowerDbm: 0 });
+  const scan = createLinkBudget(curve).scanNamedLink(link, { startGHz: 0, stopGHz: 4 });
   assert.equal(scan.status, 'complete');
   near(scan.points[2].powerDbm, -20);
   for (const index of [0,4]) assert.match(JSON.stringify(scan.points[index].gainDb), /超出曲线范围/);

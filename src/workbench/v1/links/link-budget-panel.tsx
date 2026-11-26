@@ -1,4 +1,5 @@
 import { loadedVoltages } from '../../../engine/v1/conversion-budget';
+import { DEFAULT_RF_INPUT_POWER_DBM } from '../../../engine/v1/rf-budget';
 import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import type { createLinkBudget, LinkBudgetConditions, LinkBudgetPoint, RfScanRange } from '../../../engine/v1/link-budget';
@@ -106,7 +107,7 @@ function PointDetails({ point, labels: { showEndpoint, showPort }, locate }: {
   </div>;
 }
 
-export function LinkBudgetPanel({ trialControls, diagnostics, link, budget, single, conditions, frequency, setFrequency, setInputPower, labels, locate }: {
+export function LinkBudgetPanel({ trialControls, diagnostics, link, budget, single, conditions, hasRfInput, frequency, setFrequency, setInputPower, labels, locate }: {
   trialControls: ReactNode;
   diagnostics: ReactNode;
   single: LinkBudgetPoint;
@@ -114,6 +115,7 @@ export function LinkBudgetPanel({ trialControls, diagnostics, link, budget, sing
   labels: PortLabels;
   budget: ReturnType<typeof createLinkBudget>;
   conditions: LinkBudgetConditions;
+  hasRfInput: boolean;
   frequency: number;
   setFrequency: (frequency: number) => void;
   setInputPower: (power: number | undefined) => void;
@@ -121,6 +123,7 @@ export function LinkBudgetPanel({ trialControls, diagnostics, link, budget, sing
 }) {
   const [range, setRange] = useState<RfScanRange>();
   const [metric, setMetric] = useState<ScanMetric>('gainDb');
+  const [editingPower, setEditingPower] = useState(false);
   const { inputPowerDbm, opticalSources } = conditions;
   const scan = useMemo(() => range && budget.scanNamedLink(link, range, { inputPowerDbm, opticalSources }),
     [budget, inputPowerDbm, opticalSources, link, range]);
@@ -132,7 +135,9 @@ export function LinkBudgetPanel({ trialControls, diagnostics, link, budget, sing
       <label>单点频率 (GHz)<input name="budgetFrequency" type="number" min={0} max={67} step="any"
         value={Number.isFinite(frequency) ? frequency : ''} onChange={event => setFrequency(event.currentTarget.valueAsNumber)} /></label>
       <label>射频输入功率 (dBm，可选)<input name="budgetInputPower" type="number" step="any"
-        value={conditions.inputPowerDbm ?? ''} placeholder="未知" onChange={event => {
+        value={inputPowerDbm ?? (hasRfInput && !editingPower ? DEFAULT_RF_INPUT_POWER_DBM : '')}
+        placeholder={hasRfInput ? String(DEFAULT_RF_INPUT_POWER_DBM) : '未知'}
+        onFocus={() => setEditingPower(true)} onBlur={() => setEditingPower(false)} onChange={event => {
           const value = event.currentTarget.valueAsNumber;
           setInputPower(Number.isFinite(value) ? value : undefined);
         }} /></label>

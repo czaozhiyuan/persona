@@ -10,6 +10,7 @@ import type { LocalPathRequest, PathResult } from './path-resolver';
 import type { SignalEdge, SignalGraph, SignalPort } from './signal-graph';
 
 export type RfBudgetInput = { frequencyGHz: number; inputPowerDbm?: number };
+export const DEFAULT_RF_INPUT_POWER_DBM = 0;
 
 export function isRfFrequency(frequencyGHz: number): boolean {
   return Number.isFinite(frequencyGHz) && frequencyGHz >= 0 && frequencyGHz <= 67;
@@ -92,7 +93,7 @@ export function createRfPathBudget(graph: SignalGraph) {
       return failed(frequencyGHz, { status: 'not_pure_rf', endpoint: nonRf.port.ref, reason: '纯射频预算要求整条路径均为射频。' });
     }
 
-    let powerDbm = inputPowerDbm === undefined ? unavailable('dBm', '未提供射频输入功率。') : budgetValue('dBm', inputPowerDbm);
+    let powerDbm = budgetValue('dBm', inputPowerDbm ?? DEFAULT_RF_INPUT_POWER_DBM);
     let gainDb = budgetValue('dB', 0);
     let factor: BudgetMetric<'ratio'> | undefined;
     const stages: RfStage[] = [];
