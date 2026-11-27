@@ -36,3 +36,43 @@ export function nestedDigitalProject(): Project {
     componentDefinitions: [controller, converter, wdm, reverse],
     moduleDefinitions: [root, box('A', wdm, 'CH1', 'CH3'), box('B', reverse, 'CH3', 'CH1'), card, adapter] };
 }
+
+export const sharedChannel = 'CWDM_1311' as const;
+export const inputs = ['red', 'green', 'blue'];
+export const outputs = ['right', 'left', 'middle'];
+export const controlPin = (box: string, portId: string) => ({ instancePath: [box, 'card', 'ctl'], portId });
+
+export function exposeSharedCml(project: Project) {
+  for (const [id, pin, direction] of [['A', 'a', 'in'], ['B', 'd', 'out']] as const) {
+    const box = project.moduleDefinitions.find(m => m.id === id)!;
+    box.ports = [...box.ports, port('CML', 'CONTROL', direction)];
+    box.portMappings = [...box.portMappings!, { portId: 'CML', target: local('card', pin) }];
+  }
+}
+
+export function sharedDigitalProject(): Project {
+  const project = nestedDigitalProject();
+  const [logic, , wdm, reverse] = project.componentDefinitions;
+  const [root, , , , adapter] = project.moduleDefinitions;
+  logic.controlRouting = true;
+  logic.ports = [
+    { ...port('TTL OUT', 'CONTROL', 'out'), name: 'CML TX' }, { ...port('TTL IN', 'CONTROL', 'in'), name: 'CML RX' },
+    ...inputs.map((id, i) => ({ ...port(id, 'CONTROL', 'in'), name: 'RS422 RX' + (i + 1) })),
+    ...outputs.map((id, i) => ({ ...port(id, 'CONTROL', 'out'), name: 'RS422 TX' + (i + 1) })),
+  ];
+  logic.transfers = [
+    ...inputs.map(id => ({ kind: 'control' as const, fromPortId: id, toPortId: 'TTL OUT' })),
+    ...outputs.map(id => ({ kind: 'control' as const, fromPortId: 'TTL IN', toPortId: id })),
+  ];
+  const sfp = builtInDefinitions.find(d => d.id === 'library-sfp')! as ComponentDefinition;
+  project.componentDefinitions = [logic, sfp, wdm, reverse];
+  adapter.instances = [slot('device', sfp.id)];
+  adapter.portMappings = Object.entries({ a: 'DATA_TX_IN', b: 'OPT_TX_OUT', c: 'OPT_RX_IN', d: 'DATA_RX_OUT' })
+    .map(([portId, pin]) => ({ portId, target: local('device', pin) }));
+  root.connections = root.connections!.map(c => ({ ...c, lossDb: 3 }));
+  project.instanceSettings = ['A', 'B'].map(box => ({ instancePath: [box, 'wdm'],
+    parameterOverrides: { insertionLoss: { kind: 'fixed', value: 0 } } }));
+  project.namedLinks = inputs.map((id, i) => ({ id: 'link-' + i, name: '业务 ' + (i + 1),
+    from: controlPin('A', id), to: controlPin('B', outputs[i]), channelId: sharedChannel }));
+  return project;
+}

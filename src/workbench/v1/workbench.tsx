@@ -764,7 +764,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
           </div>
           {routing && routing.definition.kind === 'component' && <div className="v1-canvas-page">
             <ControlRoutingCanvas key={hierarchyKey(routing.instancePath)} store={store} definition={routing.definition}
-              path={routing.instancePath} showName={linkOptions.showName} trace={canvasPath?.trace}
+              path={routing.instancePath} showName={linkOptions.showName} result={canvasPath}
               shared={structureScope(linkOptions.graph.instances, routing.definition.id)}
               openPorts={() => setPortTarget({ path: routing.instancePath, initialMode: 'manage' })}
               back={showTopology} enterModule={enterModule} />

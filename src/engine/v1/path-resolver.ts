@@ -92,6 +92,33 @@ export function createPathResolver(project: Project) {
     return port;
   }
 
+  // Walk the CONTROL side of every converter together, preserving each bidirectional port face.
+  function controlTerminals(boundaries: ReadonlySet<SignalPort>, exposed: ReadonlySet<SignalPort>, reverse: boolean) {
+    const adjacent = reverse ? incoming : outgoing;
+    const startFlow = reverse ? 'in' : 'out';
+    const pending: { port: SignalPort; flow: PortFlow; alias: boolean }[] =
+      [...boundaries].map(port => ({ port, flow: startFlow, alias: false }));
+    const terminals: { port: SignalPort; flow: PortFlow }[] = [];
+    const seen = { in: new Set<SignalPort>(), out: new Set<SignalPort>() };
+    const seenAlias = { in: new Set<SignalPort>(), out: new Set<SignalPort>() };
+    for (const state of pending) {
+      const { port, flow } = state;
+      const alias = state.alias || (flow === startFlow && exposed.has(port));
+      const visited = (alias ? seenAlias : seen)[flow];
+      if (visited.has(port)) continue;
+      visited.add(port);
+      const edges = adjacent.get(port)?.filter(edge => portFlowAt(edge, port) === flow);
+      if (!edges?.length && !alias && !boundaries.has(port)) terminals.push({ port, flow });
+      for (const edge of edges ?? []) {
+        const next = reverse ? edge.from : edge.to;
+        // Wires and mappings carry the same exposed signal. A control transfer reaches a distinct logical port.
+        if (next.definition.type === 'CONTROL') pending.push({ port: next, flow: portFlowAt(edge, next),
+          alias: alias && edge.source.kind !== 'transfer' });
+      }
+    }
+    return terminals;
+  }
+
   function routeConstraints(requiredEdges: readonly SignalEdge[]) {
     // Both directed realizations of a physical wire satisfy the same via constraint.
     const requiredRefs = new Map([...new Set(requiredEdges.map(edge => edge.source))].map((ref, index) => [ref, 1n << BigInt(index)]));
@@ -334,5 +361,5 @@ export function createPathResolver(project: Project) {
     return resolve(request, options);
   }
 
-  return { graph, resolveNamedLink, resolveLocalPath, reachableFrom, followBoundary };
+  return { graph, resolveNamedLink, resolveLocalPath, reachableFrom, followBoundary, controlTerminals };
 }
