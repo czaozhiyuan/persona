@@ -9,6 +9,7 @@ export type RoutingObstacle = Rect & { id: string };
 export type RoutingScene = { obstacles: readonly RoutingObstacle[]; boundary?: Rect; wires: readonly RoutingWire[] };
 export const wireCornerRadius = 8;
 const directions = [{ x: 1, y: 0 }, { x: 0, y: 1 }, { x: -1, y: 0 }, { x: 0, y: -1 }];
+const searchPasses = [{ visitLimit: 12_000, weight: 1 }, { visitLimit: 7_000, weight: 1.5 }];
 const directionIndex = { right: 0, bottom: 1, left: 2, top: 3 };
 const distance = (a: Point, b: Point) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 const advance = (p: Point, d: number, amount: number): Point =>
@@ -125,35 +126,40 @@ function routeWire(wire: RoutingWire, space: SearchSpace, clearance: number) {
   const start = from.anchor, end = to.anchor;
   if (!clear(start, advance(start, from.dir, step), clearance) || !clear(end, advance(end, to.dir, step), clearance)) return;
   const key = (p: Point, dir: number) => [p.x, p.y, dir].join(',');
-  const frontier = new Frontier();
-  frontier.push({ ...start, dir: from.dir, cost: 0, score: distance(start, end) });
-  const costs = new Map([[key(start, from.dir), 0]]);
-  let visits = 0;
-  while (frontier.entries.length && visits++ < 7000 && space.remaining-- > 0) {
-    const p = frontier.pop();
-    if (p.cost !== costs.get(key(p, p.dir))) continue;
-    if (!distance(p, end) && p.dir === (to.dir + 2) % 4) {
-      const points: Point[] = [];
-      for (let v: Visit | undefined = p; v; v = v.previous) points.push(v);
-      points.reverse();
-      for (let i = 1; i < points.length; i++) {
-        const lane = laneKey(points[i - 1], points[i]);
-        lanes.set(lane, (lanes.get(lane) ?? 0) + 1);
+  for (const { visitLimit, weight } of searchPasses) {
+    const frontier = new Frontier();
+    frontier.push({ ...start, dir: from.dir, cost: 0, score: weight * distance(start, end) });
+    const costs = new Map([[key(start, from.dir), 0]]);
+    let visits = 0;
+    while (frontier.entries.length && visits < visitLimit && space.remaining > 0) {
+      visits++;
+      space.remaining--;
+      const p = frontier.pop();
+      if (p.cost !== costs.get(key(p, p.dir))) continue;
+      if (!distance(p, end) && p.dir === (to.dir + 2) % 4) {
+        const points: Point[] = [];
+        for (let v: Visit | undefined = p; v; v = v.previous) points.push(v);
+        points.reverse();
+        for (let i = 1; i < points.length; i++) {
+          const lane = laneKey(points[i - 1], points[i]);
+          lanes.set(lane, (lanes.get(lane) ?? 0) + 1);
+        }
+        return simplify(points);
       }
-      return simplify(points);
+      for (let d = 0; d < 4; d++) {
+        if (d === (p.dir + 2) % 4 || (!p.previous && d !== from.dir)) continue;
+        const next = advance(p, d, step);
+        if (!distance(next, start) || (!distance(next, end) && d !== (to.dir + 2) % 4)) continue;
+        if (!clear(p, next, clearance)) continue;
+        if (p.dir !== d && !clear(advance(p, p.dir, -wireCornerRadius), advance(p, d, wireCornerRadius), 1)) continue;
+        const cost = p.cost + step + (p.dir === d ? 0 : 14) + 30 * (lanes.get(laneKey(p, next)) ?? 0);
+        const id = key(next, d);
+        if (cost >= (costs.get(id) ?? Infinity)) continue;
+        costs.set(id, cost);
+        frontier.push({ ...next, dir: d, cost, score: cost + weight * distance(next, end), previous: p });
+      }
     }
-    for (let d = 0; d < 4; d++) {
-      if (d === (p.dir + 2) % 4 || (!p.previous && d !== from.dir)) continue;
-      const next = advance(p, d, step);
-      if (!distance(next, start) || (!distance(next, end) && d !== (to.dir + 2) % 4)) continue;
-      if (!clear(p, next, clearance)) continue;
-      if (p.dir !== d && !clear(advance(p, p.dir, -wireCornerRadius), advance(p, d, wireCornerRadius), 1)) continue;
-      const cost = p.cost + step + (p.dir === d ? 0 : 14) + 30 * (lanes.get(laneKey(p, next)) ?? 0);
-      const id = key(next, d);
-      if (cost >= (costs.get(id) ?? Infinity)) continue;
-      costs.set(id, cost);
-      frontier.push({ ...next, dir: d, cost, score: cost + distance(next, end), previous: p });
-    }
+    if (!frontier.entries.length || !space.remaining) break;
   }
 }
 
@@ -167,6 +173,7 @@ export function planOrthogonalRoutes(scene: RoutingScene) {
     for (const clearance of [17, 2]) {
       const points = routeWire(wire, space, clearance);
       if (points) { routes.set(wire.id, points); break; }
+      if (!space.remaining) break;
     }
   }
   return routes;
