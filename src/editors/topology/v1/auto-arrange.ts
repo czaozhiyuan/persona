@@ -1,6 +1,7 @@
 import ELK, { type ElkNode } from 'elkjs/lib/elk.bundled.js';
 import type { Rect, XYPosition } from '@xyflow/react';
-import type { PortDefinition, Project, TopologyPlacement } from '../../../model/v1/types';
+import { resolveHierarchy } from '../../../engine/v1/hierarchy';
+import type { ComponentDefinition, PortDefinition, Project, TopologyPlacement } from '../../../model/v1/types';
 import { isPowerPort } from '../../../model/v1/types';
 import { gridPoint, topologyGrid } from '../../../state/v1/topology-grid';
 import { moveTopologyNodes, resizeTopologyFrame } from '../../../state/v1/topology-edits';
@@ -18,6 +19,14 @@ const compareId = (a: string, b: string) => a < b ? -1 : Number(a > b);
 const intersects = (a: Rect, b: Rect) => a.x < b.x + b.width && b.x < a.x + a.width
   && a.y < b.y + b.height && b.y < a.y + a.height;
 let engine: InstanceType<typeof ELK> | undefined;
+
+function signalRole(chip: ComponentDefinition, id: string, type: PortDefinition['type']) {
+  if (type === 'OPTICAL') return chip.transfers?.some(t => t.kind === 'eo' && t.supplyPortId === id) ? 'supply' : 'other';
+  const transfers = chip.transfers?.filter(t => t.fromPortId === id || t.toPortId === id);
+  if (transfers?.some(t => t.kind === 'digitalTx' || t.kind === 'digitalRx')) return 'digital';
+  if (transfers?.some(t => t.kind === 'control') || chip.ports.every(p => p.type === 'CONTROL' || isPowerPort(p.type))) return 'control';
+  return 'other';
+}
 
 /** Layout-only graph. All positions and edge endpoints below are local to the editing scope. */
 export async function arrangeScope(project: Project, view: Projection, edges: readonly WiringEdge[],
@@ -47,11 +56,21 @@ export async function arrangeScope(project: Project, view: Projection, edges: re
   }).sort((a, b) => compareId(a.id, b.id));
   const byId = new Map(nodes.map(n => [n.id, n]));
   const graphEdges: NonNullable<ElkNode['edges']> = [];
-  function digital(node: typeof nodes[number], port: PortDefinition) {
-    // A controller with only digital and power pins can start/end a digital chain.
-    return node.definition.kind === 'module' || node.definition.ports.every(p => p.type === 'CONTROL' || isPowerPort(p.type))
-      || node.definition.transfers?.some(t =>
-      ['digitalTx', 'digitalRx', 'control'].includes(t.kind) && (t.fromPortId === port.id || t.toPortId === port.id));
+  let hierarchy: ReturnType<typeof resolveHierarchy> | undefined;
+  const roles = new Map<string, ReturnType<typeof signalRole>>();
+  function role(node?: typeof nodes[number], port?: PortDefinition) {
+    if (!node || !port) return;
+    if (node.definition.kind === 'component') return signalRole(node.definition, port.id, port.type);
+    const key = portKey(node.definition.id, port.id);
+    if (!roles.has(key)) {
+      hierarchy ??= resolveHierarchy(project);
+      // Signal ports have at most one mapping per level. Only the leaf has a physical transfer role.
+      const resolved = hierarchy.resolvePort({ instancePath: node.member.item.instancePath, portId: port.id });
+      const end = resolved.status === 'resolved' ? resolved.chain.at(-1) : undefined;
+      const chip = end && hierarchy.resolveInstance(end.instancePath)?.definition;
+      roles.set(key, end && chip?.kind === 'component' ? signalRole(chip, end.portId, port.type) : 'other');
+    }
+    return roles.get(key);
   }
   for (const edge of [...scoped].sort((a, b) => compareId(a.id, b.id))) {
     const a = byId.get(edge.source), b = byId.get(edge.target);
@@ -59,9 +78,12 @@ export async function arrangeScope(project: Project, view: Projection, edges: re
     a?.neighbours.add(edge.target);
     b?.neighbours.add(edge.source);
     if (isPowerPort(edge.data!.portType)) continue;
-    if (edge.data!.portType === 'CONTROL' && (a && from && !digital(a, from) || b && to && !digital(b, to))) continue;
-    // An external optical supply enters the EO supply port, independently of the RF-to-optical signal.
-    if (b?.definition.kind === 'component' && b.definition.transfers?.some(t => t.kind === 'eo' && t.supplyPortId === to?.id)) continue;
+    if (edge.data!.portType === 'CONTROL') {
+      const source = role(a, from), target = role(b, to);
+      // A digital conversion pin identifies an actual signal even on a mixed-function controller.
+      if (source !== 'digital' && target !== 'digital' && (source === 'other' || target === 'other')) continue;
+    }
+    if (edge.data!.portType === 'OPTICAL' && (role(a, from) === 'supply' || role(b, to) === 'supply')) continue;
     if (a) a.primary = true;
     if (b) b.primary = true;
     if (!a || !b || a === b) continue;

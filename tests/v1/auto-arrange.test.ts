@@ -7,7 +7,7 @@ import { createLinkBudget } from '../../src/engine/v1/link-budget';
 import { arrangeScope } from '../../src/editors/topology/v1/auto-arrange';
 import { projectInlineExpansion } from '../../src/editors/topology/v1/inline-expansion-layout';
 import { handleId, nodeId, projectWiring } from '../../src/editors/topology/v1/topology-wiring';
-import type { InstancePath, Project } from '../../src/model/v1/types';
+import type { ComponentDefinition, InstancePath, ModuleDefinition, Project } from '../../src/model/v1/types';
 import { parseProjectJson } from '../../src/storage/v1/project-json';
 import { digitalControlProject } from './fixtures/digital-control-project';
 
@@ -65,6 +65,62 @@ test('digital CONTROL endpoints and MPO cores drive the main chain and duplex fe
   assert.ok(x('ctl-a') < x('a') && x('a') < x('b') && x('b') < x('ctl-b'));
   const { view, edges, measure } = input(duplex, []);
   assert.deepEqual(await arrangeScope(duplex, view, edges, measure), await arrangeScope(duplex, view, [...edges].reverse(), measure));
+});
+
+function wrapRootChildren(p: Project, count: number): Project {
+  const root = p.moduleDefinitions.find(m => m.id === p.rootModuleDefinitionId)!;
+  const modules = [...p.moduleDefinitions.filter(m => m !== root)];
+  const instances = root.instances.map(slot => {
+    let child = [...p.componentDefinitions, ...p.moduleDefinitions].find(d => d.id === slot.definitionId)!;
+    for (let i = 0; i < count; i++) {
+      const wrapper: ModuleDefinition = { kind: 'module', id: slot.id + '-wrapper-' + i, name: 'module',
+        instances: [{ ...(i === 0 ? slot : {}), id: 'nested', name: 'child', definitionId: child.id }],
+        ports: child.ports.map(({ id, type, direction }) => ({ id: 'outer-' + id, type, direction })),
+        portMappings: child.ports.map(port => ({ portId: 'outer-' + port.id, target: { instanceId: 'nested', portId: port.id } })) };
+      modules.push(wrapper);
+      child = wrapper;
+    }
+    return count ? { id: slot.id, name: slot.name, definitionId: child.id } : slot;
+  });
+  const ref = (end: { instanceId: string; portId: string }) => ({ ...end, portId: 'outer-'.repeat(count) + end.portId });
+  modules.push({ ...root, instances, connections: root.connections?.map(c => ({ ...c, from: ref(c.from), to: ref(c.to) })) });
+  return { ...p, moduleDefinitions: modules };
+}
+
+test('three reverse auxiliary status wires do not invert RF stages through zero, one or two mapped boundaries', async () => {
+  const chips: ComponentDefinition[] = ['a', 'b'].map(id => ({ kind: 'component', id, name: 'stage',
+    ports: [{ id: 'in', type: 'RF', direction: 'in' }, { id: 'out', type: 'RF', direction: 'out' },
+      ...[0, 1, 2].map(i => ({ id: 's' + i, type: 'CONTROL' as const, direction: id === 'a' ? 'in' as const : 'out' as const }))],
+    transfers: [{ kind: 'rf', fromPortId: 'in', toPortId: 'out' }] }));
+  const end = (instanceId: string, portId: string) => ({ instanceId, portId });
+  const root: ModuleDefinition = { kind: 'module', id: 'root', name: 'root', ports: [],
+    instances: chips.map(d => ({ id: d.id, name: d.name, definitionId: d.id })),
+    connections: [{ id: 'rf', from: end('a', 'out'), to: end('b', 'in') },
+      ...[0, 1, 2].map(i => ({ id: 'status' + i, from: end('b', 's' + i), to: end('a', 's' + i) }))] };
+  const p: Project = { id: 'aux', name: 'aux', rootModuleDefinitionId: root.id, componentDefinitions: chips, moduleDefinitions: [root] };
+  for (const depth of [0, 1, 2]) {
+    const result = await run(wrapRootChildren(p, depth), []);
+    const pos = result.layout!.topology!;
+    assert.ok(pos.find(n => n.instancePath[0] === 'a')!.x < pos.find(n => n.instancePath[0] === 'b')!.x, 'depth ' + depth);
+  }
+});
+
+test('EO supply and genuine digital transfers preserve their layout roles through renamed nested ports', async () => {
+  const p = example();
+  const tx = p.moduleDefinitions.find(d => d.instances.some(i => i.id === 'mzm') && d.instances.some(i => i.id === 'laser'))!;
+  const analog: Project = { ...p, rootModuleDefinitionId: tx.id, namedLinks: [], layout: undefined, instanceSettings: undefined,
+    moduleDefinitions: [{ ...tx, ports: [], portMappings: [], parameterMappings: [], cableBundles: [] }] };
+  const baseline = await run(analog, []);
+  const wrapped = await run(wrapRootChildren(analog, 2), []);
+  assert.deepEqual(wrapped.layout?.topology, baseline.layout?.topology);
+
+  const digital = digitalControlProject(), [root, box] = digital.moduleDefinitions;
+  const project: Project = { ...digital, namedLinks: [], componentDefinitions: digital.componentDefinitions.map(d => d.id === 'controller'
+    ? { ...d, ports: [...d.ports, { id: 'analog', type: 'RF', direction: 'in' }] } : d),
+    moduleDefinitions: [{ ...root, cableBundles: [], connections: root.connections!.filter(c => c.id === 'tx-a' || c.id === 'rx-b') }, box] };
+  const result = await run(wrapRootChildren(project, 2), []);
+  const x = (id: string) => result.layout!.topology!.find(n => n.instancePath[0] === id)!.x;
+  assert.ok(x('ctl-a') < x('a') && x('b') < x('ctl-b'));
 });
 
 test('rejects an unmeasured pin or an oversized scope before applying any partial layout', async () => {
