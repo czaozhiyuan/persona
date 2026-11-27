@@ -1,21 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { PointerEvent } from 'react';
-import { BaseEdge, EdgeLabelRenderer, Position, useReactFlow } from '@xyflow/react';
-import type { EdgeProps, XYPosition } from '@xyflow/react';
+import { BaseEdge, EdgeLabelRenderer, useReactFlow } from '@xyflow/react';
+import type { EdgeProps, Position, XYPosition } from '@xyflow/react';
 import type { PortType } from '../../../model/v1/types';
-import { wireCornerRadius } from './orthogonal-router';
+import { connectorControls, outward, towards, wireCornerRadius } from './fixed-wire-geometry';
 import type { WiringEdge } from './topology-wiring';
 
 export const signalColor = (type: PortType) => `var(--v1-signal-${type})`;
-
-function outward(position: Position) {
-  switch (position) {
-    case Position.Left: return { x: -1, y: 0 };
-    case Position.Right: return { x: 1, y: 0 };
-    case Position.Top: return { x: 0, y: -1 };
-    case Position.Bottom: return { x: 0, y: 1 };
-  }
-}
 
 function fannedCurve(edge: EdgeProps<WiringEdge>) {
   const { sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data } = edge;
@@ -57,20 +48,10 @@ export function curveThroughPoint(edge: Pick<EdgeProps<WiringEdge>, 'sourceX' | 
 
 type EdgeEnds = Pick<EdgeProps<WiringEdge>, 'sourceX' | 'sourceY' | 'targetX' | 'targetY' | 'sourcePosition' | 'targetPosition'>;
 const xy = (p: XYPosition) => p.x + ',' + p.y;
-const towards = (a: XYPosition, b: XYPosition, n: number) => {
-  const span = Math.hypot(b.x - a.x, b.y - a.y);
-  return { x: a.x + (b.x - a.x) * n / span, y: a.y + (b.y - a.y) * n / span };
-};
-
 export function fixedWirePath(edge: EdgeEnds, points: readonly XYPosition[]) {
   const start = { x: edge.sourceX, y: edge.sourceY }, end = { x: edge.targetX, y: edge.targetY };
-  function controls(port: XYPosition, side: Position, anchor: XYPosition, next: XYPosition) {
-    const amount = Math.min(40, Math.hypot(port.x - anchor.x, port.y - anchor.y) / 3);
-    const dir = outward(side);
-    return [xy({ x: port.x + dir.x * amount, y: port.y + dir.y * amount }), xy(towards(anchor, next, -amount))];
-  }
   const first = points[0], last = points[points.length - 1];
-  const [a, b] = controls(start, edge.sourcePosition, first, points[1]);
+  const [a, b] = connectorControls(start, edge.sourcePosition, first, points[1]).map(xy);
   const commands = ['M ' + xy(start) + ' C ' + a + ' ' + b + ' ' + xy(first)];
   for (let i = 1; i + 1 < points.length; i++) {
     const p = points[i], previous = points[i - 1], next = points[i + 1];
@@ -78,7 +59,7 @@ export function fixedWirePath(edge: EdgeEnds, points: readonly XYPosition[]) {
     const clockwise = (p.x - previous.x) * (next.y - p.y) > (p.y - previous.y) * (next.x - p.x);
     commands.push('L ' + xy(towards(p, previous, r)) + ' A ' + r + ',' + r + ' 0 0 ' + Number(clockwise) + ' ' + xy(towards(p, next, r)));
   }
-  const [d, c] = controls(end, edge.targetPosition, last, points[points.length - 2]);
+  const [d, c] = connectorControls(end, edge.targetPosition, last, points[points.length - 2]).map(xy);
   commands.push('L ' + xy(last) + ' C ' + c + ' ' + d + ' ' + xy(end));
   return commands.join(' ');
 }

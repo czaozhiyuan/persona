@@ -49,6 +49,34 @@ test('a narrow channel relaxes clearance, while an obstructed port and a separat
   assert.equal(planOrthogonalRoutes({ ...tight, obstacles: solid }).size, 0);
 });
 
+test('both cubics can turn into a common track while keeping their port tangents', () => {
+  const wire: RoutingWire = { id: 'a', source: { x: 0, y: 100, side: 'right', obstacle: 'source' },
+    target: { x: 160, y: 240, side: 'left', obstacle: 'target' } };
+  const obstacles = [{ id: 'source', x: -20, y: 50, width: 140, height: 100 },
+    { id: 'target', x: 160, y: 210, width: 50, height: 60 }];
+  // The source control reaches y=60, but the cubic stays within the frame starting at y=81.
+  const boundary = { x: -50, y: 81, width: 350, height: 230 };
+  const points = [{ x: 140, y: 100 }, { x: 140, y: 240 }];
+  const plan = (w: RoutingWire, s: Omit<RoutingScene, 'wires'>) => planOrthogonalRoutes({ ...s, wires: [w] }).get('a');
+  assert.deepEqual(plan(wire, { obstacles, boundary }), points);
+  const reverse = { ...wire, source: wire.target, target: wire.source };
+  assert.deepEqual(plan(reverse, { obstacles, boundary }), [...points].reverse());
+  const path = fixedWirePath({ sourceX: 0, sourceY: 100, sourcePosition: Position.Right,
+    targetX: 160, targetY: 240, targetPosition: Position.Left }, points);
+  assert.match(path, /^M 0,100 C 40,100 140,60 140,100 L 140,240 C 140,246\.\d+ 153\.\d+,240 160,240$/);
+  // Both restrictions intersect the bowed cubic but leave the port-to-anchor chord free.
+  for (const constrained of [{ obstacles, boundary: { ...boundary, y: 95 } },
+    { obstacles: [...obstacles, { id: 'near', x: 120, y: 83, width: 4, height: 2 }], boundary }]) {
+    for (const w of [wire, reverse]) {
+      const route = plan(w, constrained);
+      assert.ok(route);
+      const [anchor, next] = w === wire ? route : [...route].reverse();
+      assert.equal(next.y, anchor.y);
+      assert.ok(next.x > anchor.x);
+    }
+  }
+});
+
 test('ordinary A* keeps its four-bend detour and a longer search can retry at the same clearance', () => {
   for (const [span, bends] of [[500, 4], [700, 6]]) {
     const wall = { id: 'wall', x: span / 2, y: -200, width: 50, height: span + 240 };
@@ -60,7 +88,8 @@ test('ordinary A* keeps its four-bend detour and a longer search can retry at th
       { id: 'target', x: span - 60, y: span - 30, width: 60, height: 60 }] });
     const points = routes.get('a');
     assert.ok(points);
-    assert.equal(points.length - 2, bends);
+    const anchorTurns = Number(points[1].y !== points[0].y) + Number(points.at(-2)!.y !== points.at(-1)!.y);
+    assert.equal(points.length - 2 + anchorTurns, bends);
     assert.deepEqual(points[0], { x: -20, y: 0 });
     assert.deepEqual(points.at(-1), { x: span + 20, y: span });
     for (let i = 1; i < points.length; i++) {
