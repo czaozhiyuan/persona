@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
 import { serializeProjectJson } from '../../src/storage/v1/project-json';
-import { controlPin, inputs, outputs, sharedChannel, sharedDigitalProject } from '../v1/fixtures/nested-digital-project';
+import { controlPin, exposeSharedCml, inputs, outputs, sharedChannel, sharedDigitalProject } from '../v1/fixtures/nested-digital-project';
 
 const browser = await chromium.launch({ channel: 'chrome' });
 try {
@@ -83,6 +83,7 @@ try {
     return wires;
   }
   const fixture = sharedDigitalProject();
+  exposeSharedCml(fixture);
   fixture.namedLinks = [];
   await load(serializeProjectJson(fixture));
   await button('参数计算').click();
@@ -90,9 +91,8 @@ try {
     await select.selectOption('');
     assert.equal(await book.locator('input[type=checkbox]').first().isChecked(), false);
     await from.selectOption(pair('A', input));
-    assert.deepEqual(await to.locator('option').evaluateAll(opts => opts.map(o => (o as HTMLOptionElement).value)), [
-      '', ...outputs.map(id => pair('B', id)),
-    ]);
+    assert.deepEqual(new Set(await to.locator('option').evaluateAll(opts => opts.map(o => (o as HTMLOptionElement).value))),
+      new Set(['', JSON.stringify([['B'], 'CML']), ...outputs.map(id => pair('B', id))]));
     assert.equal(await to.inputValue(), '');
     await to.selectOption(pair('B', outputs[i]));
     await book.locator('[name=channel]').selectOption(sharedChannel);

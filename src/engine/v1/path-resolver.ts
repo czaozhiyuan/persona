@@ -93,19 +93,27 @@ export function createPathResolver(project: Project) {
   }
 
   // Walk the CONTROL side of every converter together, preserving each bidirectional port face.
-  function controlTerminals(boundaries: ReadonlySet<SignalPort>, reverse: boolean) {
+  function controlTerminals(boundaries: ReadonlySet<SignalPort>, exposed: ReadonlySet<SignalPort>, reverse: boolean) {
     const adjacent = reverse ? incoming : outgoing;
-    const pending: { port: SignalPort; flow: PortFlow }[] = [...boundaries].map(port => ({ port, flow: reverse ? 'in' : 'out' }));
-    const terminals: typeof pending = [];
+    const startFlow = reverse ? 'in' : 'out';
+    const pending: { port: SignalPort; flow: PortFlow; alias: boolean }[] =
+      [...boundaries].map(port => ({ port, flow: startFlow, alias: false }));
+    const terminals: { port: SignalPort; flow: PortFlow }[] = [];
     const seen = { in: new Set<SignalPort>(), out: new Set<SignalPort>() };
-    for (const { port, flow } of pending) {
-      if (seen[flow].has(port)) continue;
-      seen[flow].add(port);
+    const seenAlias = { in: new Set<SignalPort>(), out: new Set<SignalPort>() };
+    for (const state of pending) {
+      const { port, flow } = state;
+      const alias = state.alias || (flow === startFlow && exposed.has(port));
+      const visited = (alias ? seenAlias : seen)[flow];
+      if (visited.has(port)) continue;
+      visited.add(port);
       const edges = adjacent.get(port)?.filter(edge => portFlowAt(edge, port) === flow);
-      if (!edges?.length && !boundaries.has(port)) terminals.push({ port, flow });
+      if (!edges?.length && !alias && !boundaries.has(port)) terminals.push({ port, flow });
       for (const edge of edges ?? []) {
         const next = reverse ? edge.from : edge.to;
-        if (next.definition.type === 'CONTROL') pending.push({ port: next, flow: portFlowAt(edge, next) });
+        // Wires and mappings carry the same exposed signal. A control transfer reaches a distinct logical port.
+        if (next.definition.type === 'CONTROL') pending.push({ port: next, flow: portFlowAt(edge, next),
+          alias: alias && edge.source.kind !== 'transfer' });
       }
     }
     return terminals;

@@ -17,6 +17,7 @@ export function createEndpointChoices({ graph, reachableFrom, followBoundary, co
   const mapped = new Set<SignalPort>();
   const consumes = new Set<SignalPort>(), produces = new Set<SignalPort>();
   const txInputs = new Set<SignalPort>(), rxOutputs = new Set<SignalPort>();
+  const publicInputs = new Set<SignalPort>(), publicOutputs = new Set<SignalPort>();
   for (const edge of graph.edges) {
     const { source, from, to, supply } = edge;
     if ((source.kind === 'connection' || source.kind === 'cableCore') && !source.ref.scopePath.length) {
@@ -50,21 +51,20 @@ export function createEndpointChoices({ graph, reachableFrom, followBoundary, co
     if (value.instancePath.length > 1) continue;
     const port = graph.ports.get(key)!;
     const { direction, type, opticalEmitter } = port.definition;
-    // A system boundary mapped to a converter already represents its control input or output.
     if (supportsDirection(direction, 'in') && !occupiedIn.has(port)) {
       addRole(starts, key, 'in');
-      if (port.modulePort && type === 'CONTROL') txInputs.delete(followBoundary(port));
+      if (port.modulePort && type === 'CONTROL') publicInputs.add(followBoundary(port));
     }
     if (supportsDirection(direction, 'out') && !occupiedOut.has(port)) {
       addRole(ends, key, 'out');
-      if (port.modulePort && type === 'CONTROL') rxOutputs.delete(followBoundary(port));
+      if (port.modulePort && type === 'CONTROL') publicOutputs.add(followBoundary(port));
     }
     if (port.modulePort || mapped.has(port)) continue;
     if (!produces.has(port) && (opticalEmitter || (type !== 'OPTICAL' && direction === 'out'))) addRole(starts, key, 'out');
     if (occupiedIn.has(port) && !consumes.has(port)) addRole(ends, key, 'in');
   }
-  for (const [boundaries, reverse, roles] of [[txInputs, true, starts], [rxOutputs, false, ends]] as const) {
-    for (const { port, flow } of controlTerminals(boundaries, reverse)) {
+  for (const [boundaries, exposed, reverse, roles] of [[txInputs, publicInputs, true, starts], [rxOutputs, publicOutputs, false, ends]] as const) {
+    for (const { port, flow } of controlTerminals(boundaries, exposed, reverse)) {
       if (!port.modulePort && port.ref.instancePath.length > 1) addRole(roles, signalPortKey(port.ref), flow);
     }
   }

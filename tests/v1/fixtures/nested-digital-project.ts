@@ -42,6 +42,14 @@ export const inputs = ['red', 'green', 'blue'];
 export const outputs = ['right', 'left', 'middle'];
 export const controlPin = (box: string, portId: string) => ({ instancePath: [box, 'card', 'ctl'], portId });
 
+export function exposeSharedCml(project: Project) {
+  for (const [id, pin, direction] of [['A', 'a', 'in'], ['B', 'd', 'out']] as const) {
+    const box = project.moduleDefinitions.find(m => m.id === id)!;
+    box.ports = [...box.ports, port('CML', 'CONTROL', direction)];
+    box.portMappings = [...box.portMappings!, { portId: 'CML', target: local('card', pin) }];
+  }
+}
+
 export function sharedDigitalProject(): Project {
   const project = nestedDigitalProject();
   const [logic, , wdm, reverse] = project.componentDefinitions;

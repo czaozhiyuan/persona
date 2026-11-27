@@ -5,7 +5,7 @@ import { createOpticalBudgetForGraph } from '../../src/engine/v1/optical-budget'
 import { signalPortKey } from '../../src/engine/v1/signal-graph';
 import { createLinkOptions } from '../../src/workbench/v1/links/link-options';
 import { parseProjectJson, serializeProjectJson } from '../../src/storage/v1/project-json';
-import { controlPin, inputs, outputs, sharedChannel, sharedDigitalProject } from './fixtures/nested-digital-project';
+import { controlPin, exposeSharedCml, inputs, outputs, sharedChannel, sharedDigitalProject } from './fixtures/nested-digital-project';
 
 test('nested CONTROL fan-in and fan-out expose nine reachable combinations without pairing or reserving endpoints', () => {
   const project = sharedDigitalProject(), links = project.namedLinks!;
@@ -40,6 +40,29 @@ test('nested CONTROL fan-in and fan-out expose nine reachable combinations witho
   const parallel = createLinkOptions(project);
   assert.equal(parallel.resolveNamedLink(links[0]).status, 'ambiguous');
   assert.equal(parallel.resolveNamedLink({ ...links[0], via: [{ scopePath: ['A', 'card'], connectionId: 'alternate' }] }).status, 'resolved');
+});
+
+test('public CML mappings coexist with independent RS422 branches and preserve their outer aliases', () => {
+  const p = sharedDigitalProject();
+  exposeSharedCml(p);
+  const key = (box: string, pin: string) => signalPortKey(controlPin(box, pin));
+  function check(publicStart: string, publicEnd: string) {
+    const options = createLinkOptions(parseProjectJson(serializeProjectJson(p)));
+    const initial = options.endpointChoices('', sharedChannel, false);
+    const startPins = ['A', 'B'].flatMap(box => inputs.map(id => key(box, id)));
+    const endPins = ['A', 'B'].flatMap(box => outputs.map(id => key(box, id)));
+    assert.deepEqual(new Set(initial.from.map(p => p.key)), new Set([publicStart, ...startPins]));
+    assert.deepEqual(new Set(initial.to.map(p => p.key)), new Set([publicEnd, ...endPins]));
+    for (const input of inputs) {
+      const choices = options.endpointChoices(key('A', input), sharedChannel, false);
+      assert.deepEqual(new Set(choices.to.map(p => p.key)), new Set([publicEnd, ...outputs.map(id => key('B', id))]));
+    }
+  }
+  check(signalPortKey({ instancePath: ['A'], portId: 'CML' }), signalPortKey({ instancePath: ['B'], portId: 'CML' }));
+  const [root] = p.moduleDefinitions;
+  root.ports = [{ id: 'in', direction: 'in', type: 'CONTROL' }, { id: 'out', direction: 'out', type: 'CONTROL' }];
+  root.portMappings = ['A', 'B'].map((box, i) => ({ portId: root.ports[i].id, target: { instanceId: box, portId: 'CML' } }));
+  check(signalPortKey({ instancePath: [], portId: 'in' }), signalPortKey({ instancePath: [], portId: 'out' }));
 });
 
 test('three named links share one physical launch and independently track loss, receiver settings and disconnections', () => {
