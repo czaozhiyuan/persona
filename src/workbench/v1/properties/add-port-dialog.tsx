@@ -4,7 +4,8 @@ import { PortDeletionDialog } from '../../../editors/topology/v1/port-deletion-d
 import type { ResolvedInstance } from '../../../engine/v1/hierarchy';
 import { canSetSupplyCapacity, isPowerPort, portDirectionLabels, supportsDirection } from '../../../model/v1/types';
 import type { PortDefinition, PortDirection, PortType } from '../../../model/v1/types';
-import { addDefinitionPort, updateDefinitionPort } from '../../../state/v1/module-ports';
+import { addDefinitionPort } from '../../../state/v1/module-ports';
+import { savePort } from './save-port';
 import type { ProjectStore } from '../../../state/v1/project-store';
 import { editablePortName, portDisplayName, portTypeLabels } from '../labels';
 import { PortParameterFields, readPort } from './device-fields';
@@ -95,8 +96,9 @@ function StandardPortDialog({ initialMode, name, owner, locations, store, added,
       setRevision(value => value + 1);
       return;
     }
-    const result = store.commit(project => port
-      ? updateDefinitionPort(project, definitionId, next) : addDefinitionPort(project, definitionId, next));
+    const result = port ? savePort(store, definitionId, next)
+      : store.commit(project => addDefinitionPort(project, definitionId, next));
+    if (!result) return;
     if (!result.ok) throw new Error(result.message);
     if (!port) added(next.id);
     setSelected(next.id);

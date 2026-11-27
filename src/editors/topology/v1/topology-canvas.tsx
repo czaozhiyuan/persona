@@ -168,6 +168,7 @@ type Props = {
   fullPage: boolean;
   toggleFullPage: (view: CanvasView) => void;
   restoreView?: CanvasView;
+  readView: React.Ref<() => CanvasView | undefined>;
   move: (placements: readonly TopologyPlacement[], manual: Projection, delta: XYPosition) => void;
   resize: (frame: TopologyFrame, placementAdjustments: readonly TopologyPlacement[]) => void;
   finishContentEdit: (base: Project, layout: ExpansionLayout) => void;
@@ -205,7 +206,7 @@ export function TopologyCanvas(props: Props) {
 function EditableTopologyCanvas({ multiplex, project, instances, modulePath, selectedInstance, selectedPaths, pathResult, budgetHighlight, expanded, manualFrames,
   toggleModule, selectObject, selectObjects, enterModule, reparent, focusMoved, move, resize, connect, mapPort, add, placingModule, cancelPlacement,
   deleteInstances, deleteWiring, route, finishRouting, rename, copyObjects, pasteObjects, pointerPlacement, centerPlacement, report, undo, redo, openPort, onAddPort, newPort,
-  depth, fullPage, toggleFullPage, restoreView, viewHost, topologyActive, finishContentEdit }: Props) {
+  depth, fullPage, toggleFullPage, restoreView, readView, viewHost, topologyActive, finishContentEdit }: Props) {
   const flowStore = useStoreApi<CanvasNode, WiringEdge>();
   const boxSelection = useRef<readonly InstancePath[] | undefined>(undefined);
   const panWithSpace = useKeyPress('Space', { actInsideInputWithModifier: false });
@@ -919,8 +920,14 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
     } };
   });
 
+  function canvasView() {
+    if (flow.current) return { viewport: flow.current.getViewport(), edgeId: selectedWiring ? selectedWiring.id : undefined };
+  }
+  useImperativeHandle(readView, () => canvasView);
+
   function switchFullPage() {
-    if (flow.current) toggleFullPage({ viewport: flow.current.getViewport(), edgeId: selectedWiring ? selectedWiring.id : undefined });
+    const view = canvasView();
+    if (view) toggleFullPage(view);
   }
 
   return <div ref={canvas} className="v1-topology-canvas" aria-label="逻辑拓扑画布" tabIndex={-1}
@@ -1021,7 +1028,8 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
       }}
       onNodeDoubleClick={(event, node) => {
         if (event.target instanceof Element && event.target.closest('.react-flow__handle')) return;
-        if (node.data.toggle) enterModule(node.data.path);
+        const definition = node.data.labelContext.definition;
+        if (node.data.toggle || (definition.kind === 'component' && definition.controlRouting)) enterModule(node.data.path);
       }}
       onNodesChange={changes => {
         const dimensions = changes.flatMap(change => {

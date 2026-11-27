@@ -1,5 +1,6 @@
 import type { Rect, XYPosition } from '@xyflow/react';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { ControlRoutingCanvas } from '../../editors/topology/v1/control-routing-canvas';
 import { LayoutEditor } from '../../editors/layout/v1/layout-editor';
 import { HierarchyTree } from '../../editors/topology/v1/hierarchy-tree';
 import { hierarchyKey, inHierarchy } from '../../editors/topology/v1/hierarchy-view';
@@ -50,7 +51,7 @@ type Props = {
   newProject: () => Project;
 };
 
-type Page = 'canvas' | 'project' | 'budget';
+type Page = 'canvas' | 'project' | 'budget' | { routing: InstancePath };
 type BudgetPage = 'links' | 'optical' | 'dc';
 type SideTab = 'structure' | 'library';
 type Presentation = {
@@ -81,6 +82,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const objectClipboard = useRef<ObjectClipboard>(undefined);
   const fileInput = useRef<HTMLInputElement>(null);
   const importAttempt = useRef(0);
+  const readCanvasView = useRef<() => CanvasView | undefined>(null);
+  const treeClickOrigin = useRef<{ target: string; restore: () => void }>(undefined);
   const topologyLocation = useRef<TopologyLocation | undefined>(undefined);
   const [projectSession, setProjectSession] = useState(0);
   const [portTarget, setPortTarget] = useState<{ path: InstancePath; initialMode: PortManagerMode }>();
@@ -118,9 +121,13 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const [localOptical, setLocalOptical] = useState<LocalOpticalSettings>({ sources: [] });
   const activeOccurrence = store.resolveInstance(selection.modulePath);
   const active = activeOccurrence?.definition;
-  const selected = selection.instancePath && store.resolveInstance(selection.instancePath);
+  const routeOwner = typeof page === 'object' ? store.resolveInstance(page.routing) : undefined;
+  const routing = routeOwner?.definition.kind === 'component' && routeOwner.definition.controlRouting ? routeOwner : undefined;
+  useEffect(() => { if (typeof page === 'object' && !routing) setPage('canvas'); }, [page, routing]);
+  const selected = routing ?? (selection.instancePath && store.resolveInstance(selection.instancePath));
+  const visibleTab = routing && leftTab === 'library' ? 'structure' : leftTab;
   const selectedPaths = selectionPaths(selection);
-  const properties = selection.instancePaths ? undefined : selected || activeOccurrence;
+  const properties = routing ?? (selection.instancePaths ? undefined : selected || activeOccurrence);
   const targetPortOwner = portTarget && store.resolveInstance(portTarget.path);
   const layout = selection.view === 'topology' ? project.layout?.topology : project.layout?.physical;
   const linkOptions = useMemo(() => createLinkOptions(project), [project]);
@@ -269,7 +276,19 @@ export function Workbench({ store, loadExample, newProject }: Props) {
       ? paths.filter(item => hierarchyKey(item) !== key) : [...paths, path]);
   }
 
-  function selectTreeObject(path: InstancePath, extend: boolean) {
+  function selectTreeObject(path: InstancePath, extend: boolean, firstRoutingClick: boolean) {
+    if (firstRoutingClick) {
+      // Native double-click fires after two clicks. Keep the view before the first reveal.
+      const view = readCanvasView.current?.();
+      treeClickOrigin.current = { target: hierarchyKey(path), restore: () => {
+        store.selectModule(selection.modulePath);
+        store.selectInstances(selectedPaths);
+        setExpandedCanvas(expandedCanvas);
+        setFocusMoved(undefined);
+        if (view) setRestoredView({ scope: currentScope, view });
+      } };
+    }
+    if (routing && hierarchyKey(routing.instancePath) === hierarchyKey(path)) return;
     if (!inHierarchy(selection.modulePath, path)) {
       store.selectModule(path.slice(0, -1));
       selectObjects([path]);
@@ -411,6 +430,24 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     setDissolve(undefined);
   }
 
+  function enterObject(path: InstancePath) {
+    const definition = store.resolveInstance(path)?.definition;
+    if (definition?.kind === 'component' && definition.controlRouting) {
+      setCopyNotice('');
+      store.setView('topology');
+      openPage({ routing: path });
+    } else {
+      enterModule(path);
+    }
+  }
+
+  function enterTreeObject(path: InstancePath) {
+    const origin = treeClickOrigin.current;
+    treeClickOrigin.current = undefined;
+    if (origin?.target === hierarchyKey(path)) origin.restore();
+    enterObject(path);
+  }
+
   function enterModule(path: InstancePath) {
     setCopyNotice('');
     store.selectModule(path);
@@ -431,6 +468,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
       setOpticalTarget(undefined);
       setDcScope(undefined);
       importAttempt.current++;
+      treeClickOrigin.current = undefined;
       topologyLocation.current = undefined;
       setProjectSession(session => session + 1);
       setPresentation(undefined);
@@ -636,18 +674,18 @@ export function Workbench({ store, loadExample, newProject }: Props) {
           <button type="button" aria-label="撤销" title="撤销" disabled={!canUndo} onClick={() => { store.undo(); setError(''); }}>↶</button>
           <button type="button" aria-label="重做" title="重做" disabled={!canRedo} onClick={() => { store.redo(); setError(''); }}>↷</button>
         </div>
-        <button className="v1-new-module" type="button" disabled={!topologyActive}
+        {!routing && <button className="v1-new-module" type="button" disabled={!topologyActive}
           aria-pressed={placingModule && topologyActive} onClick={() => setPlacingModule(active => !active)}>
           {placingModule && topologyActive ? '取消放置' : '＋ 新建模块'}
-        </button>
+        </button>}
         <div className="view-switch" role="group" aria-label="视图选择">
           <button type="button" aria-pressed={page === 'canvas' && selection.view === 'topology'} onClick={showTopology}>框图</button>
-          <button type="button" aria-pressed={page === 'canvas' && selection.view === 'physical'}
+          {!routing && <button type="button" aria-pressed={page === 'canvas' && selection.view === 'physical'}
             onClick={() => {
               if (selection.view === 'topology') topologyLocation.current = selection;
               store.setView('physical');
               openPage('canvas');
-            }}>机箱布局</button>
+            }}>机箱布局</button>}
           <button type="button" aria-pressed={page === 'budget'} onClick={() => openBudget(category)}>参数计算</button>
         </div>
         <nav className="v1-main-menu v1-view-menus" aria-label="计算与视图菜单">
@@ -660,8 +698,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
           </details>
           <details name="workbench-menu" data-workbench-popup><summary>视图</summary>
             <div className="v1-menu-items v1-view-items">
-              <button type="button" aria-pressed={leftTab === 'structure'} onClick={() => setLeftTab(tab => tab === 'structure' ? undefined : 'structure')}>结构</button>
-              <button type="button" aria-pressed={leftTab === 'library'} onClick={() => setLeftTab(tab => tab === 'library' ? undefined : 'library')}>器件库</button>
+              <button type="button" aria-pressed={visibleTab === 'structure'} onClick={() => setLeftTab(visibleTab === 'structure' ? undefined : 'structure')}>结构</button>
+              {!routing && <button type="button" aria-pressed={leftTab === 'library'} onClick={() => setLeftTab(tab => tab === 'library' ? undefined : 'library')}>器件库</button>}
               <button type="button" aria-pressed={propertiesOpen} onClick={() => setPropertiesOpen(open => !open)}>属性</button>
               <div ref={setViewHost} className="v1-view-canvas-settings" />
             </div>
@@ -676,21 +714,21 @@ export function Workbench({ store, loadExample, newProject }: Props) {
           if (file) void openProjectFile(file);
         }} />
       {error && <p className="v1-workbench-notice error" role="alert">{error}</p>}
-      <div className="v1-workbench-body" data-left-open={leftTab !== undefined} data-right-open={propertiesOpen}>
+      <div className="v1-workbench-body" data-left-open={visibleTab !== undefined} data-right-open={propertiesOpen}>
         <aside className="v1-side v1-side-left" aria-label="结构与器件库">
           <div className="v1-side-tools">
-            <button type="button" aria-expanded={leftTab === 'structure'} aria-controls="workbench-structure"
-              onClick={() => setLeftTab(current => current === 'structure' ? undefined : 'structure')}>结构</button>
-            <button type="button" aria-expanded={leftTab === 'library'} aria-controls="workbench-library"
-              onClick={() => setLeftTab(current => current === 'library' ? undefined : 'library')}>器件库</button>
+            <button type="button" aria-expanded={visibleTab === 'structure'} aria-controls="workbench-structure"
+              onClick={() => setLeftTab(visibleTab === 'structure' ? undefined : 'structure')}>结构</button>
+            {!routing && <button type="button" aria-expanded={leftTab === 'library'} aria-controls="workbench-library"
+              onClick={() => setLeftTab(current => current === 'library' ? undefined : 'library')}>器件库</button>}
           </div>
-          <div id="workbench-structure" className="v1-side-scroll" hidden={leftTab !== 'structure'}>
+          <div id="workbench-structure" className="v1-side-scroll" hidden={visibleTab !== 'structure'}>
             <HierarchyTree key={projectSession} project={project} focusMoved={focusMoved?.path} move={moveAcrossLevels}
-              instances={linkOptions.graph.instances} modulePath={selection.modulePath}
-              selected={selectedPaths} expanded={expandedHierarchy} toggle={toggleBranch} select={selectTreeObject}
-              enter={enterModule} navigatePort={navigatePort} />
+              instances={linkOptions.graph.instances} modulePath={routing?.instancePath ?? selection.modulePath}
+              selected={routing ? [routing.instancePath] : selectedPaths} expanded={expandedHierarchy} toggle={toggleBranch} select={selectTreeObject}
+              enter={enterTreeObject} navigatePort={navigatePort} />
           </div>
-          <div id="workbench-library" className="v1-side-scroll" hidden={leftTab !== 'library'}>
+          <div id="workbench-library" className="v1-side-scroll" hidden={visibleTab !== 'library'}>
             {active?.kind === 'module' && <LibraryPanel pointerPlacement={(...args) => pointerPlacement.current?.(...args)} centerPlacement={(definition, name) => centerPlacement.current?.(definition, name)} library={library} key={projectSession} store={store} state={state} module={active} />}
           </div>
         </aside>
@@ -698,7 +736,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
           <div className="v1-canvas-page" inert={page !== 'canvas' || selection.view !== 'topology'}
             aria-hidden={page !== 'canvas' || selection.view !== 'topology'}>
             {active?.kind === 'module' &&
-              <TopologyEditor pointerPlacement={pointerPlacement} multiplex={multiplex} centerPlacement={centerPlacement} library={library.config} key={JSON.stringify(['topology', projectSession, selection.modulePath])}
+              <TopologyEditor readView={readCanvasView} enterObject={enterObject} pointerPlacement={pointerPlacement} multiplex={multiplex} centerPlacement={centerPlacement} library={library.config} key={JSON.stringify(['topology', projectSession, selection.modulePath])}
                 linkControls={<div className="v1-canvas-link">
                   <label>当前链路<select aria-label="框图当前链路" value={category === 'links' ? savedLink?.id ?? '' : ''} onChange={e => chooseLink(e.target.value || undefined)}>
                     <option value="">{category !== 'links' ? budgetTitles[category] : canvasDraft === 'new' ? '画布临时链路' : '未选择链路'}</option>
@@ -724,6 +762,13 @@ export function Workbench({ store, loadExample, newProject }: Props) {
                 placingModule={topologyActive && placingModule} setPlacingModule={setPlacingModule}
                 toolsHost={toolsHost} viewHost={viewHost} topologyActive={topologyActive} />}
           </div>
+          {routing && routing.definition.kind === 'component' && <div className="v1-canvas-page">
+            <ControlRoutingCanvas key={hierarchyKey(routing.instancePath)} store={store} definition={routing.definition}
+              path={routing.instancePath} showName={linkOptions.showName} trace={canvasPath?.trace}
+              shared={structureScope(linkOptions.graph.instances, routing.definition.id)}
+              openPorts={() => setPortTarget({ path: routing.instancePath, initialMode: 'manage' })}
+              back={showTopology} enterModule={enterModule} />
+          </div>}
           <div className="v1-canvas-page v1-layout-scroll" inert={page !== 'canvas' || selection.view !== 'physical'}
             aria-hidden={page !== 'canvas' || selection.view !== 'physical'}>
             <LayoutEditor key={projectSession} store={store} state={state} onDcBudget={showDc} />
@@ -821,7 +866,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
           </div>
           <div id="workbench-properties" className="v1-right-content" hidden={!propertiesOpen}>
             <div className="v1-side-scroll v1-object-properties">
-              {selection.instancePaths && !topologyActive && <p className="panel" role="status">已选中 {selection.instancePaths.length} 个对象。选中单个对象可编辑属性。</p>}
+              {!routing && selection.instancePaths && !topologyActive && <p className="panel" role="status">已选中 {selection.instancePaths.length} 个对象。选中单个对象可编辑属性。</p>}
               {properties && <PropertiesPanel key={JSON.stringify([projectSession, properties.instancePath])}
                 store={store} occurrence={properties} occurrences={linkOptions.graph.instances} jumpToParameter={jumpToParameter}
                 onAddPort={path => setPortTarget({ path, initialMode: 'manage' })}
@@ -839,7 +884,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
                 onAddInside={topologyActive && selected?.instance && selected.definition.kind === 'module'
                   ? path => { enterModule(path); setLeftTab('library'); } : undefined}
                 onDcBudget={topologyActive && properties.definition.kind === 'module' && properties.definition.physicalEnclosure ? showDc : undefined}
-                onMoveUp={selection.view === 'topology' && selected && selected.instancePath.length > 1 ? requestMoveUp : undefined}
+                onMoveUp={!routing && selection.view === 'topology' && selected && selected.instancePath.length > 1 ? requestMoveUp : undefined}
                 onDissolve={selection.view === 'topology' && selected?.instance && selected.definition.kind === 'module' ? requestDissolve : undefined} />}
             </div>
             <div className="v1-scope-tools" ref={setToolsHost} />

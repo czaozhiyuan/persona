@@ -6,6 +6,7 @@ import { resolveHierarchy } from '../../src/engine/v1/hierarchy';
 import { builtInDefinitions } from '../../src/library/v1/built-in';
 import { insertLibraryItem } from '../../src/library/v1/insert-library-item';
 import { addTemplateInstance, previewTemplateUpdate } from '../../src/library/v1/project-snapshots';
+import { captureInstance, factoryLibrary, libraryDefinitions, parseLibrary, saveDefinition } from '../../src/library/v1/user-library';
 import type { ModuleDefinition, Project } from '../../src/model/v1/types';
 import { instantiateModule } from '../../src/state/v1/instantiate-module';
 import { createProjectStore } from '../../src/state/v1/project-store';
@@ -29,6 +30,38 @@ test('factory templates use the confirmed component, module and enclosure symbol
     'library-splitter': 'splitter', 'library-sfp': 'sfp', 'library-wdm': 'component',
     'library-optical-amplifier': 'opticalAmplifier', 'library-circulator': 'circulator', 'library-isolator': 'isolator',
   });
+});
+
+test('control routing survives template and project round trips, with independent copies and shared module instances', () => {
+  const config = factoryLibrary();
+  const capable = libraryDefinitions(config).filter(d => d.kind === 'component' && d.controlRouting);
+  assert.deepEqual(capable.map(d => d.id), ['library-pcb']);
+  const board = capable[0];
+  assert.ok(board.kind === 'component');
+  const oldOverride = { ...board, name: 'Renamed board', controlRouting: undefined };
+  assert.equal(libraryDefinitions({ ...config, overrides: [oldOverride] }).some(d =>
+    d.id === board.id && d.kind === 'component' && d.controlRouting), true);
+  const routed = { ...board, ports: [...board.ports,
+    { id: 'i', type: 'CONTROL', direction: 'in' }, { id: 'o', type: 'CONTROL', direction: 'out' }] as const,
+    transfers: [{ kind: 'control', fromPortId: 'i', toPortId: 'o' }] as const };
+  const rack = { ...empty.moduleDefinitions[0], id: 'rack', instances: [{ id: 'board', name: 'Board', definitionId: board.id }] };
+  const project = addTemplateInstance(empty, [rack, routed], rack.id, 'system', 'rack', 'Rack');
+  const shared = instantiateModule(project, ['rack'], 'reuse', 'shared', () => assert.fail());
+  const [snapshot] = captureInstance(shared, ['rack', 'board'], false);
+  const library = parseLibrary(JSON.stringify(saveDefinition(config, snapshot)));
+  const copy = addTemplateInstance(shared, libraryDefinitions(library), snapshot.id, 'system', 'copy', 'Copy');
+  const restored = parseProjectJson(serializeProjectJson(copy));
+  const tree = resolveHierarchy(restored);
+  const original = tree.resolveInstance(['rack', 'board'])!.definition;
+  const independent = tree.resolveInstance(['copy'])!.definition;
+  assert.equal(tree.resolveInstance(['shared', 'board'])!.definition, original);
+  assert.notEqual(independent.id, original.id);
+  for (const device of [original, independent]) {
+    assert.ok(device.kind === 'component' && device.controlRouting);
+    assert.deepEqual(device.transfers, routed.transfers);
+  }
+  const oldProject = { ...restored, componentDefinitions: restored.componentDefinitions.map(d => ({ ...d, controlRouting: undefined })) };
+  assert.ok(parseProjectJson(serializeProjectJson(oldProject)).componentDefinitions.every(d => d.controlRouting === undefined));
 });
 
 test('copied and reused modules retain component icon choices through project JSON', () => {

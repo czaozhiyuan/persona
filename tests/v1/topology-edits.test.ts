@@ -7,6 +7,27 @@ import type { Project } from '../../src/model/v1/types';
 import { parseProjectJson, serializeProjectJson } from '../../src/storage/v1/project-json';
 import { createProjectStore } from '../../src/state/v1/project-store';
 import { editModule, editModuleWiring, moveTopologyNodes, planPortDeletion } from '../../src/state/v1/topology-edits';
+import { digitalControlProject } from './fixtures/digital-control-project';
+
+test('changing a shared control terminal preserves endpoint IDs while removing incompatible transfers and wires', () => {
+  const fixture = digitalControlProject();
+  const project: Project = { ...fixture, componentDefinitions: fixture.componentDefinitions.map(d => d.id === 'controller'
+    ? { ...d, controlRouting: true, transfers: [{ kind: 'control', fromPortId: 'in', toPortId: 'out' }] } : d) };
+  const store = createProjectStore(project);
+  const base = store.getSnapshot().project;
+  const replacement = { id: 'in', name: 'Repurposed', direction: 'out', type: 'RF' } as const;
+  const plan = planPortDeletion(base, 'controller', replacement.id, replacement)!;
+  assert.deepEqual(plan.impacts.find(i => i.kind === '器件传输')?.paths, [['ctl-a'], ['ctl-b']]);
+  assert.ok(plan.impacts.some(i => i.kind === '连接'));
+  assert.equal(store.commit(() => plan.project).ok, true);
+  const after = store.getSnapshot().project;
+  assert.deepEqual(after.namedLinks?.map(link => link.to), base.namedLinks?.map(link => link.to));
+  assert.deepEqual(after.moduleDefinitions[0].connections?.map(w => w.id), ['tx-a', 'tx-b', 'pure']);
+  assert.deepEqual(after.componentDefinitions[0].transfers, []);
+  assert.deepEqual(after.componentDefinitions[0].ports[1], replacement);
+  store.undo();
+  assert.equal(store.getSnapshot().project, base);
+});
 
 test('shared MZM output deletion previews direct and scoped Link references and undoes as one edit', () => {
   const withConnection = editModule(topologyExample, 'tx', module => ({

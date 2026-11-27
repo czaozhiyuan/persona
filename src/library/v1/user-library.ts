@@ -22,6 +22,9 @@ export function libraryDefinitions(config: LibraryConfig): LibraryDefinition[] {
   const overrides = new Map(config.overrides.map(d => [d.id, d]));
   const definitions = builtInDefinitions.map(d => {
     const override = overrides.get(d.id);
+    if (d.id === 'library-pcb' && override?.kind === 'component' && override.controlRouting === undefined) {
+      return { ...override, controlRouting: true };
+    }
     if (override) return override;
     if (d.id === 'library-rf-stage') {
       const gain = overrides.get('library-rf-gain');

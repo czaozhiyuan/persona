@@ -35,7 +35,7 @@ import './topology.css';
 
 import type { LibraryConfig } from '../../../library/v1/user-library';
 
-export function TopologyEditor({ multiplex, pointerPlacement, centerPlacement, linkControls, library, store, state, module, pathResult, graph, rename, expanded, manualFrames, setExpanded, budgetHighlight, canEditLink, onPortBudget, onDcBudget, openPorts, newPort, onSelectObject, onSelectObjects, moveAcrossLevels, focusMoved, copyObjects, pasteObjects, copyNotice, fullPage, toggleFullPage, restoreView, placingModule, setPlacingModule, toolsHost, viewHost, topologyActive }: {
+export function TopologyEditor({ multiplex, pointerPlacement, centerPlacement, linkControls, library, store, state, module, pathResult, graph, rename, expanded, manualFrames, setExpanded, budgetHighlight, canEditLink, onPortBudget, onDcBudget, openPorts, newPort, onSelectObject, onSelectObjects, moveAcrossLevels, focusMoved, copyObjects, pasteObjects, copyNotice, fullPage, toggleFullPage, restoreView, placingModule, setPlacingModule, toolsHost, viewHost, topologyActive, enterObject, readView }: {
   multiplex: MultiplexPower;
   linkControls: import('react').ReactNode;
   library: LibraryConfig;
@@ -58,11 +58,13 @@ export function TopologyEditor({ multiplex, pointerPlacement, centerPlacement, l
   fullPage: boolean;
   toggleFullPage: (view: CanvasView) => void;
   restoreView?: CanvasView;
+  readView: Parameters<typeof TopologyCanvas>[0]['readView'];
   placingModule: boolean;
   setPlacingModule: (active: boolean) => void;
   toolsHost: HTMLDivElement | null;
   viewHost: HTMLDivElement | null;
   topologyActive: boolean;
+  enterObject: (path: InstancePath) => void;
   focusMoved?: Parameters<typeof TopologyCanvas>[0]['focusMoved'];
   newPort?: EndpointRef;
 }) {
@@ -241,8 +243,8 @@ export function TopologyEditor({ multiplex, pointerPlacement, centerPlacement, l
         pathResult={pathResult} budgetHighlight={budgetHighlight} expanded={expanded}
         manualFrames={manualFrames} toggleModule={toggleModule}
         selectedPaths={selectedPaths} selectObject={onSelectObject} selectObjects={onSelectObjects}
-        enterModule={store.selectModule} focusMoved={focusMoved}
-        fullPage={fullPage} toggleFullPage={toggleFullPage} restoreView={restoreView}
+        enterModule={enterObject} focusMoved={focusMoved}
+        fullPage={fullPage} toggleFullPage={toggleFullPage} restoreView={restoreView} readView={readView}
         depth={depth} viewHost={viewHost} topologyActive={topologyActive}
         reparent={(base, plan, layout) => setMessage(moveAcrossLevels(base, plan, layout) ?? '')}
         onAddPort={path => openPorts(path, 'create')} newPort={newPort}
