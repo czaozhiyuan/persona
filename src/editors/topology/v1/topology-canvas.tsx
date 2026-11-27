@@ -177,8 +177,6 @@ type Props = {
   cancelPlacement: () => void;
   add: (item: LibraryItem, placement: CenterPlacement) => boolean;
   deleteInstances: (paths: readonly InstancePath[], preserve: (project: Project, parentIds: ReadonlySet<string>) => Project) => void;
-  commands: React.Ref<ArrangeCommands>;
-  setArranging: (busy: boolean) => void;
   finishRouting: (base: Project, positioned: Project, result: ReturnType<typeof routeDisplayedScope>) => Project;
   route: (scope: InstancePath, wire: WiringSelection, point?: XYPosition) => void;
   deleteWiring: (path: InstancePath, wire: WiringSelection) => boolean;
@@ -192,7 +190,13 @@ type Props = {
   redo: () => void;
 };
 
-export type ArrangeCommands = { arrange: () => void; route: () => void; cancel: () => void };
+type OrganizeJob = {
+  base: Project;
+  project: Project;
+  token: symbol;
+  depths: readonly number[];
+  anchors?: ReadonlyMap<string, XYPosition>;
+};
 
 export function TopologyCanvas(props: Props) {
   return <ReactFlowProvider><EditableTopologyCanvas {...props} /></ReactFlowProvider>;
@@ -200,7 +204,7 @@ export function TopologyCanvas(props: Props) {
 
 function EditableTopologyCanvas({ multiplex, project, instances, modulePath, selectedInstance, selectedPaths, pathResult, budgetHighlight, expanded, manualFrames,
   toggleModule, selectObject, selectObjects, enterModule, reparent, focusMoved, move, resize, connect, mapPort, add, placingModule, cancelPlacement,
-  deleteInstances, deleteWiring, route, commands, setArranging, finishRouting, rename, copyObjects, pasteObjects, pointerPlacement, centerPlacement, report, undo, redo, openPort, onAddPort, newPort,
+  deleteInstances, deleteWiring, route, finishRouting, rename, copyObjects, pasteObjects, pointerPlacement, centerPlacement, report, undo, redo, openPort, onAddPort, newPort,
   depth, fullPage, toggleFullPage, restoreView, viewHost, topologyActive, finishContentEdit }: Props) {
   const flowStore = useStoreApi<CanvasNode, WiringEdge>();
   const boxSelection = useRef<readonly InstancePath[] | undefined>(undefined);
@@ -238,13 +242,11 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
   const [opening, setOpening] = useState<{ expanded: ReadonlySet<string>; positions: WeakMap<Project, ReadonlyMap<string, XYPosition>> }>();
   const anchors = opening?.expanded === expanded ? opening.positions.get(project) : undefined;
   const pendingArrange = useRef<symbol | undefined>(undefined);
-  const [staged, setStaged] = useState<{ base: Project; project: Project; token: symbol; anchors?: ReadonlyMap<string, XYPosition> }>();
+  const [staged, setStaged] = useState<OrganizeJob>();
   const preview = staged?.base === project && staged.token === pendingArrange.current ? staged : undefined;
   const { manual, view: projection, layout } = useMemo(() =>
     projectInlineExpansion(preview?.project ?? project, instances, modulePath, expanded, measured, resizePreview, portHeights, preview ? preview.anchors : anchors),
   [project, preview, instances, modulePath, expanded, measured, resizePreview, portHeights, anchors]);
-  const displayedProjection = useRef(projection);
-  useLayoutEffect(() => { displayedProjection.current = projection; }, [projection]);
   const { nodes: items, rootKey, nodeByKey, scopes } = projection;
   const cancelContentEdit = useContentLayoutEdit(canvas, project, projection, layout, instances, modulePath, expanded,
     measured, portHeights, topologyActive && !pendingArrange.current && !dragSession.current && !resizePreview, manualFrames, finishContentEdit);
@@ -269,79 +271,81 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
     if (!pendingArrange.current) return;
     pendingArrange.current = undefined;
     setStaged(undefined);
-    setArranging(false);
-  }, [setArranging]);
+  }, []);
   useLayoutEffect(() => cancelArrange, [project, rootKey, expanded, topologyActive, cancelArrange]);
-  useImperativeHandle(commands, () => ({
-    cancel: cancelArrange,
-    route() {
-      if (pendingArrange.current || !flow.current || !canvas.current) return;
-      const updated = finishRouting(project, project, routeDisplayedScope(projection, edges, flow.current, canvas.current));
-      if (anchors) opening!.positions.set(updated, anchors);
-    },
-    async arrange() {
-      if (pendingArrange.current || !flow.current || !canvas.current || dragSession.current || resizePreview) return;
-      const token = Symbol();
-      pendingArrange.current = token;
-      setArranging(true);
-      report('');
-      try {
-        // Paint the progress and cancel controls before starting the bundled engine.
-        await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-        if (pendingArrange.current !== token) return;
-        const positioned = await arrangeScope(project, projection, edges, id => {
-          const node = flow.current?.getInternalNode(id);
-          if (!node?.measured.width || !node.measured.height) return;
-          const ports = node.internals.handleBounds;
-          const handles = new Map([...(ports?.source ?? []), ...(ports?.target ?? [])].map(h =>
-            [h.id!, { x: h.x + h.width / 2, y: h.y + h.height / 2 }]));
-          return { width: node.measured.width, height: node.measured.height, handles };
-        });
-        if (pendingArrange.current === token) {
-          if (displayedProjection.current !== projection) { cancelArrange(); return; }
-          const nested = anchors && new Map(anchors);
-          for (const member of scopes.get(rootKey)!.members) nested?.delete(member.key);
-          setStaged({ base: project, project: positioned, token, anchors: nested });
-        }
-      } catch (error) {
-        if (pendingArrange.current === token) {
-          cancelArrange();
-          report(error instanceof Error ? error.message : '自动排列失败。');
-        }
-      }
-    },
-  }));
 
-  // Read the actual handles after applying the snapped positions to the view, before any store commit.
+  function organize(action: 'arrange' | 'route') {
+    if (pendingArrange.current || !flow.current || !canvas.current || dragSession.current || resizePreview) return;
+    const token = Symbol();
+    pendingArrange.current = token;
+    const depths = action === 'arrange'
+      ? [...new Set([...scopes.values()].map(scope => scope.path.length))].sort((a, b) => b - a) : [];
+    report('');
+    setStaged({ base: project, project, token, depths, anchors });
+  }
+
+  // Render each completed depth before measuring its parents. Only the final routes reach the store.
   useLayoutEffect(() => {
     if (!preview) return;
-    let frame: number, attempts = 0;
-    function finish() {
-      if (!preview || pendingArrange.current !== preview.token || !flow.current || !canvas.current) return;
-      try {
-        const root = projection.nodeByKey.get(projection.rootKey);
-        const members = projection.scopes.get(projection.rootKey)!.members;
-        const ready = (root ? [root, ...members] : members).every(n => {
-          const actual = flow.current!.getInternalNode(nodeId(n.key));
-          const origin = n.parentKey ? flow.current!.getInternalNode(nodeId(n.parentKey))?.internals.positionAbsolute : undefined;
-          const p = actual?.internals.positionAbsolute;
-          return p && Math.abs(p.x - (origin?.x ?? 0) - n.position.x) < 0.5
-            && Math.abs(p.y - (origin?.y ?? 0) - n.position.y) < 0.5
-            && (!n.frame || Math.abs((actual.measured.width ?? 0) - n.frame.display.width) <= 1
-              && Math.abs((actual.measured.height ?? 0) - n.frame.display.height) <= 1);
-        });
-        if (!ready && ++attempts < 30) { frame = requestAnimationFrame(finish); return; }
-        if (!ready) throw new Error('画布尺寸尚未就绪，请重试。');
-        const result = routeDisplayedScope(projection, edges, flow.current, canvas.current);
-        const updated = finishRouting(preview.base, preview.project, result);
-        if (preview.anchors && updated !== preview.base) opening?.positions.set(updated, preview.anchors);
-      } catch (error) {
-        report(error instanceof Error ? error.message : '自动理线失败。');
+    const job = preview;
+    let active = true;
+    const current = () => active && pendingArrange.current === job.token;
+    const paint = () => new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    async function run() {
+      await paint();
+      await paint();
+      if (!current() || !flow.current || !canvas.current) return;
+      const api = flow.current, element = canvas.current;
+      const ready = () => projection.nodes.every(n => {
+        const actual = api.getInternalNode(nodeId(n.key));
+        const origin = n.parentKey ? api.getInternalNode(nodeId(n.parentKey))?.internals.positionAbsolute : undefined;
+        const p = actual?.internals.positionAbsolute;
+        return p && Math.abs(p.x - (origin?.x ?? 0) - n.position.x) < 0.5
+          && Math.abs(p.y - (origin?.y ?? 0) - n.position.y) < 0.5
+          && (!n.frame || Math.abs((actual.measured.width ?? 0) - n.frame.display.width) <= 1
+            && Math.abs((actual.measured.height ?? 0) - n.frame.display.height) <= 1);
+      });
+      for (let attempt = 0; !ready(); attempt++) {
+        if (attempt >= 30) throw new Error('画布尺寸尚未就绪，请重试。');
+        await paint();
+        if (!current()) return;
       }
+      if (job.depths.length) {
+        const [depth, ...remaining] = job.depths;
+        let positioned = job.project;
+        for (const [key, scope] of projection.scopes) {
+          if (scope.path.length !== depth) continue;
+          positioned = await arrangeScope(positioned, projection, edges, id => {
+            const node = api.getInternalNode(id);
+            if (!node?.measured.width || !node.measured.height) return;
+            const ports = node.internals.handleBounds;
+            const handles = new Map([...(ports?.source ?? []), ...(ports?.target ?? [])].map(h =>
+              [h.id!, { x: h.x + h.width / 2, y: h.y + h.height / 2 }]));
+            return { width: node.measured.width, height: node.measured.height, handles };
+          }, key);
+          if (!current()) return;
+        }
+        setStaged({ ...job, project: positioned, anchors: undefined, depths: remaining });
+        return;
+      }
+      const result: ReturnType<typeof routeDisplayedScope> = { routes: [], failed: 0 };
+      for (const key of projection.scopes.keys()) {
+        const part = routeDisplayedScope(projection, edges, api, element, key);
+        result.routes.push(...part.routes);
+        result.failed += part.failed;
+        await paint();
+        if (!current()) return;
+      }
+      const updated = finishRouting(job.base, job.project, result);
+      if (job.anchors) opening?.positions.set(updated, job.anchors);
       cancelArrange();
     }
-    frame = requestAnimationFrame(() => { frame = requestAnimationFrame(finish); });
-    return () => cancelAnimationFrame(frame);
+    void run().catch(error => {
+      if (!current()) return;
+      cancelArrange();
+      report(error instanceof Error ? error.message : '画布整理失败。');
+    });
+    return () => { active = false; };
   }, [preview, projection, edges, finishRouting, cancelArrange, report, opening]);
 
   const routes = useMemo(() => new Map(project.layout?.topologyWireRoutes?.map(r => [wireRouteKey(r.modulePath, r.wire), r])),
@@ -921,7 +925,11 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
 
   return <div ref={canvas} className="v1-topology-canvas" aria-label="逻辑拓扑画布" tabIndex={-1}
     data-space-pan={panWithSpace}
-    onPointerDownCapture={event => { cancelArrange(); if (panWithSpace) event.currentTarget.focus({ preventScroll: true }); }}
+    onPointerDownCapture={event => {
+      if (event.target instanceof Element && event.target.closest('.v1-organize-controls')) return;
+      cancelArrange();
+      if (panWithSpace) event.currentTarget.focus({ preventScroll: true });
+    }}
     onPointerUpCapture={event => { if (event.button === 0) readBoxSelection(); }}
     onPointerCancel={() => { cancelBoxSelection(); cancelDrag(); }}
     onDragOver={event => {
@@ -1045,7 +1053,7 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
           if (point && flow.current) return { ...flow.current.flowToScreenPosition(point), zoom: flow.current.getZoom() };
         }}
         place={(screen, free) => placeAt({ source: 'blank-module', id: blankModuleId, name: '新建模块', automaticName: true }, screen, free)} />}
-      <CanvasControls depth={depth} fullPage={fullPage} canLocate={!!locateIds.length} locate={() => {
+      <CanvasControls organize={organize} busy={!!preview} cancel={cancelArrange} depth={depth} fullPage={fullPage} canLocate={!!locateIds.length} locate={() => {
         if (locateIds.length) void flow.current?.fitView({ ...canvasFitOptions, nodes: locateIds.map(id => ({ id })), maxZoom: 1.2 });
       }} toggleFullPage={switchFullPage} />
     </ReactFlow>
