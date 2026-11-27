@@ -7,12 +7,11 @@ import { hierarchyKey } from './hierarchy-view';
 import { nodeId, type WiringEdge } from './topology-wiring';
 
 export function routeDisplayedScope<N extends Node>(projection: Projection, edges: readonly WiringEdge[],
-  flow: ReactFlowInstance<N, WiringEdge>, canvas: HTMLElement) {
-  const { rootKey } = projection;
-  const scope = projection.scopes.get(rootKey)!;
-  const scoped = edges.filter(edge => hierarchyKey(edge.data!.scope) === rootKey);
-  const root = nodeId(rootKey);
-  const frame = projection.nodeByKey.get(rootKey)?.frame;
+  flow: ReactFlowInstance<N, WiringEdge>, canvas: HTMLElement, scopeKey: string) {
+  const scope = projection.scopes.get(scopeKey)!;
+  const scoped = edges.filter(edge => hierarchyKey(edge.data!.scope) === scopeKey);
+  const root = nodeId(scopeKey);
+  const frame = projection.nodeByKey.get(scopeKey)?.frame;
   const rootNode = flow.getInternalNode(root);
   const origin = rootNode?.internals.positionAbsolute;
   const dx = origin && frame ? origin.x - frame.display.x : 0;

@@ -30,9 +30,9 @@ function signalRole(chip: ComponentDefinition, id: string, type: PortDefinition[
 
 /** Layout-only graph. All positions and edge endpoints below are local to the editing scope. */
 export async function arrangeScope(project: Project, view: Projection, edges: readonly WiringEdge[],
-  measure: (id: string) => MeasuredBlock | undefined) {
-  const scope = view.scopes.get(view.rootKey)!;
-  const scoped = edges.filter(edge => hierarchyKey(edge.data!.scope) === view.rootKey);
+  measure: (id: string) => MeasuredBlock | undefined, scopeKey = view.rootKey) {
+  const scope = view.scopes.get(scopeKey)!;
+  const scoped = edges.filter(edge => hierarchyKey(edge.data!.scope) === scopeKey);
   if (!scope.members.length) return project;
   if (scope.members.length > 300 || scoped.length > 1500 || scope.members.reduce((n, m) => n + m.item.definition.ports.length, 0) > 3000) {
     throw new Error('当前层级对象或连线过多，无法一次整理。');
@@ -93,7 +93,7 @@ export async function arrangeScope(project: Project, view: Projection, edges: re
     graphEdges.push({ id: edge.id, sources: [reverse ? y : x], targets: [reverse ? x : y] });
   }
 
-  const frame = view.nodeByKey.get(view.rootKey)?.frame;
+  const frame = view.nodeByKey.get(scopeKey)?.frame;
   const left = frame ? ceilGrid(frame.display.x + frame.insets.left + gap) : gridPoint({ x: Math.min(...nodes.map(n => n.member.bounds.x)), y: 0 }).x;
   const top = frame ? ceilGrid(frame.display.y + frame.insets.top + gap) : gridPoint({ x: 0, y: Math.min(...nodes.map(n => n.member.bounds.y)) }).y;
   const placed = new Map<string, Rect>();
@@ -148,9 +148,9 @@ export async function arrangeScope(project: Project, view: Projection, edges: re
   let next = moveTopologyNodes(project, moves);
   if (frame) {
     const rects = [...placed.values()];
-    const width = Math.max(frame.base.width, ceilGrid(Math.max(...rects.map(r => r.x + r.width)) + frame.insets.right + gap - frame.display.x));
-    const height = Math.max(frame.base.height, ceilGrid(Math.max(...rects.map(r => r.y + r.height)) + framePadding + gap - frame.display.y));
-    const saved = project.layout?.topologyFrames?.find(f => hierarchyKey(f.modulePath) === view.rootKey);
+    const saved = project.layout?.topologyFrames?.find(f => hierarchyKey(f.modulePath) === scopeKey);
+    const width = Math.max(saved?.width ?? 0, frame.insets.minWidth, ceilGrid(Math.max(...rects.map(r => r.x + r.width)) + frame.insets.right + gap - frame.display.x));
+    const height = Math.max(saved?.height ?? 0, frame.insets.height, ceilGrid(Math.max(...rects.map(r => r.y + r.height)) + framePadding + gap - frame.display.y));
     if (saved ? width > saved.width || height > saved.height : moves.length || width > frame.base.width || height > frame.base.height) {
       next = resizeTopologyFrame(next, { modulePath: scope.path, x: frame.display.x, y: frame.display.y, width, height });
     }

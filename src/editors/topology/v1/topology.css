@@ -45,7 +45,8 @@
 .v1-canvas-zoom button { min-height: 1.75rem; width: 1.75rem; border: 0; padding: 0; background: transparent; }
 .v1-canvas-zoom output { min-width: 2.7rem; text-align: center; font-size: .73rem; }
 .v1-canvas-zoom .v1-full-page-toggle { width: auto; padding-inline: .35rem; white-space: nowrap; font-size: .75rem; }
-.v1-canvas-zoom .v1-hierarchy-depth button { width: auto; padding-inline: .2rem; white-space: nowrap; font-size: .73rem; }
+.v1-organize-controls { font-size: .73rem; }
+.v1-canvas-zoom .v1-organize-controls button, .v1-canvas-zoom .v1-hierarchy-depth button { width: auto; padding-inline: .2rem; white-space: nowrap; font-size: .73rem; }
 .v1-hierarchy-depth input { width: clamp(2.4rem, 8vw, 6rem); min-width: 0; height: 1.35rem; margin: 0; accent-color: #267e73; }
 .v1-block-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: .5rem; }
 .v1-topology-device:has(.v1-block-column.top) {

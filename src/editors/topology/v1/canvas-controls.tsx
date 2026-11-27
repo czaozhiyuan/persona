@@ -16,12 +16,18 @@ export const flowAriaLabels = {
 export type CanvasView = { viewport: Viewport; edgeId?: string };
 export type ExpansionDepth = { value: number; max: number; set: (depth: number) => void };
 
-export function CanvasControls({ locate, canLocate, depth, fullPage, toggleFullPage }: {
+export function CanvasControls({ locate, canLocate, depth, fullPage, toggleFullPage, organize, busy, cancel }: {
+  organize: (action: 'arrange' | 'route') => void; busy: boolean; cancel: () => void;
   locate: () => void; canLocate: boolean; depth: ExpansionDepth; fullPage: boolean; toggleFullPage: () => void;
 }) {
   const { zoomIn, zoomOut, fitView } = useReactFlow();
   const { zoom } = useViewport();
   return <Panel position="bottom-right" className="v1-canvas-zoom nopan nowheel" aria-label="框图视图控件">
+    <div className="v1-canvas-control-group v1-organize-controls" onPointerDown={event => event.stopPropagation()}>
+      <button type="button" disabled={busy} onClick={() => organize('arrange')}>自动排列</button>
+      <button type="button" disabled={busy} onClick={() => organize('route')}>理线</button>
+      {busy && <><span role="status">正在整理…</span><button type="button" onClick={cancel}>取消整理</button></>}
+    </div>
     <DepthControl depth={depth} />
     <div className="v1-canvas-control-group">
       <button type="button" aria-label="缩小" title="缩小" onClick={() => void zoomOut()}>−</button>
