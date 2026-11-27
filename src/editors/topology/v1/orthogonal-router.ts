@@ -1,13 +1,12 @@
 import type { Rect } from '@xyflow/react';
 import type { RoutePoint as Point } from '../../../model/v1/types';
 import { gridPoint, topologyGrid as step } from '../../../state/v1/topology-grid';
+import { connectorControls, wireCornerRadius, type PortSide } from './fixed-wire-geometry';
 
-export type PortSide = 'left' | 'right' | 'top' | 'bottom';
 export type RoutingPort = Point & { side: PortSide; obstacle: string };
 export type RoutingWire = { id: string; source: RoutingPort; target: RoutingPort };
 export type RoutingObstacle = Rect & { id: string };
 export type RoutingScene = { obstacles: readonly RoutingObstacle[]; boundary?: Rect; wires: readonly RoutingWire[] };
-export const wireCornerRadius = 8;
 const directions = [{ x: 1, y: 0 }, { x: 0, y: 1 }, { x: -1, y: 0 }, { x: 0, y: -1 }];
 const searchPasses = [{ visitLimit: 12_000, weight: 1 }, { visitLimit: 7_000, weight: 1.5 }];
 const directionIndex = { right: 0, bottom: 1, left: 2, top: 3 };
@@ -51,6 +50,21 @@ function indexObstacles(obstacles: readonly RoutingObstacle[]) {
     }
     return false;
   };
+}
+
+// Subdivision tightens a cubic's convex-hull bound when a nearby obstacle or frame
+// intersects its control box. Never accept a piece until the entire box is clear.
+function connectorClear(port: Point, a: Point, b: Point, anchor: Point,
+  boxClear: (min: Point, max: Point) => boolean, depth = 0): boolean {
+  const min = { x: Math.min(port.x, a.x, b.x, anchor.x), y: Math.min(port.y, a.y, b.y, anchor.y) };
+  const max = { x: Math.max(port.x, a.x, b.x, anchor.x), y: Math.max(port.y, a.y, b.y, anchor.y) };
+  if (boxClear(min, max)) return true;
+  if (depth === 5) return false;
+  const mid = (p: Point, q: Point) => ({ x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 });
+  const pa = mid(port, a), ab = mid(a, b), bz = mid(b, anchor);
+  const left = mid(pa, ab), right = mid(ab, bz), center = mid(left, right);
+  return connectorClear(port, pa, left, center, boxClear, depth + 1)
+    && connectorClear(center, right, bz, anchor, boxClear, depth + 1);
 }
 
 function laneKey(a: Point, b: Point) {
@@ -117,14 +131,27 @@ function routeWire(wire: RoutingWire, space: SearchSpace, clearance: number) {
     const r = space.byId.get(port.obstacle);
     const edge = r ? [r.x + r.width - port.x, r.y + r.height - port.y, port.x - r.x, port.y - r.y][dir] : 0;
     const anchor = gridPoint(advance(port, dir, Math.max(0, edge) + clearance + step / 2));
-    // The port and its two cubic controls are all inside this box at planning time.
-    if (!inside(port, boundary) || !clear(port, anchor, 1, port.obstacle) || !clear(anchor, anchor, clearance)) return;
-    return { anchor, dir };
+    if (!inside(port, boundary) || !clear(anchor, anchor, clearance)) return;
+    const exits = directions.map((_, d) => {
+      const next = advance(anchor, d, step);
+      if (d === (dir + 2) % 4 || !clear(anchor, next, clearance)) return false;
+      const [a, b] = connectorControls(port, port.side, anchor, next);
+      // A recessed handle may cross its owner's face once on its way out.
+      const normal = directions[dir];
+      if ((b.x - a.x) * normal.x + (b.y - a.y) * normal.y < 0) return false;
+      return connectorClear(port, a, b, anchor, (min, max) => {
+        if (!inside(min, boundary) || !clear(min, max, 1, port.obstacle)) return false;
+        if (!r || !overlaps(min, max, r, 0)) return true;
+        // A frame handle can be behind its own label. Traverse its width only along
+        // the port side, then stay outside the face by monotone outward progress.
+        return normal.x ? min.y >= r.y && max.y <= r.y + r.height : min.x >= r.x && max.x <= r.x + r.width;
+      });
+    });
+    if (exits.some(Boolean)) return { anchor, dir, exits };
   }
   const from = escape(wire.source), to = escape(wire.target);
   if (!from || !to || !distance(from.anchor, to.anchor)) return;
   const start = from.anchor, end = to.anchor;
-  if (!clear(start, advance(start, from.dir, step), clearance) || !clear(end, advance(end, to.dir, step), clearance)) return;
   const key = (p: Point, dir: number) => [p.x, p.y, dir].join(',');
   for (const { visitLimit, weight } of searchPasses) {
     const frontier = new Frontier();
@@ -136,7 +163,7 @@ function routeWire(wire: RoutingWire, space: SearchSpace, clearance: number) {
       space.remaining--;
       const p = frontier.pop();
       if (p.cost !== costs.get(key(p, p.dir))) continue;
-      if (!distance(p, end) && p.dir === (to.dir + 2) % 4) {
+      if (!distance(p, end)) {
         const points: Point[] = [];
         for (let v: Visit | undefined = p; v; v = v.previous) points.push(v);
         points.reverse();
@@ -147,12 +174,14 @@ function routeWire(wire: RoutingWire, space: SearchSpace, clearance: number) {
         return simplify(points);
       }
       for (let d = 0; d < 4; d++) {
-        if (d === (p.dir + 2) % 4 || (!p.previous && d !== from.dir)) continue;
+        if (d === (p.dir + 2) % 4 || (!p.previous && !from.exits[d])) continue;
         const next = advance(p, d, step);
-        if (!distance(next, start) || (!distance(next, end) && d !== (to.dir + 2) % 4)) continue;
+        const atEnd = !distance(next, end);
+        if (!distance(next, start) || (atEnd && !to.exits[(d + 2) % 4])) continue;
         if (!clear(p, next, clearance)) continue;
-        if (p.dir !== d && !clear(advance(p, p.dir, -wireCornerRadius), advance(p, d, wireCornerRadius), 1)) continue;
-        const cost = p.cost + step + (p.dir === d ? 0 : 14) + 30 * (lanes.get(laneKey(p, next)) ?? 0);
+        if (p.previous && p.dir !== d && !clear(advance(p, p.dir, -wireCornerRadius), advance(p, d, wireCornerRadius), 1)) continue;
+        const cost = p.cost + step + (p.dir === d ? 0 : 14) + (atEnd && d !== (to.dir + 2) % 4 ? 14 : 0)
+          + 30 * (lanes.get(laneKey(p, next)) ?? 0);
         const id = key(next, d);
         if (cost >= (costs.get(id) ?? Infinity)) continue;
         costs.set(id, cost);
