@@ -31,6 +31,7 @@ import { DcBudgetPanel } from './budgets/dc-budget-panel';
 import { LocalOpticalPanel } from './budgets/local-optical-panel';
 import type { LocalOpticalSettings } from './budgets/local-optical-panel';
 import { useLibrary } from './use-library';
+import type { LibraryPointerPlacement } from './use-library-pointer-drag';
 import { LibraryPanel } from './library-panel';
 import { cleanLinkDraft, previewLinkDraft, stageLinkFields } from './links/link-draft';
 import type { LinkDraft, LinkFields } from './links/link-draft';
@@ -75,6 +76,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const { project, selection, canUndo, canRedo } = state;
   const [error, setError] = useState('');
   const [copyNotice, setCopyNotice] = useState('');
+  const pointerPlacement = useRef<LibraryPointerPlacement>(null);
   const centerPlacement = useRef<CenterPlacement>(null);
   const objectClipboard = useRef<ObjectClipboard>(undefined);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -688,14 +690,14 @@ export function Workbench({ store, loadExample, newProject }: Props) {
               enter={enterModule} navigatePort={navigatePort} />
           </div>
           <div id="workbench-library" className="v1-side-scroll" hidden={leftTab !== 'library'}>
-            {active?.kind === 'module' && <LibraryPanel centerPlacement={(definition, name) => centerPlacement.current?.(definition, name)} library={library} key={projectSession} store={store} state={state} module={active} />}
+            {active?.kind === 'module' && <LibraryPanel pointerPlacement={(...args) => pointerPlacement.current?.(...args)} centerPlacement={(definition, name) => centerPlacement.current?.(definition, name)} library={library} key={projectSession} store={store} state={state} module={active} />}
           </div>
         </aside>
         <main className="v1-workbench-main">
           <div className="v1-canvas-page" inert={page !== 'canvas' || selection.view !== 'topology'}
             aria-hidden={page !== 'canvas' || selection.view !== 'topology'}>
             {active?.kind === 'module' &&
-              <TopologyEditor multiplex={multiplex} centerPlacement={centerPlacement} library={library.config} key={JSON.stringify(['topology', projectSession, selection.modulePath])}
+              <TopologyEditor pointerPlacement={pointerPlacement} multiplex={multiplex} centerPlacement={centerPlacement} library={library.config} key={JSON.stringify(['topology', projectSession, selection.modulePath])}
                 linkControls={<div className="v1-canvas-link">
                   <label>当前链路<select aria-label="框图当前链路" value={category === 'links' ? savedLink?.id ?? '' : ''} onChange={e => chooseLink(e.target.value || undefined)}>
                     <option value="">{category !== 'links' ? budgetTitles[category] : canvasDraft === 'new' ? '画布临时链路' : '未选择链路'}</option>

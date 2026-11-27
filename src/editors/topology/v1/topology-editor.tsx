@@ -35,7 +35,7 @@ import './topology.css';
 
 import type { LibraryConfig } from '../../../library/v1/user-library';
 
-export function TopologyEditor({ multiplex, centerPlacement, linkControls, library, store, state, module, pathResult, graph, rename, expanded, manualFrames, setExpanded, budgetHighlight, canEditLink, onPortBudget, onDcBudget, openPorts, newPort, onSelectObject, onSelectObjects, moveAcrossLevels, focusMoved, copyObjects, pasteObjects, copyNotice, fullPage, toggleFullPage, restoreView, placingModule, setPlacingModule, toolsHost, viewHost, topologyActive }: {
+export function TopologyEditor({ multiplex, pointerPlacement, centerPlacement, linkControls, library, store, state, module, pathResult, graph, rename, expanded, manualFrames, setExpanded, budgetHighlight, canEditLink, onPortBudget, onDcBudget, openPorts, newPort, onSelectObject, onSelectObjects, moveAcrossLevels, focusMoved, copyObjects, pasteObjects, copyNotice, fullPage, toggleFullPage, restoreView, placingModule, setPlacingModule, toolsHost, viewHost, topologyActive }: {
   multiplex: MultiplexPower;
   linkControls: import('react').ReactNode;
   library: LibraryConfig;
@@ -50,6 +50,7 @@ export function TopologyEditor({ multiplex, centerPlacement, linkControls, libra
   onSelectObject: (path: InstancePath, extend: boolean) => void;
   onSelectObjects: (paths: readonly InstancePath[]) => void;
   moveAcrossLevels: (base: Project, plan: ApprovedMove, layout?: ReparentLayout) => string | undefined;
+  pointerPlacement: Parameters<typeof TopologyCanvas>[0]['pointerPlacement'];
   centerPlacement: Parameters<typeof TopologyCanvas>[0]['centerPlacement'];
   copyObjects: Parameters<typeof TopologyCanvas>[0]['copyObjects'];
   pasteObjects: Parameters<typeof TopologyCanvas>[0]['pasteObjects'];
@@ -236,7 +237,7 @@ export function TopologyEditor({ multiplex, centerPlacement, linkControls, libra
 
   return <section className="v1-topology" aria-label={`框图 · ${moduleName}`}>
     <div className="v1-hierarchy-workspace">
-      <TopologyCanvas multiplex={multiplex} centerPlacement={centerPlacement} project={project} instances={graph.instances} modulePath={scope} selectedInstance={selection.instancePath}
+      <TopologyCanvas pointerPlacement={pointerPlacement} multiplex={multiplex} centerPlacement={centerPlacement} project={project} instances={graph.instances} modulePath={scope} selectedInstance={selection.instancePath}
         pathResult={pathResult} budgetHighlight={budgetHighlight} expanded={expanded}
         manualFrames={manualFrames} toggleModule={toggleModule}
         selectedPaths={selectedPaths} selectObject={onSelectObject} selectObjects={onSelectObjects}

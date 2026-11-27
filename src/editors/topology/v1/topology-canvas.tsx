@@ -23,6 +23,7 @@ import { frameInsets, ModuleFrame, type FramePortHeights } from './module-frame'
 import { canConnect } from '../../../model/v1/types';
 import { gridCoordinate, gridPoint, topologyGrid } from '../../../state/v1/topology-grid';
 import { moduleExtent } from './frame-geometry';
+import type { LibraryPointerPlacement } from '../../../workbench/v1/use-library-pointer-drag';
 import { ModulePlacement } from './module-placement';
 import { FrameResizeHandles } from './frame-resize-handles';
 import { keepGraphVisible } from './viewport';
@@ -178,6 +179,7 @@ type Props = {
   deleteWiring: (path: InstancePath, wire: WiringSelection) => boolean;
   rename: () => void;
   copyObjects: (view: Projection) => void;
+  pointerPlacement: React.Ref<LibraryPointerPlacement>;
   centerPlacement: React.Ref<CenterPlacement>;
   pasteObjects: (view: Projection, placement: (size: Rect) => XYPosition | undefined) => void;
   report: (message: string) => void;
@@ -191,7 +193,7 @@ export function TopologyCanvas(props: Props) {
 
 function EditableTopologyCanvas({ multiplex, project, instances, modulePath, selectedInstance, selectedPaths, pathResult, budgetHighlight, expanded, manualFrames,
   toggleModule, selectObject, selectObjects, enterModule, reparent, focusMoved, move, resize, connect, mapPort, add, placingModule, cancelPlacement,
-  deleteInstances, deleteWiring, route, rename, copyObjects, pasteObjects, centerPlacement, report, undo, redo, openPort, onAddPort, newPort,
+  deleteInstances, deleteWiring, route, rename, copyObjects, pasteObjects, pointerPlacement, centerPlacement, report, undo, redo, openPort, onAddPort, newPort,
   depth, fullPage, toggleFullPage, restoreView, viewHost, topologyActive, finishContentEdit }: Props) {
   const flowStore = useStoreApi<CanvasNode, WiringEdge>();
   const boxSelection = useRef<readonly InstancePath[] | undefined>(undefined);
@@ -626,6 +628,17 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
     setSelectedEdgeKey(undefined);
     add(item, () => ({ position, projection: manual }));
   }
+
+  useImperativeHandle(pointerPlacement, () => (screen, free = false, item) => {
+    if (!topologyActive || !screen || !canvas.current?.contains(document.elementFromPoint(screen.x, screen.y))) {
+      setLibraryDrop(undefined);
+      return;
+    }
+    if (item) {
+      setLibraryDrop(undefined);
+      placeAt(item, screen, free);
+    } else setLibraryDrop(placementPoint(screen, free) ?? undefined);
+  });
 
   useImperativeHandle(centerPlacement, () => (definition, name) => {
     if (!topologyActive) return;

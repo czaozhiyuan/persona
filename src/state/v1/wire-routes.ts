@@ -10,7 +10,7 @@ export function setWireRoute(project: Project, modulePath: InstancePath, wire: W
 
 export function translateGroupRoutes(project: Project, paths: readonly InstancePath[], delta: { x: number; y: number }): Project {
   const routes = project.layout?.topologyWireRoutes;
-  if (paths.length < 2 || !routes?.length) return project;
+  if (!paths.length || !routes?.length) return project;
   const parent = paths[0].slice(0, -1);
   const scope = JSON.stringify(parent);
   const owner = moduleLookup(project)(parent)!;

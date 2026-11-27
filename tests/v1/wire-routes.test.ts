@@ -5,7 +5,7 @@ import { Position } from '@xyflow/react';
 import { curveThroughPoint } from '../../src/editors/topology/v1/signal-wire';
 import { calculateDcBudget } from '../../src/engine/v1/dc-budget';
 import { createLinkBudget } from '../../src/engine/v1/link-budget';
-import type { WireRef } from '../../src/model/v1/types';
+import type { Project, WireRef } from '../../src/model/v1/types';
 import { planDissolveModule } from '../../src/state/v1/dissolve-module';
 import { groupModule } from '../../src/state/v1/group-module';
 import { pasteModule } from '../../src/state/v1/instantiate-module';
@@ -14,7 +14,7 @@ import { createProjectStore } from '../../src/state/v1/project-store';
 import { removeTopologyInstance, removeWiring } from '../../src/state/v1/remove-topology-object';
 import { moveInstance } from '../../src/state/v1/reparent-instance';
 import { planPortDeletion } from '../../src/state/v1/topology-edits';
-import { setWireRoute } from '../../src/state/v1/wire-routes';
+import { setWireRoute, translateGroupRoutes } from '../../src/state/v1/wire-routes';
 import { parseProjectJson, serializeProjectJson } from '../../src/storage/v1/project-json';
 
 const example = parseProjectJson(readFileSync(new URL('../../examples/v1-project.json', import.meta.url), 'utf8'));
@@ -44,6 +44,21 @@ test('a route through a waypoint follows the top and bottom handle tangents', ()
   assert.ok(numbers[2] === edge.sourceX && numbers[3] < edge.sourceY);
   assert.ok(numbers[8] === edge.targetX && numbers[9] > edge.targetY);
   assert.deepEqual(numbers.slice(6, 8), [point.x, point.y]);
+});
+
+test('a single moved device carries its self-loop waypoint while a wire to a stationary neighbour stays fixed', () => {
+  const project: Project = { ...example, rootModuleDefinitionId: 'root', namedLinks: [], instanceSettings: [], layout: {},
+    componentDefinitions: [{ id: 'dev', name: 'Device', kind: 'component', ports: [
+      { id: 'out', type: 'RF', direction: 'out' }, { id: 'in', type: 'RF', direction: 'in' },
+    ] }],
+    moduleDefinitions: [{ id: 'root', name: 'Root', kind: 'module', ports: [],
+      instances: ['a', 'b'].map(id => ({ id, name: id, definitionId: 'dev' })),
+      connections: ['a', 'b'].map(id => ({ id, from: { instanceId: 'a', portId: 'out' }, to: { instanceId: id, portId: 'in' } })),
+    }] };
+  const self = setWireRoute(project, [], { kind: 'connection', id: 'a' }, point);
+  const both = setWireRoute(self, [], { kind: 'connection', id: 'b' }, point);
+  const moved = translateGroupRoutes(both, [['a']], { x: 33, y: 23 });
+  assert.deepEqual(moved.layout!.topologyWireRoutes!.map(({ x, y }) => ({ x, y })), [{ x: point.x + 33, y: point.y + 23 }, point]);
 });
 
 test('scoped project layout survives JSON and undo; rewiring, deletion and copy affect only the correct routes', () => {
