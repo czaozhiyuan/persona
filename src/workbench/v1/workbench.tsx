@@ -5,7 +5,7 @@ import { HierarchyTree } from '../../editors/topology/v1/hierarchy-tree';
 import { hierarchyKey, inHierarchy } from '../../editors/topology/v1/hierarchy-view';
 import type { ApprovedMove, ReparentLayout } from '../../editors/topology/v1/reparent-drop';
 import type { CanvasView } from '../../editors/topology/v1/canvas-controls';
-import { captureTopologyObjects, pasteInView } from '../../editors/topology/v1/topology-layout-edits';
+import { captureTopologyObjects, pasteInView, placeInModule } from '../../editors/topology/v1/topology-layout-edits';
 import type { CenterPlacement, ObjectClipboard, Projection } from '../../editors/topology/v1/topology-layout-edits';
 import { TopologyEditor } from '../../editors/topology/v1/topology-editor';
 import { createMultiplexPower } from '../../engine/v1/multiplex-power';
@@ -19,6 +19,7 @@ import type { EndpointRef, InstancePath, Project } from '../../model/v1/types';
 import { pasteModule } from '../../state/v1/instantiate-module';
 import { planDissolveModule } from '../../state/v1/dissolve-module';
 import { moveWiringSummary, planInstanceMove } from '../../state/v1/reparent-instance';
+import { translateGroupRoutes } from '../../state/v1/wire-routes';
 import { moveTopologyNodes, resizeTopologyFrame } from '../../state/v1/topology-edits';
 import { selectionPaths, type ProjectStore } from '../../state/v1/project-store';
 import { parseProjectJson, projectErrorMessage, serializeProjectJson } from '../../storage/v1/project-json';
@@ -308,8 +309,9 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   function moveAcrossLevels(base: Project, plan: ApprovedMove, layout?: ReparentLayout, centerCanvas = true) {
     if (store.getSnapshot().project !== base) return '工程已变化，请重新拖动或选择对象。';
     const result = store.commit(() => {
-      if (!layout) return plan.project;
-      const placed = moveTopologyNodes(plan.project, layout.placements);
+      if (!layout) return placeInModule(plan.project, plan.instancePath);
+      const routed = translateGroupRoutes(plan.project, plan.instancePaths, layout.delta);
+      const placed = moveTopologyNodes(routed, layout.placements);
       return layout.frame ? resizeTopologyFrame(placed, layout.frame) : placed;
     });
     if (!result.ok) return result.message;
@@ -326,7 +328,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     const path = [...destination, id];
     const snapshot = store.getSnapshot();
     const owner = store.resolveInstance(destination);
-    const result = store.commit(draft => pasteModule(draft, copiedProject, source, destination, id, () => crypto.randomUUID()));
+    const result = store.commit(draft => placeInModule(pasteModule(draft, copiedProject, source, destination, id, () => crypto.randomUUID()), path));
     if (!result.ok) {
       setCopyNotice('');
       setError(result.message);

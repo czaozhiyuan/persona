@@ -6,6 +6,7 @@ import { resolveHierarchy } from '../../engine/v1/hierarchy';
 import type { ParameterDefinition, ParameterMapping } from '../../model/v1/parameters';
 import type { CableBundle, Connection, LocalEndpointRef } from '../../model/v1/topology';
 import type { EndpointRef, InstancePath, ModuleDefinition, PortDefinition, PortMapping, Project, TopologyPlacement } from '../../model/v1/types';
+import { gridPoint } from './topology-grid';
 import { defaultTopologyPosition } from './topology-position';
 
 const pathKey = (path: InstancePath) => JSON.stringify(path);
@@ -129,7 +130,7 @@ export function groupModule(project: Project, paths: readonly InstancePath[], na
     const moving = direct.filter(item => selected.has(item.instancePath.at(-1)!));
     const x = Math.min(...moving.map(item => item.x));
     const y = Math.min(...moving.map(item => item.y));
-    topology.push({ instancePath: [...instancePath, instanceId], x, y });
+    topology.push({ instancePath: [...instancePath, instanceId], ...gridPoint({ x, y }) });
     for (const item of direct) {
       topology.push(selected.has(item.instancePath.at(-1)!) ? {
         instancePath: remap(item.instancePath), x: item.x - x, y: item.y - y,

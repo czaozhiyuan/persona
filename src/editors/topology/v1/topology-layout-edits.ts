@@ -5,7 +5,9 @@ import { insertLibraryItem } from '../../../library/v1/insert-library-item';
 import type { LibraryItem } from '../../../library/v1/insert-library-item';
 import type { InstancePath, PortDefinition, Project, TopologyPlacement } from '../../../model/v1/types';
 import { moveTopologyNode, moveTopologyNodes, resizeTopologyFrame } from '../../../state/v1/topology-edits';
+import { gridPoint } from '../../../state/v1/topology-grid';
 import { defaultTopologyPosition } from '../../../state/v1/topology-position';
+import { translateGroupRoutes } from '../../../state/v1/wire-routes';
 import { outermostPaths } from '../../../state/v1/object-selection';
 import { pasteTopologyObjects } from '../../../state/v1/instantiate-module';
 import { hierarchyKey } from './hierarchy-view';
@@ -109,7 +111,7 @@ function growFrameToFit(project: Project, bounds: Rect, view: Projection, parent
   return resizeTopologyFrame(result, { modulePath: root.item.instancePath, x, y, width, height });
 }
 
-export function moveInView(project: Project, moves: readonly TopologyPlacement[], manual: Projection) {
+export function moveInView(project: Project, moves: readonly TopologyPlacement[], manual: Projection, delta?: XYPosition) {
   if (!moves.length) return project;
   const parentKey = hierarchyKey(moves[0].instancePath.slice(0, -1));
   // Persist space for the dragged cards at the drop, using the parent's compact manual frame.
@@ -118,7 +120,18 @@ export function moveInView(project: Project, moves: readonly TopologyPlacement[]
     const { width, height } = manual.nodeByKey.get(key)!.bounds;
     return { key, bounds: { x: move.x, y: move.y, width, height } };
   });
-  return moveTopologyNodes(growFrameToFit(project, groupDragBounds(cards), manual, parentKey), moves);
+  const updated = moveTopologyNodes(growFrameToFit(project, groupDragBounds(cards), manual, parentKey), moves);
+  return delta ? translateGroupRoutes(updated, moves.map(move => move.instancePath), delta) : updated;
+}
+
+// Tree moves, module copies and reuse have no pointer or visible viewport in the destination.
+export function placeInModule(project: Project, path: InstancePath) {
+  const parent = path.slice(0, -1);
+  const instances = [...resolveHierarchy(project).walkInstances()];
+  const view = projectTopology(project, instances, parent, new Set(), new Map());
+  const card = view.nodeByKey.get(hierarchyKey(path))!;
+  const placed = gridPoint(card.preferred);
+  return moveTopologyNode(growFrameToFit(project, { ...card.bounds, ...placed }, view), path, placed);
 }
 
 export function insertCanvasItem(project: Project, item: LibraryItem, moduleId: string, modulePath: InstancePath,
@@ -127,7 +140,6 @@ export function insertCanvasItem(project: Project, item: LibraryItem, moduleId: 
   const updated = insertLibraryItem(project, item, moduleId, modulePath, instanceId, position, library);
   const key = hierarchyKey(modulePath);
   const frame = updated.layout?.topologyFrames?.find(frame => hierarchyKey(frame.modulePath) === key);
-  if (!frame && typeof placement !== 'function') return updated;
 
   const owner = updated.moduleDefinitions.find(module => module.id === moduleId)!;
   const child = owner.instances.find(instance => instance.id === instanceId)!;
@@ -138,8 +150,7 @@ export function insertCanvasItem(project: Project, item: LibraryItem, moduleId: 
     if (centered) return growFrameToFit(moveTopologyNode(updated, [...modulePath, instanceId], centered.position),
       { ...centered.position, ...estimatedBlockSize(definition.ports) }, centered.projection);
   }
-  if (!frame) return updated;
-  const anchor = position ?? defaultTopologyPosition(owner.instances.length - 1, owner.ports.length);
+  const anchor = gridPoint(position ?? defaultTopologyPosition(owner.instances.length - 1, owner.ports.length));
   const placed = placeDropGroup({ ...anchor, ...estimatedBlockSize(definition.ports) }, anchor, anchor, frame, frameInsets(owner.ports));
   const positioned = moveTopologyNode(updated, [...modulePath, instanceId], {
     x: anchor.x + placed.delta.x, y: anchor.y + placed.delta.y,

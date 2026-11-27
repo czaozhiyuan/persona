@@ -76,7 +76,7 @@
 .v1-block-column .v1-topology-port .v1-port-multiplex > span { white-space: normal; }
 .v1-module-frame { box-sizing: border-box; width: 100%; height: 100%; border: 2px solid transparent; border-radius: .5rem; }
 .v1-frame-surfaces { position: absolute; inset: 0; z-index: -1; pointer-events: none; }
-.v1-frame-surface { position: absolute; border: 2px solid #82948e; border-radius: .5rem; background: var(--v1-frame-fill); }
+.v1-frame-surface { position: absolute; border: 2px solid #82948e; border-radius: .5rem; background: radial-gradient(circle, #aebcb6 .65px, transparent .8px) border-box var(--v1-frame-fill); }
 .v1-frame-resize { position: absolute; z-index: 2; pointer-events: auto; touch-action: none; }
 .v1-frame-resize:hover { background: #267e7366; }
 .v1-frame-resize-n, .v1-frame-resize-s { left: 10px; right: 10px; height: 10px; cursor: ns-resize; }
@@ -154,6 +154,10 @@
   background: #e7f7ee; color: #155a49; font-size: .85rem; pointer-events: none;
 }
 .v1-drop-label[data-blocked="true"] { background: #fff1ef; color: #8c352b; border-color: #a34e37; }
+.v1-library-drop-point {
+  position: absolute; width: 1rem; height: 1rem; border-top: 2px solid #168269;
+  border-left: 2px solid #168269; z-index: 1000; pointer-events: none;
+}
 .v1-module-placement { position: absolute; inset: 0; z-index: 5; cursor: copy; }
 .v1-module-placement .v1-module-placement-preview {
   position: absolute; transform-origin: top left; pointer-events: none;

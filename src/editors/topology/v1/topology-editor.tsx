@@ -24,7 +24,7 @@ import { PortBindingDialog } from './port-binding-dialog';
 import type { BindingPreview } from './port-binding-dialog';
 import { PortDeletionDialog } from './port-deletion-dialog';
 import type { BudgetHighlight } from './path-highlight';
-import { insertCanvasItem, moveInView } from './topology-layout-edits';
+import { insertCanvasItem, moveInView, type CenterPlacement } from './topology-layout-edits';
 import { applyExpansionLayout } from './inline-expansion-layout';
 import type { CanvasView } from './canvas-controls';
 import { TopologyCanvas } from './topology-canvas';
@@ -110,7 +110,7 @@ export function TopologyEditor({ multiplex, centerPlacement, linkControls, libra
     setGroupDialog(true);
   }
 
-  function add(item: LibraryItem, position?: { x: number; y: number }) {
+  function add(item: LibraryItem, position: CenterPlacement) {
     const id = crypto.randomUUID();
     if (!commit(draft => insertCanvasItem(draft, item, module.id, scope, id, position, library))) return false;
     setPlacingModule(false);
@@ -249,7 +249,7 @@ export function TopologyEditor({ multiplex, centerPlacement, linkControls, libra
         add={add} placingModule={placingModule} cancelPlacement={() => { setPlacingModule(false); setMessage(''); }}
         deleteInstances={deleteInstances} deleteWiring={deleteWiring} rename={rename} copyObjects={copyObjects} pasteObjects={pasteObjects} report={setMessage} undo={store.undo} redo={store.redo}
         route={(scope, wire, point) => commit(draft => setWireRoute(draft, scope, wire, point))}
-        move={(moves, manual) => commit(draft => moveInView(draft, moves, manual))}
+        move={(moves, manual, delta) => commit(draft => moveInView(draft, moves, manual, delta))}
         resize={(frame, adjustments) => commit(draft =>
           resizeTopologyFrame(moveTopologyNodes(draft, adjustments), frame))}
         finishContentEdit={(base, layout) => {

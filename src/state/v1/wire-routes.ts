@@ -8,6 +8,22 @@ export function setWireRoute(project: Project, modulePath: InstancePath, wire: W
   return { ...project, layout: { ...project.layout, topologyWireRoutes: routes.length ? routes : undefined } };
 }
 
+export function translateGroupRoutes(project: Project, paths: readonly InstancePath[], delta: { x: number; y: number }): Project {
+  const routes = project.layout?.topologyWireRoutes;
+  if (paths.length < 2 || !routes?.length) return project;
+  const parent = paths[0].slice(0, -1);
+  const scope = JSON.stringify(parent);
+  const owner = moduleLookup(project)(parent)!;
+  const ids = new Set(paths.map(path => path.at(-1)));
+  const moved = routes.map(route => {
+    if (JSON.stringify(route.modulePath) !== scope || route.wire.kind === 'mapping') return route;
+    const ends = wireEndpoints(owner, route.wire);
+    return ends && ids.has(ends[0]) && ids.has(ends[2])
+      ? { ...route, x: route.x + delta.x, y: route.y + delta.y } : route;
+  });
+  return { ...project, layout: { ...project.layout, topologyWireRoutes: moved } };
+}
+
 function moduleLookup(project: Project) {
   const modules = new Map(project.moduleDefinitions.map(m => [m.id, m]));
   return (path: InstancePath) => {

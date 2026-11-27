@@ -29,12 +29,21 @@ test('a group drop translates the whole box and grows the saved destination with
   const frame = { modulePath: ['target'], x: 0, y: 0, width: 360, height: 120 };
   const insets = frameInsets([]);
   assert.deepEqual(placeDropGroup(box, anchor, drop, frame, insets), {
-    delta: { x: 150, y: -48 },
-    frame: { ...frame, width: 678, height: 210 },
+    delta: { x: 150, y: -40 },
+    frame: { ...frame, width: 678, height: 218 },
   });
   assert.deepEqual(placeDropGroup(box, anchor, drop), { delta: { x: 150, y: -100 } });
   assert.deepEqual(placeDropGroup(box, anchor, drop, { ...frame, width: 700, height: 300 }, insets),
-    { delta: { x: 150, y: -48 }, frame: undefined });
+    { delta: { x: 150, y: -40 }, frame: undefined });
+});
+
+test('group snapping uses the local bounding corner and applies one delta even when the grabbed member is elsewhere', () => {
+  const box = { x: 13.5, y: -22, width: 273, height: 100 };
+  const grab = { x: 179, y: 27 };
+  const position = { x: 194, y: 41 };
+  assert.deepEqual(groupDropDelta(box, grab, position), { x: 16.5, y: 12 });
+  assert.deepEqual(groupDropDelta(box, grab, position, undefined, true), { x: 15, y: 14 });
+  assert.deepEqual(groupDropDelta(box, grab, position, [[14, -21], [290, 82]]), { x: 3.5, y: 2 });
 });
 
 test('expanded members use their visible size and cannot make existing source overflow worse', () => {
