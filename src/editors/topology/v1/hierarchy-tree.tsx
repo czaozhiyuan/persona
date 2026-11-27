@@ -24,7 +24,7 @@ type Props = {
   selected: readonly InstancePath[];
   expanded: ReadonlySet<string>;
   toggle: (path: InstancePath) => void;
-  select: (path: InstancePath, extend: boolean) => void;
+  select: (path: InstancePath, extend: boolean, firstRoutingClick: boolean) => void;
   enter: (path: InstancePath) => void;
   navigatePort: (path: InstancePath, portId: string) => void;
 };
@@ -135,7 +135,8 @@ export function HierarchyTree({ project, focusMoved, move, instances, modulePath
             onDragEnd={endDrag}
             aria-label={`选中 ${name}`}
             aria-current={key === active ? 'location' : undefined} aria-pressed={selectedKeys.has(key)}
-            onClick={event => select(instancePath, event.ctrlKey || event.shiftKey || event.metaKey)}
+            onClick={event => select(instancePath, event.ctrlKey || event.shiftKey || event.metaKey,
+              event.detail === 1 && definition.kind === 'component' && !!definition.controlRouting)}
             onDoubleClick={module || definition.controlRouting ? () => enter(instancePath) : undefined}>
             <DeviceIcon iconKey={definitionIcon(definition)} size={16} />
             <span>{name}</span>

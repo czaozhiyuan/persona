@@ -51,7 +51,7 @@ type Props = {
   newProject: () => Project;
 };
 
-type Page = 'routing' | 'canvas' | 'project' | 'budget';
+type Page = 'canvas' | 'project' | 'budget' | { routing: InstancePath };
 type BudgetPage = 'links' | 'optical' | 'dc';
 type SideTab = 'structure' | 'library';
 type Presentation = {
@@ -82,6 +82,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const objectClipboard = useRef<ObjectClipboard>(undefined);
   const fileInput = useRef<HTMLInputElement>(null);
   const importAttempt = useRef(0);
+  const readCanvasView = useRef<() => CanvasView | undefined>(null);
+  const treeClickOrigin = useRef<{ target: string; restore: () => void }>(undefined);
   const topologyLocation = useRef<TopologyLocation | undefined>(undefined);
   const [projectSession, setProjectSession] = useState(0);
   const [portTarget, setPortTarget] = useState<{ path: InstancePath; initialMode: PortManagerMode }>();
@@ -119,12 +121,13 @@ export function Workbench({ store, loadExample, newProject }: Props) {
   const [localOptical, setLocalOptical] = useState<LocalOpticalSettings>({ sources: [] });
   const activeOccurrence = store.resolveInstance(selection.modulePath);
   const active = activeOccurrence?.definition;
-  const selected = selection.instancePath && store.resolveInstance(selection.instancePath);
-  const routing = page === 'routing' && selected?.definition.kind === 'component' && selected.definition.controlRouting ? selected : undefined;
-  useEffect(() => { if (page === 'routing' && !routing) setPage('canvas'); }, [page, routing]);
+  const routeOwner = typeof page === 'object' ? store.resolveInstance(page.routing) : undefined;
+  const routing = routeOwner?.definition.kind === 'component' && routeOwner.definition.controlRouting ? routeOwner : undefined;
+  useEffect(() => { if (typeof page === 'object' && !routing) setPage('canvas'); }, [page, routing]);
+  const selected = routing ?? (selection.instancePath && store.resolveInstance(selection.instancePath));
   const visibleTab = routing && leftTab === 'library' ? 'structure' : leftTab;
   const selectedPaths = selectionPaths(selection);
-  const properties = selection.instancePaths ? undefined : selected || activeOccurrence;
+  const properties = routing ?? (selection.instancePaths ? undefined : selected || activeOccurrence);
   const targetPortOwner = portTarget && store.resolveInstance(portTarget.path);
   const layout = selection.view === 'topology' ? project.layout?.topology : project.layout?.physical;
   const linkOptions = useMemo(() => createLinkOptions(project), [project]);
@@ -273,7 +276,18 @@ export function Workbench({ store, loadExample, newProject }: Props) {
       ? paths.filter(item => hierarchyKey(item) !== key) : [...paths, path]);
   }
 
-  function selectTreeObject(path: InstancePath, extend: boolean) {
+  function selectTreeObject(path: InstancePath, extend: boolean, firstRoutingClick: boolean) {
+    if (firstRoutingClick) {
+      // Native double-click fires after two clicks. Keep the view before the first reveal.
+      const view = readCanvasView.current?.();
+      treeClickOrigin.current = { target: hierarchyKey(path), restore: () => {
+        store.selectModule(selection.modulePath);
+        store.selectInstances(selectedPaths);
+        setExpandedCanvas(expandedCanvas);
+        setFocusMoved(undefined);
+        if (view) setRestoredView({ scope: currentScope, view });
+      } };
+    }
     if (routing && hierarchyKey(routing.instancePath) === hierarchyKey(path)) return;
     if (!inHierarchy(selection.modulePath, path)) {
       store.selectModule(path.slice(0, -1));
@@ -420,12 +434,18 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     const definition = store.resolveInstance(path)?.definition;
     if (definition?.kind === 'component' && definition.controlRouting) {
       setCopyNotice('');
-      store.selectInstance(path);
       store.setView('topology');
-      openPage('routing');
+      openPage({ routing: path });
     } else {
       enterModule(path);
     }
+  }
+
+  function enterTreeObject(path: InstancePath) {
+    const origin = treeClickOrigin.current;
+    treeClickOrigin.current = undefined;
+    if (origin?.target === hierarchyKey(path)) origin.restore();
+    enterObject(path);
   }
 
   function enterModule(path: InstancePath) {
@@ -448,6 +468,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
       setOpticalTarget(undefined);
       setDcScope(undefined);
       importAttempt.current++;
+      treeClickOrigin.current = undefined;
       topologyLocation.current = undefined;
       setProjectSession(session => session + 1);
       setPresentation(undefined);
@@ -704,8 +725,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
           <div id="workbench-structure" className="v1-side-scroll" hidden={visibleTab !== 'structure'}>
             <HierarchyTree key={projectSession} project={project} focusMoved={focusMoved?.path} move={moveAcrossLevels}
               instances={linkOptions.graph.instances} modulePath={routing?.instancePath ?? selection.modulePath}
-              selected={selectedPaths} expanded={expandedHierarchy} toggle={toggleBranch} select={selectTreeObject}
-              enter={enterObject} navigatePort={navigatePort} />
+              selected={routing ? [routing.instancePath] : selectedPaths} expanded={expandedHierarchy} toggle={toggleBranch} select={selectTreeObject}
+              enter={enterTreeObject} navigatePort={navigatePort} />
           </div>
           <div id="workbench-library" className="v1-side-scroll" hidden={visibleTab !== 'library'}>
             {active?.kind === 'module' && <LibraryPanel pointerPlacement={(...args) => pointerPlacement.current?.(...args)} centerPlacement={(definition, name) => centerPlacement.current?.(definition, name)} library={library} key={projectSession} store={store} state={state} module={active} />}
@@ -715,7 +736,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
           <div className="v1-canvas-page" inert={page !== 'canvas' || selection.view !== 'topology'}
             aria-hidden={page !== 'canvas' || selection.view !== 'topology'}>
             {active?.kind === 'module' &&
-              <TopologyEditor enterObject={enterObject} pointerPlacement={pointerPlacement} multiplex={multiplex} centerPlacement={centerPlacement} library={library.config} key={JSON.stringify(['topology', projectSession, selection.modulePath])}
+              <TopologyEditor readView={readCanvasView} enterObject={enterObject} pointerPlacement={pointerPlacement} multiplex={multiplex} centerPlacement={centerPlacement} library={library.config} key={JSON.stringify(['topology', projectSession, selection.modulePath])}
                 linkControls={<div className="v1-canvas-link">
                   <label>当前链路<select aria-label="框图当前链路" value={category === 'links' ? savedLink?.id ?? '' : ''} onChange={e => chooseLink(e.target.value || undefined)}>
                     <option value="">{category !== 'links' ? budgetTitles[category] : canvasDraft === 'new' ? '画布临时链路' : '未选择链路'}</option>
@@ -845,7 +866,7 @@ export function Workbench({ store, loadExample, newProject }: Props) {
           </div>
           <div id="workbench-properties" className="v1-right-content" hidden={!propertiesOpen}>
             <div className="v1-side-scroll v1-object-properties">
-              {selection.instancePaths && !topologyActive && <p className="panel" role="status">已选中 {selection.instancePaths.length} 个对象。选中单个对象可编辑属性。</p>}
+              {!routing && selection.instancePaths && !topologyActive && <p className="panel" role="status">已选中 {selection.instancePaths.length} 个对象。选中单个对象可编辑属性。</p>}
               {properties && <PropertiesPanel key={JSON.stringify([projectSession, properties.instancePath])}
                 store={store} occurrence={properties} occurrences={linkOptions.graph.instances} jumpToParameter={jumpToParameter}
                 onAddPort={path => setPortTarget({ path, initialMode: 'manage' })}
