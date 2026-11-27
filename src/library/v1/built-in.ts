@@ -58,7 +58,7 @@ export const builtInDefinitions = [
   { kind: 'module', id: blankModuleId, name: '空白模块', ports: [], instances: [] },
   { kind: 'module', id: blankEnclosureId, name: '空机箱', ports: [], instances: [],
     physicalEnclosure: { widthMm: 440, depthMm: 350, heightMm: 44.45 } },
-  { kind: 'component', id: 'library-pcb', iconKey: 'controlCircuit', name: '控制电路', ports: [fiveVoltInput] },
+  { kind: 'component', id: 'library-pcb', controlRouting: true, iconKey: 'controlCircuit', name: '控制电路', ports: [fiveVoltInput] },
   { kind: 'component', id: 'library-laser', iconKey: 'laser', name: '激光器', parameters: [laserPower],
     ports: [{ ...port('OPT_OUT', '光输出', 'OPTICAL', 'out'), opticalEmitter: emitter }, fiveVoltInput] },
   {

@@ -3,7 +3,7 @@ import { portDisplayName } from '../../model/v1/display-names';
 import { resolveHierarchy } from '../../engine/v1/hierarchy';
 import type { CableCoreRef, CableCore, LocalEndpointRef } from '../../model/v1/topology';
 import { isSupplyOutput } from '../../model/v1/types';
-import type { ConnectionRef, EndpointRef, InstancePath, ModuleDefinition, Project, TopologyFrame } from '../../model/v1/types';
+import type { ConnectionRef, EndpointRef, InstancePath, ModuleDefinition, PortDefinition, Project, TopologyFrame } from '../../model/v1/types';
 
 type Via = ConnectionRef | CableCoreRef;
 
@@ -59,7 +59,7 @@ export type PortDeletionImpact = {
   paths: readonly InstancePath[];
 };
 
-export function planPortDeletion(project: Project, definitionId: string, portId: string) {
+export function planPortDeletion(project: Project, definitionId: string, portId: string, replacement?: PortDefinition) {
   const hierarchy = resolveHierarchy(project);
   const instances = new Map<string, string>();
   const pathsByDefinition = new Map<string, InstancePath[]>();
@@ -115,7 +115,7 @@ export function planPortDeletion(project: Project, definitionId: string, portId:
     if (clearLoad) reportEndpoints('直流负载', component.id, removedLabel);
     return {
       ...component,
-      ports: component.ports.filter(port => port.id !== portId),
+      ports: replacement ? component.ports.map(port => port.id === portId ? replacement : port) : component.ports.filter(port => port.id !== portId),
       ...(clearLoad && { dcLoad: undefined }),
       transfers: component.transfers?.filter(transfer => {
         const removed = transfer.fromPortId === portId || transfer.toPortId === portId
@@ -172,7 +172,7 @@ export function planPortDeletion(project: Project, definitionId: string, portId:
   const scopeId = (path: InstancePath) => instances.get(JSON.stringify(path))!;
   const namedLinks = project.namedLinks?.map(link => {
     const clearEndpoint = (label: string, endpoint?: EndpointRef) => {
-      if (!endpoint || endpoint.portId !== portId || scopeId(endpoint.instancePath) !== definitionId) return endpoint;
+      if (replacement || !endpoint || endpoint.portId !== portId || scopeId(endpoint.instancePath) !== definitionId) return endpoint;
       report('链路端点', `${link.name} / ${label}`, definitionId, endpoint.instancePath);
       return undefined;
     };

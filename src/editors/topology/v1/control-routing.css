@@ -1,0 +1,18 @@
+.v1-routing { outline: none; }
+.v1-routing .v1-topology-path { display: flex; }
+.v1-routing-actions, .v1-routing-note {
+  display: flex; align-items: center; flex-wrap: wrap; gap: .45rem;
+  margin: 0; padding: .25rem .55rem; border: 1px solid #ccdad5; border-radius: .45rem;
+  background: #fbfdfc; color: #214d46; font-size: .78rem;
+}
+.v1-routing-note { display: block; max-height: 4.5em; overflow: auto; overflow-wrap: anywhere; }
+.v1-routing-actions button { min-height: 1.4rem; padding: 0 .35rem; }
+.v1-routing-port {
+  position: relative; display: flex; align-items: center; width: 100%; height: 100%; padding: 0 12px;
+  border: 1px solid #b7ccc3; border-radius: .4rem; background: #fff; color: #24463e; font-size: 13px;
+}
+.v1-routing-port[data-direction="in"] { justify-content: flex-end; }
+.v1-routing-port strong { position: absolute; bottom: calc(100% + 5px); color: #47675c; }
+.v1-routing-port span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.v1-routing-port .react-flow__handle { width: 12px; height: 12px; border: 2px solid #fff; background: var(--v1-signal-CONTROL); }
+.v1-routing .react-flow__edge.selected .v1-wire-halo { stroke: #09896e; opacity: .8; }

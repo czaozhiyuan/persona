@@ -18,6 +18,7 @@ import type { ReceiverQuery } from './receiver-properties';
 import { resolveEmpiricalValue } from '../../../engine/v1/empirical-value';
 import { DcLoadFields } from './dc-load-fields';
 import { AddConversion } from './add-conversion';
+import { savePort } from './save-port';
 import { AutosaveForm } from './autosave-form';
 import { PortFields, TransferFields } from './device-fields';
 import { choice, formatValue, numberField, ParameterField, readNumericParameter, readParameter, textField } from './value-fields';
@@ -248,9 +249,11 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
           </span></summary>
           {sharedLocations.length > 0 && <p className="v1-property-effective">端口变更会应用到 {sharedLocations.join('、')}。</p>}
           <PortFields port={port} occurrence={occurrence} remove={() => { setError(''); setDeletion(port.id); }}
-            save={next => changeDefinition(() => ({ ...definition,
-              ports: definition.ports.map(item => item.id === port.id ? next : item),
-            }))} />
+            save={next => {
+              const result = savePort(store, definition.id, next);
+              setError(result && !result.ok ? result.message : '');
+              return result?.ok ?? false;
+            }} />
         </details>)}
       </section>
       <details className="v1-advanced-properties">

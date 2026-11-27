@@ -136,7 +136,7 @@ export function HierarchyTree({ project, focusMoved, move, instances, modulePath
             aria-label={`选中 ${name}`}
             aria-current={key === active ? 'location' : undefined} aria-pressed={selectedKeys.has(key)}
             onClick={event => select(instancePath, event.ctrlKey || event.shiftKey || event.metaKey)}
-            onDoubleClick={module ? () => enter(instancePath) : undefined}>
+            onDoubleClick={module || definition.controlRouting ? () => enter(instancePath) : undefined}>
             <DeviceIcon iconKey={definitionIcon(definition)} size={16} />
             <span>{name}</span>
           </button>

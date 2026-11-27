@@ -145,6 +145,7 @@ const transfer = byKind({
 const definition = { ...identity, ports: list(port) };
 const footprint = { widthMm: number, depthMm: number };
 const component = shape({ ...definition, kind: oneOf('component') }, {
+  controlRouting: boolean,
   wdm: boolean,
   iconKey: oneOf(...componentIconKeys),
   physicalFootprint: shape(footprint),

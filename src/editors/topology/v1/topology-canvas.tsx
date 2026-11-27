@@ -1021,7 +1021,8 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
       }}
       onNodeDoubleClick={(event, node) => {
         if (event.target instanceof Element && event.target.closest('.react-flow__handle')) return;
-        if (node.data.toggle) enterModule(node.data.path);
+        const definition = node.data.labelContext.definition;
+        if (node.data.toggle || (definition.kind === 'component' && definition.controlRouting)) enterModule(node.data.path);
       }}
       onNodesChange={changes => {
         const dimensions = changes.flatMap(change => {
