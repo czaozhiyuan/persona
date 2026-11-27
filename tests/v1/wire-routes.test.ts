@@ -5,16 +5,16 @@ import { Position } from '@xyflow/react';
 import { curveThroughPoint } from '../../src/editors/topology/v1/signal-wire';
 import { calculateDcBudget } from '../../src/engine/v1/dc-budget';
 import { createLinkBudget } from '../../src/engine/v1/link-budget';
-import type { Project, WireRef } from '../../src/model/v1/types';
+import type { Project, TopologyWireRoute, WireRef } from '../../src/model/v1/types';
 import { planDissolveModule } from '../../src/state/v1/dissolve-module';
 import { groupModule } from '../../src/state/v1/group-module';
-import { pasteModule } from '../../src/state/v1/instantiate-module';
+import { pasteModule, pasteTopologyObjects } from '../../src/state/v1/instantiate-module';
 import { connectBoundaryPort } from '../../src/state/v1/module-ports';
 import { createProjectStore } from '../../src/state/v1/project-store';
 import { removeTopologyInstance, removeWiring } from '../../src/state/v1/remove-topology-object';
-import { moveInstance } from '../../src/state/v1/reparent-instance';
+import { moveInstance, planInstanceMoves } from '../../src/state/v1/reparent-instance';
 import { planPortDeletion } from '../../src/state/v1/topology-edits';
-import { setWireRoute, translateGroupRoutes } from '../../src/state/v1/wire-routes';
+import { applyWireRoutes, offsetRoute, setWireRoute, translateGroupRoutes } from '../../src/state/v1/wire-routes';
 import { parseProjectJson, serializeProjectJson } from '../../src/storage/v1/project-json';
 
 const example = parseProjectJson(readFileSync(new URL('../../examples/v1-project.json', import.meta.url), 'utf8'));
@@ -58,7 +58,55 @@ test('a single moved device carries its self-loop waypoint while a wire to a sta
   const self = setWireRoute(project, [], { kind: 'connection', id: 'a' }, point);
   const both = setWireRoute(self, [], { kind: 'connection', id: 'b' }, point);
   const moved = translateGroupRoutes(both, [['a']], { x: 33, y: 23 });
-  assert.deepEqual(moved.layout!.topologyWireRoutes!.map(({ x, y }) => ({ x, y })), [{ x: point.x + 33, y: point.y + 23 }, point]);
+  assert.deepEqual(moved.layout!.topologyWireRoutes!.map(r => !r.kind && ({ x: r.x, y: r.y })), [{ x: point.x + 33, y: point.y + 23 }, point]);
+});
+
+test('orthogonal layout survives JSON and history, copies both anchors, and keeps manual and failed routes', () => {
+  const points = [{ x: 40, y: 60 }, { x: 210, y: 60 }, { x: 210, y: 100 }];
+  const manual = setWireRoute(example, ['TX_B'], rf, point);
+  const updates: TopologyWireRoute[] = [
+    { modulePath: [], wire: core, kind: 'orthogonal', points },
+    { modulePath: ['TX_A'], wire: rf, kind: 'orthogonal', points },
+    { modulePath: ['TX_A'], wire: mapping, kind: 'orthogonal', points },
+  ];
+  const planned = applyWireRoutes(manual, updates);
+  assert.equal(applyWireRoutes(planned, structuredClone(updates)), planned);
+  assert.equal(applyWireRoutes(planned, []), planned);
+  assert.equal(planned.layout!.topologyWireRoutes![0], manual.layout!.topologyWireRoutes![0]);
+  const store = createProjectStore(manual);
+  assert.deepEqual(store.commit(p => applyWireRoutes(p, updates)), { ok: true });
+  store.undo(); assert.deepEqual(store.getSnapshot().project, manual);
+  store.redo(); assert.deepEqual(parseProjectJson(serializeProjectJson(store.getSnapshot().project)), planned);
+  assert.deepEqual(calculateDcBudget(planned), calculateDcBudget(example));
+  const link = example.namedLinks!.find(l => l.id === 'pure-rf')!;
+  const conditions = { frequencyGHz: 10, inputPowerDbm: -20 };
+  assert.deepEqual(createLinkBudget(planned).calculateNamedLink(link, conditions), createLinkBudget(example).calculateNamedLink(link, conditions));
+  assert.throws(() => serializeProjectJson(applyWireRoutes(planned, [
+    { ...updates[0], kind: 'orthogonal', points: [points[0], { x: 51, y: 77 }] },
+  ])), /水平或垂直/);
+  let id = 0;
+  const roots = ['TX_A', 'RX_A'].map((slot, i) => ({ path: [slot], id: 'copy-' + i, routeOffset: { x: 300, y: -170 } }));
+  const copy = parseProjectJson(serializeProjectJson(pasteTopologyObjects(planned, planned, roots, [], () => 'fresh-' + ++id)));
+  const copied = copy.layout!.topologyWireRoutes!.filter(r => r.kind === 'orthogonal');
+  assert.deepEqual(copied.filter(r => r.modulePath[0] === 'copy-0').map(r => r.points), [points, points]);
+  assert.deepEqual(copied.find(r => r.wire.kind === 'core' && r.wire.bundleId !== 'mpo-12')?.points,
+    points.map(p => ({ x: p.x + 300, y: p.y - 170 })));
+  const unmoved = translateGroupRoutes(planned, [['TX_A'], ['RX_A']], { x: 43, y: 57 });
+  assert.deepEqual(unmoved.layout!.topologyWireRoutes, planned.layout!.topologyWireRoutes);
+  const reset = setWireRoute(planned, ['TX_A'], rf);
+  assert.equal(reset.layout!.topologyWireRoutes!.length, 3);
+  assert.ok(!removeWiring(planned, 'system', core).layout!.topologyWireRoutes!.some(r => r.wire.kind === 'core'));
+  const relocation = planInstanceMoves(planned, [['TX_A'], ['RX_A']], ['deviceDemo']);
+  assert.ok(relocation.ok);
+  assert.equal(relocation.fixedRoutesToPlace.length, 1);
+  assert.deepEqual(relocation.fixedRoutesToPlace[0].modulePath, ['deviceDemo']);
+  const placed = applyWireRoutes(relocation.project, relocation.fixedRoutesToPlace.map(r => offsetRoute(r, { x: 85, y: -40 })));
+  assert.ok(parseProjectJson(serializeProjectJson(placed)).layout!.topologyWireRoutes!.some(r =>
+    r.kind === 'orthogonal' && r.wire.kind === 'core' && r.points[0].x === 125 && r.points[0].y === 20));
+  assert.ok(!relocation.project.layout!.topologyWireRoutes!.some(r => r.wire.kind === 'core'));
+  const regrouped = groupModule(planned, [['TX_A'], ['RX_A']], 'Group', 'group', 'group-def');
+  assert.deepEqual(paths(parseProjectJson(serializeProjectJson(regrouped))),
+    [['TX_B', 'rf-feed'], ['group/TX_A', 'rf-feed'], ['group/TX_A', 'OPT_OUT']]);
 });
 
 test('scoped project layout survives JSON and undo; rewiring, deletion and copy affect only the correct routes', () => {

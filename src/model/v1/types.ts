@@ -163,7 +163,10 @@ export type WireRef =
   | { kind: 'mapping'; id: string }
   | { kind: 'core'; id: string; bundleId: string };
 
-export type TopologyWireRoute = { modulePath: InstancePath; wire: WireRef; x: number; y: number };
+export type RoutePoint = { x: number; y: number };
+export type OrthogonalRoute = { kind: 'orthogonal'; points: readonly RoutePoint[] };
+export type TopologyWireRoute = { modulePath: InstancePath; wire: WireRef }
+  & ((RoutePoint & { kind?: undefined }) | OrthogonalRoute);
 
 export type LayoutState = {
   topologyWireRoutes?: readonly TopologyWireRoute[];

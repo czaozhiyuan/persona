@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { PointerEvent } from 'react';
 import { BaseEdge, EdgeLabelRenderer, Position, useReactFlow } from '@xyflow/react';
 import type { EdgeProps, XYPosition } from '@xyflow/react';
 import type { PortType } from '../../../model/v1/types';
+import { wireCornerRadius } from './orthogonal-router';
 import type { WiringEdge } from './topology-wiring';
 
 export const signalColor = (type: PortType) => `var(--v1-signal-${type})`;
@@ -54,6 +55,34 @@ export function curveThroughPoint(edge: Pick<EdgeProps<WiringEdge>, 'sourceX' | 
     x, y, Math.atan2(dy, dx)] as const;
 }
 
+type EdgeEnds = Pick<EdgeProps<WiringEdge>, 'sourceX' | 'sourceY' | 'targetX' | 'targetY' | 'sourcePosition' | 'targetPosition'>;
+const xy = (p: XYPosition) => p.x + ',' + p.y;
+const towards = (a: XYPosition, b: XYPosition, n: number) => {
+  const span = Math.hypot(b.x - a.x, b.y - a.y);
+  return { x: a.x + (b.x - a.x) * n / span, y: a.y + (b.y - a.y) * n / span };
+};
+
+export function fixedWirePath(edge: EdgeEnds, points: readonly XYPosition[]) {
+  const start = { x: edge.sourceX, y: edge.sourceY }, end = { x: edge.targetX, y: edge.targetY };
+  function controls(port: XYPosition, side: Position, anchor: XYPosition, next: XYPosition) {
+    const amount = Math.min(40, Math.hypot(port.x - anchor.x, port.y - anchor.y) / 3);
+    const dir = outward(side);
+    return [xy({ x: port.x + dir.x * amount, y: port.y + dir.y * amount }), xy(towards(anchor, next, -amount))];
+  }
+  const first = points[0], last = points[points.length - 1];
+  const [a, b] = controls(start, edge.sourcePosition, first, points[1]);
+  const commands = ['M ' + xy(start) + ' C ' + a + ' ' + b + ' ' + xy(first)];
+  for (let i = 1; i + 1 < points.length; i++) {
+    const p = points[i], previous = points[i - 1], next = points[i + 1];
+    const r = Math.min(wireCornerRadius, Math.hypot(p.x - previous.x, p.y - previous.y) / 2, Math.hypot(next.x - p.x, next.y - p.y) / 2);
+    const clockwise = (p.x - previous.x) * (next.y - p.y) > (p.y - previous.y) * (next.x - p.x);
+    commands.push('L ' + xy(towards(p, previous, r)) + ' A ' + r + ',' + r + ' 0 0 ' + Number(clockwise) + ' ' + xy(towards(p, next, r)));
+  }
+  const [d, c] = controls(end, edge.targetPosition, last, points[points.length - 2]);
+  commands.push('L ' + xy(last) + ' C ' + c + ' ' + d + ' ' + xy(end));
+  return commands.join(' ');
+}
+
 export function SignalWire(edge: EdgeProps<WiringEdge>) {
   const { screenToFlowPosition } = useReactFlow();
   const [preview, setPreview] = useState<XYPosition>();
@@ -71,10 +100,24 @@ export function SignalWire(edge: EdgeProps<WiringEdge>) {
     const at = screenToFlowPosition({ x: event.clientX, y: event.clientY });
     return { x: gesture.point.x + (at.x - gesture.start.x), y: gesture.point.y + (at.y - gesture.start.y) };
   }
-  const [path, labelX, labelY, tangent] = active ? curveThroughPoint(edge, active) : fannedCurve(edge);
+  const fixed = edge.data?.fixedPoints;
+  const curve = active ? curveThroughPoint(edge, active) : fannedCurve(edge);
+  const path = fixed ? fixedWirePath(edge, fixed) : curve[0];
+  const pathRef = useRef<SVGPathElement>(null);
+  const [geometry, setGeometry] = useState<readonly [number, number, number]>();
+  const needsMidpoint = !!fixed && !!(edge.selected || edge.data?.caption || edge.data?.powerLabels?.length);
+  useLayoutEffect(() => {
+    const svg = pathRef.current;
+    if (!svg || !needsMidpoint) return;
+    const mid = svg.getTotalLength() / 2;
+    const p = svg.getPointAtLength(mid);
+    const before = svg.getPointAtLength(mid - 0.25), after = svg.getPointAtLength(mid + 0.25);
+    setGeometry([p.x, p.y, Math.atan2(after.y - before.y, after.x - before.x)]);
+  }, [path, needsMidpoint]);
+  const [labelX, labelY, tangent] = needsMidpoint && geometry ? geometry : [curve[1], curve[2], curve[3]];
   const dash = edge.data?.wire.kind === 'mapping' ? '6 4' : undefined;
   return <g className="v1-signal-wire" style={{ color: edge.data && signalColor(edge.data.portType) }} strokeDasharray={dash}>
-    <path d={path} className="v1-wire-halo" />
+    <path ref={pathRef} d={path} className="v1-wire-halo" />
     <path d={path} className="v1-wire-casing" />
     <BaseEdge id={edge.id} path={path} interactionWidth={8} className="v1-wire-main" style={{ stroke: 'currentColor' }} />
     {edge.data?.caption && <text x={labelX} y={labelY - (edge.selected ? 11 : 5)} className="v1-wire-caption" textAnchor="middle">{edge.data.caption}</text>}
@@ -93,7 +136,7 @@ export function SignalWire(edge: EdgeProps<WiringEdge>) {
     })}
     {edge.selected && <EdgeLabelRenderer>
       <div className="v1-wire-control nodrag nopan" style={{ left: labelX, top: labelY }}>
-        <button type="button" className="v1-wire-point" aria-label="拖动调整连线轨迹" title="拖动调整连线轨迹"
+        {!fixed && <button type="button" className="v1-wire-point" aria-label="拖动调整连线轨迹" title="拖动调整连线轨迹"
           onPointerDown={event => {
             if (event.button !== 0 || !event.isPrimary) return;
             event.stopPropagation(); event.preventDefault();
@@ -119,8 +162,8 @@ export function SignalWire(edge: EdgeProps<WiringEdge>) {
             event.stopPropagation();
             if (event.key === 'Escape') { event.preventDefault(); cancel(); }
           }}
-          onClick={event => event.stopPropagation()} />
-        {saved && !preview && <button type="button" className="v1-wire-reset" style={edge.data?.powerLabels?.length ? { top: 25 } : undefined}
+          onClick={event => event.stopPropagation()} />}
+        {(saved || fixed) && !preview && <button type="button" className="v1-wire-reset" style={edge.data?.powerLabels?.length ? { top: 25 } : undefined}
           onClick={event => { event.stopPropagation(); edge.data?.savePoint?.(); }}>恢复默认轨迹</button>}
       </div>
     </EdgeLabelRenderer>}

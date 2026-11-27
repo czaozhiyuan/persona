@@ -44,7 +44,7 @@ test('copies only the outermost occurrences, their connected MPO cores, ordinary
   const wires = parent.connections!.slice(rootModule(initial).connections!.length);
   assert.deepEqual(wires.map(w => [w.from.instanceId, w.to.instanceId, w.mediaKind]),
     [['c', 'd', 'OPTICAL_FIBER'], ['c', 'd', 'RJ45_CABLE']]);
-  const routes = saved.layout!.topologyWireRoutes!;
+  const routes = saved.layout!.topologyWireRoutes!.filter(route => !route.kind);
   assert.ok(routes.some(r => r.wire.kind === 'core' && r.wire.bundleId === cable.id && r.x === 43 + dx && r.y === -17 + dy));
   assert.ok(routes.some(r => r.wire.id === wires[0].id && r.x === 80 + dx && r.y === 77 + dy));
   assert.deepEqual(saved.namedLinks, initial.namedLinks);

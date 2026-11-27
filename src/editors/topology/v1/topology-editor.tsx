@@ -1,9 +1,9 @@
-import { setWireRoute } from '../../../state/v1/wire-routes';
+import { applyWireRoutes, setWireRoute } from '../../../state/v1/wire-routes';
 import { createPortal } from 'react-dom';
 import { editablePortName, portDisplayName, portTypeLabels } from '../../../workbench/v1/labels';
 import { createPathNames, structureScope } from '../../../workbench/v1/structure-scope';
 import type { PortManagerMode } from '../../../workbench/v1/properties/add-port-dialog';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { PathResult } from '../../../engine/v1/path-resolver';
 import type { SignalGraph } from '../../../engine/v1/signal-graph';
 import type { LibraryItem } from '../../../library/v1/insert-library-item';
@@ -70,6 +70,7 @@ export function TopologyEditor({ multiplex, pointerPlacement, centerPlacement, l
   const scope = selection.modulePath;
   const scopeOccurrence = store.resolveInstance(scope);
   const moduleName = scopeOccurrence?.instance?.name ?? module.name;
+  const autoRoute = useRef<() => void>(null);
   const [message, setMessage] = useState('');
   const selectedPaths = selectionPaths(selection);
   const [groupDialog, setGroupDialog] = useState(false);
@@ -249,6 +250,13 @@ export function TopologyEditor({ multiplex, pointerPlacement, centerPlacement, l
         openPort={(path, portId) => { setMessage(''); setPortAction({ path, portId }); }}
         add={add} placingModule={placingModule} cancelPlacement={() => { setPlacingModule(false); setMessage(''); }}
         deleteInstances={deleteInstances} deleteWiring={deleteWiring} rename={rename} copyObjects={copyObjects} pasteObjects={pasteObjects} report={setMessage} undo={store.undo} redo={store.redo}
+        autoRoute={autoRoute} finishRouting={({ routes, failed }) => {
+          const updated = applyWireRoutes(project, routes);
+          if (updated === project || commit(() => updated)) {
+            setMessage(failed ? `有 ${failed} 条连线未能整理，已保留原轨迹。` : '');
+          }
+          return store.getSnapshot().project;
+        }}
         route={(scope, wire, point) => commit(draft => setWireRoute(draft, scope, wire, point))}
         move={(moves, manual, delta) => commit(draft => moveInView(draft, moves, manual, delta))}
         resize={(frame, adjustments) => commit(draft =>
@@ -290,6 +298,7 @@ export function TopologyEditor({ multiplex, pointerPlacement, centerPlacement, l
           「{moduleName}」的共享结构改动会应用到 {sharedLocations.join('、')}。
         </p>}
 
+        <button type="button" onClick={() => autoRoute.current?.()}>仅自动理线</button>
         {activeDcShortcut && <button type="button" onClick={() => onDcBudget(scope)}>查看供电/功耗 · {moduleName}</button>}
         <TopologyTool title="模块对外端口">
           <button type="button" onClick={() => openPorts(scope, 'manage')}>＋ 添加对外端口</button>
