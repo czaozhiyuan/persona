@@ -217,7 +217,16 @@ export function validateProject(project: Project): void {
     const owner = definitionAtPath(route.modulePath);
     requireValid(owner?.kind === 'module' && wireEndpoints(owner, route.wire), '手动轨迹必须引用当前模块中已连接的线。');
     requireValid(!routes.has(key), '同一连线的手动轨迹重复。');
-    requireValid(Number.isFinite(route.x) && Number.isFinite(route.y), '手动轨迹坐标必须是有限数值。');
+    if (route.kind === 'orthogonal') {
+      const points = route.points;
+      requireValid(points.length >= 2 && points.every((p, i) => {
+        if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) return false;
+        if (!i) return true;
+        const previous = points[i - 1];
+        const vertical = previous.x === p.x;
+        return vertical !== (previous.y === p.y) && (i < 2 || vertical !== (previous.x === points[i - 2].x));
+      }), '正交路线需要两个锚点和有效的水平或垂直线段。');
+    } else requireValid(Number.isFinite(route.x) && Number.isFinite(route.y), '手动轨迹坐标必须是有限数值。');
     routes.add(key);
   }
   const frames = new Set<string>();

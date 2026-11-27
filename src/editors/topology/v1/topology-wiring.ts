@@ -19,6 +19,7 @@ type ScopedPort = CanvasPort & { module: ModuleDefinition; scope: InstancePath }
 export type WiringEdge = Edge<{
   wire: WiringSelection;
   routePoint?: XYPosition;
+  fixedPoints?: readonly XYPosition[];
   savePoint?: (point?: XYPosition) => void;
   scope: InstancePath;
   portType: PortType;

@@ -9,7 +9,7 @@ type OccurrenceMove = { from: InstancePath; to: InstancePath };
 type MoveOptions = { position?: Pick<TopologyPlacement, 'x' | 'y'> };
 type MovePlan =
   | { ok: true; project: Project; instancePath: InstancePath; instancePaths: readonly InstancePath[];
-      affected: readonly OccurrenceMove[]; wiring: { retained: number; disconnected: number } }
+      affected: readonly OccurrenceMove[]; fixedRoutesToPlace: readonly TopologyWireRoute[]; wiring: { retained: number; disconnected: number } }
   | { ok: false; message: string };
 
 const key = (path: InstancePath) => JSON.stringify(path);
@@ -133,22 +133,26 @@ function applyMove(project: Project, sources: readonly InstancePath[], destinati
     },
   }, remap);
   const relocated: TopologyWireRoute[] = [];
+  const fixedRoutesToPlace: TopologyWireRoute[] = [];
   for (const route of layout?.topologyWireRoutes ?? []) {
     const modulePath = sourceScopes.get(key(route.modulePath));
     if (!modulePath) continue;
+    // Only the dragged occurrence has a measured transform into its destination.
+    if (route.kind === 'orthogonal' && !samePath(modulePath, destination)) continue;
+    const mapped = route.kind === 'orthogonal' ? fixedRoutesToPlace : relocated;
     const wire = route.wire;
     if (wire.kind === 'connection') {
       const id = wiring.relocatedConnections.get(wire.id);
-      if (id !== undefined) relocated.push({ ...route, modulePath, wire: { ...wire, id } });
+      if (id !== undefined) mapped.push({ ...route, modulePath, wire: { ...wire, id } });
     } else if (wire.kind === 'core') {
       const bundleId = wiring.relocatedBundles.get(wire.bundleId);
-      if (bundleId !== undefined) relocated.push({ ...route, modulePath, wire: { ...wire, bundleId } });
+      if (bundleId !== undefined) mapped.push({ ...route, modulePath, wire: { ...wire, bundleId } });
     }
   }
   if (relocated.length) candidate = { ...candidate, layout: { ...candidate.layout,
     topologyWireRoutes: [...(candidate.layout?.topologyWireRoutes ?? []), ...relocated] } };
   validateProjectSnapshot(candidate);
-  return { project: candidate, instancePath, instancePaths, affected,
+  return { project: candidate, instancePath, instancePaths, affected, fixedRoutesToPlace,
     wiring: { retained: wiring.retained, disconnected: wiring.disconnected } };
 }
 

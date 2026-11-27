@@ -182,6 +182,16 @@ const link = shape(identity, {
   trial: shape({ frequencyGHz: number }, { inputPowerDbm: number,
     opticalSources: list(shape({ endpoint }, { channelId: text, powerDbm: number })) }),
 });
+const routeIdentity = { modulePath: instancePath, wire: byKind({
+  connection: shape({ kind: oneOf('connection'), id: text }),
+  mapping: shape({ kind: oneOf('mapping'), id: text }),
+  core: shape({ kind: oneOf('core'), id: text, bundleId: text }),
+}) };
+const manualRoute = shape({ ...routeIdentity, x: number, y: number });
+const orthogonalRoute = shape({ ...routeIdentity, kind: oneOf('orthogonal'), points: list(shape({ x: number, y: number })) });
+const wireRoute: Check = (value, path) => {
+  (Object.hasOwn(record(value, path), 'kind') ? orthogonalRoute : manualRoute)(value, path);
+};
 const projectShape = shape({
   ...identity, rootModuleDefinitionId: text, componentDefinitions: list(component), moduleDefinitions: list(moduleDefinition),
 }, {
@@ -191,11 +201,7 @@ const projectShape = shape({
     physical: list(shape({ instancePath, enclosurePath: instancePath, xMm: number, yMm: number, rotationDeg: number },
       { footprint: shape(footprint) })),
     topology: list(shape({ instancePath, x: number, y: number })),
-    topologyWireRoutes: list(shape({ modulePath: instancePath, x: number, y: number, wire: byKind({
-      connection: shape({ kind: oneOf('connection'), id: text }),
-      mapping: shape({ kind: oneOf('mapping'), id: text }),
-      core: shape({ kind: oneOf('core'), id: text, bundleId: text }),
-    }) })),
+    topologyWireRoutes: list(wireRoute),
     topologyFrames: list(shape({ modulePath: instancePath, x: number, y: number, width: number, height: number })),
   }),
 });

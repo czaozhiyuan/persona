@@ -19,7 +19,7 @@ import type { EndpointRef, InstancePath, Project } from '../../model/v1/types';
 import { pasteModule } from '../../state/v1/instantiate-module';
 import { planDissolveModule } from '../../state/v1/dissolve-module';
 import { moveWiringSummary, planInstanceMove } from '../../state/v1/reparent-instance';
-import { translateGroupRoutes } from '../../state/v1/wire-routes';
+import { applyWireRoutes, offsetRoute, translateGroupRoutes } from '../../state/v1/wire-routes';
 import { moveTopologyNodes, resizeTopologyFrame } from '../../state/v1/topology-edits';
 import { selectionPaths, type ProjectStore } from '../../state/v1/project-store';
 import { parseProjectJson, projectErrorMessage, serializeProjectJson } from '../../storage/v1/project-json';
@@ -313,7 +313,8 @@ export function Workbench({ store, loadExample, newProject }: Props) {
     const result = store.commit(() => {
       if (!layout) return placeInModule(plan.project, plan.instancePath);
       const routed = translateGroupRoutes(plan.project, plan.instancePaths, layout.delta);
-      const placed = moveTopologyNodes(routed, layout.placements);
+      const fixed = applyWireRoutes(routed, plan.fixedRoutesToPlace.map(route => offsetRoute(route, layout.delta)));
+      const placed = moveTopologyNodes(fixed, layout.placements);
       return layout.frame ? resizeTopologyFrame(placed, layout.frame) : placed;
     });
     if (!result.ok) return result.message;

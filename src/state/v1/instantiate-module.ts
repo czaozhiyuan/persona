@@ -1,3 +1,4 @@
+import { offsetRoute } from './wire-routes';
 import { moduleName } from './module-name';
 import type { ResolvedInstance } from '../../engine/v1/hierarchy';
 import { resolveHierarchy } from '../../engine/v1/hierarchy';
@@ -62,8 +63,7 @@ export function pasteTopologyObjects(project: Project, snapshot: Project, roots:
     }
     function copyRoute(from: WireRef, to: WireRef) {
       const original = sourceRoutes.get(wireRouteKey(path, from));
-      if (original && routeOffset) routes.push({ modulePath: destination, wire: to,
-        x: original.x + routeOffset.x, y: original.y + routeOffset.y });
+      if (original && routeOffset) routes.push({ ...offsetRoute(original, routeOffset), modulePath: destination, wire: to });
     }
     for (const c of parent.connections ?? []) {
       const from = endpoint(c.from), to = endpoint(c.to);

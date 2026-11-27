@@ -1,3 +1,4 @@
+import { routeDisplayedScope } from './routing-scene';
 import { wireRouteKey } from '../../../model/v1/wire-route';
 import { createPortal } from 'react-dom';
 import { Background, ConnectionMode, ReactFlow, ReactFlowProvider, useKeyPress, useStoreApi, useUpdateNodeInternals, ViewportPortal } from '@xyflow/react';
@@ -175,6 +176,8 @@ type Props = {
   cancelPlacement: () => void;
   add: (item: LibraryItem, placement: CenterPlacement) => boolean;
   deleteInstances: (paths: readonly InstancePath[], preserve: (project: Project, parentIds: ReadonlySet<string>) => Project) => void;
+  autoRoute: React.Ref<() => void>;
+  finishRouting: (result: ReturnType<typeof routeDisplayedScope>) => Project;
   route: (scope: InstancePath, wire: WiringSelection, point?: XYPosition) => void;
   deleteWiring: (path: InstancePath, wire: WiringSelection) => boolean;
   rename: () => void;
@@ -193,7 +196,7 @@ export function TopologyCanvas(props: Props) {
 
 function EditableTopologyCanvas({ multiplex, project, instances, modulePath, selectedInstance, selectedPaths, pathResult, budgetHighlight, expanded, manualFrames,
   toggleModule, selectObject, selectObjects, enterModule, reparent, focusMoved, move, resize, connect, mapPort, add, placingModule, cancelPlacement,
-  deleteInstances, deleteWiring, route, rename, copyObjects, pasteObjects, pointerPlacement, centerPlacement, report, undo, redo, openPort, onAddPort, newPort,
+  deleteInstances, deleteWiring, route, autoRoute, finishRouting, rename, copyObjects, pasteObjects, pointerPlacement, centerPlacement, report, undo, redo, openPort, onAddPort, newPort,
   depth, fullPage, toggleFullPage, restoreView, viewHost, topologyActive, finishContentEdit }: Props) {
   const flowStore = useStoreApi<CanvasNode, WiringEdge>();
   const boxSelection = useRef<readonly InstancePath[] | undefined>(undefined);
@@ -228,8 +231,8 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
   const flow = useRef<ReactFlowInstance<CanvasNode, WiringEdge>>(null);
 
   // A clicked card and its ancestors can already occupy temporary slots in the current view.
-  const [opening, setOpening] = useState<{ expanded: ReadonlySet<string>; project: Project; positions: Map<string, XYPosition> }>();
-  const anchors = opening?.expanded === expanded && opening.project === project ? opening.positions : undefined;
+  const [opening, setOpening] = useState<{ expanded: ReadonlySet<string>; projects: WeakSet<Project>; positions: Map<string, XYPosition> }>();
+  const anchors = opening?.expanded === expanded && opening.projects.has(project) ? opening.positions : undefined;
   const { manual, view: projection, layout } = useMemo(() =>
     projectInlineExpansion(project, instances, modulePath, expanded, measured, resizePreview, portHeights, anchors),
   [project, instances, modulePath, expanded, measured, resizePreview, portHeights, anchors]);
@@ -252,6 +255,12 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
   const highlights = useMemo(() => new Map([...scopes].map(([key, { path }]) =>
     [key, projectPathHighlight(pathResult, path, budgetHighlight)])), [scopes, pathResult, budgetHighlight]);
   const { ports, edges } = useMemo(() => projectWiring(projection, highlights), [projection, highlights]);
+
+  useImperativeHandle(autoRoute, () => () => {
+    if (!flow.current || !canvas.current) return;
+    const updated = finishRouting(routeDisplayedScope(projection, edges, flow.current, canvas.current));
+    if (anchors) opening!.projects.add(updated);
+  });
 
   const routes = useMemo(() => new Map(project.layout?.topologyWireRoutes?.map(r => [wireRouteKey(r.modulePath, r.wire), r])),
     [project.layout?.topologyWireRoutes]);
@@ -368,7 +377,7 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
             const { x, y } = nodeByKey.get(key)!.bounds;
             positions.set(key, { x, y });
           }
-          setOpening({ expanded: next, project, positions });
+          setOpening({ expanded: next, projects: new WeakSet([project]), positions });
         }
       } : undefined,
     };
@@ -817,7 +826,8 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
     });
     return { ...edge, selected, data: { ...data,
       powerLabels, caption: directions ? undefined : data.caption,
-      routePoint: saved && { x: saved.x + dx + routeDx, y: saved.y + dy + routeDy },
+      routePoint: saved && !saved.kind ? { x: saved.x + dx + routeDx, y: saved.y + dy + routeDy } : undefined,
+      fixedPoints: saved?.kind === 'orthogonal' ? saved.points.map(p => ({ x: p.x + dx, y: p.y + dy })) : undefined,
       savePoint: selected ? (p?: XYPosition) => route(data.scope, data.wire, p && { x: p.x - dx, y: p.y - dy }) : undefined,
     } };
   });
