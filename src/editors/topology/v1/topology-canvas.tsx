@@ -1,3 +1,4 @@
+import { arrangeScope } from './auto-arrange';
 import { routeDisplayedScope } from './routing-scene';
 import { wireRouteKey } from '../../../model/v1/wire-route';
 import { createPortal } from 'react-dom';
@@ -176,8 +177,9 @@ type Props = {
   cancelPlacement: () => void;
   add: (item: LibraryItem, placement: CenterPlacement) => boolean;
   deleteInstances: (paths: readonly InstancePath[], preserve: (project: Project, parentIds: ReadonlySet<string>) => Project) => void;
-  autoRoute: React.Ref<() => void>;
-  finishRouting: (result: ReturnType<typeof routeDisplayedScope>) => Project;
+  commands: React.Ref<ArrangeCommands>;
+  setArranging: (busy: boolean) => void;
+  finishRouting: (base: Project, positioned: Project, result: ReturnType<typeof routeDisplayedScope>) => Project;
   route: (scope: InstancePath, wire: WiringSelection, point?: XYPosition) => void;
   deleteWiring: (path: InstancePath, wire: WiringSelection) => boolean;
   rename: () => void;
@@ -190,13 +192,15 @@ type Props = {
   redo: () => void;
 };
 
+export type ArrangeCommands = { arrange: () => void; route: () => void; cancel: () => void };
+
 export function TopologyCanvas(props: Props) {
   return <ReactFlowProvider><EditableTopologyCanvas {...props} /></ReactFlowProvider>;
 }
 
 function EditableTopologyCanvas({ multiplex, project, instances, modulePath, selectedInstance, selectedPaths, pathResult, budgetHighlight, expanded, manualFrames,
   toggleModule, selectObject, selectObjects, enterModule, reparent, focusMoved, move, resize, connect, mapPort, add, placingModule, cancelPlacement,
-  deleteInstances, deleteWiring, route, autoRoute, finishRouting, rename, copyObjects, pasteObjects, pointerPlacement, centerPlacement, report, undo, redo, openPort, onAddPort, newPort,
+  deleteInstances, deleteWiring, route, commands, setArranging, finishRouting, rename, copyObjects, pasteObjects, pointerPlacement, centerPlacement, report, undo, redo, openPort, onAddPort, newPort,
   depth, fullPage, toggleFullPage, restoreView, viewHost, topologyActive, finishContentEdit }: Props) {
   const flowStore = useStoreApi<CanvasNode, WiringEdge>();
   const boxSelection = useRef<readonly InstancePath[] | undefined>(undefined);
@@ -231,14 +235,19 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
   const flow = useRef<ReactFlowInstance<CanvasNode, WiringEdge>>(null);
 
   // A clicked card and its ancestors can already occupy temporary slots in the current view.
-  const [opening, setOpening] = useState<{ expanded: ReadonlySet<string>; projects: WeakSet<Project>; positions: Map<string, XYPosition> }>();
-  const anchors = opening?.expanded === expanded && opening.projects.has(project) ? opening.positions : undefined;
+  const [opening, setOpening] = useState<{ expanded: ReadonlySet<string>; positions: WeakMap<Project, ReadonlyMap<string, XYPosition>> }>();
+  const anchors = opening?.expanded === expanded ? opening.positions.get(project) : undefined;
+  const pendingArrange = useRef<symbol | undefined>(undefined);
+  const [staged, setStaged] = useState<{ base: Project; project: Project; token: symbol; anchors?: ReadonlyMap<string, XYPosition> }>();
+  const preview = staged?.base === project && staged.token === pendingArrange.current ? staged : undefined;
   const { manual, view: projection, layout } = useMemo(() =>
-    projectInlineExpansion(project, instances, modulePath, expanded, measured, resizePreview, portHeights, anchors),
-  [project, instances, modulePath, expanded, measured, resizePreview, portHeights, anchors]);
+    projectInlineExpansion(preview?.project ?? project, instances, modulePath, expanded, measured, resizePreview, portHeights, preview ? preview.anchors : anchors),
+  [project, preview, instances, modulePath, expanded, measured, resizePreview, portHeights, anchors]);
+  const displayedProjection = useRef(projection);
+  useLayoutEffect(() => { displayedProjection.current = projection; }, [projection]);
   const { nodes: items, rootKey, nodeByKey, scopes } = projection;
   const cancelContentEdit = useContentLayoutEdit(canvas, project, projection, layout, instances, modulePath, expanded,
-    measured, portHeights, topologyActive && !dragSession.current && !resizePreview, manualFrames, finishContentEdit);
+    measured, portHeights, topologyActive && !pendingArrange.current && !dragSession.current && !resizePreview, manualFrames, finishContentEdit);
   // An empty scope has nothing to fit. A queued fit would zoom to its first insertion.
   const [fitInitialNodes] = useState(() => !initialViewport && items.length > 0);
   useEffect(() => {
@@ -256,11 +265,84 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
     [key, projectPathHighlight(pathResult, path, budgetHighlight)])), [scopes, pathResult, budgetHighlight]);
   const { ports, edges } = useMemo(() => projectWiring(projection, highlights), [projection, highlights]);
 
-  useImperativeHandle(autoRoute, () => () => {
-    if (!flow.current || !canvas.current) return;
-    const updated = finishRouting(routeDisplayedScope(projection, edges, flow.current, canvas.current));
-    if (anchors) opening!.projects.add(updated);
-  });
+  const cancelArrange = useCallback(() => {
+    if (!pendingArrange.current) return;
+    pendingArrange.current = undefined;
+    setStaged(undefined);
+    setArranging(false);
+  }, [setArranging]);
+  useLayoutEffect(() => cancelArrange, [project, rootKey, expanded, topologyActive, cancelArrange]);
+  useImperativeHandle(commands, () => ({
+    cancel: cancelArrange,
+    route() {
+      if (pendingArrange.current || !flow.current || !canvas.current) return;
+      const updated = finishRouting(project, project, routeDisplayedScope(projection, edges, flow.current, canvas.current));
+      if (anchors) opening!.positions.set(updated, anchors);
+    },
+    async arrange() {
+      if (pendingArrange.current || !flow.current || !canvas.current || dragSession.current || resizePreview) return;
+      const token = Symbol();
+      pendingArrange.current = token;
+      setArranging(true);
+      report('');
+      try {
+        // Paint the progress and cancel controls before starting the bundled engine.
+        await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+        if (pendingArrange.current !== token) return;
+        const positioned = await arrangeScope(project, projection, edges, id => {
+          const node = flow.current?.getInternalNode(id);
+          if (!node?.measured.width || !node.measured.height) return;
+          const ports = node.internals.handleBounds;
+          const handles = new Map([...(ports?.source ?? []), ...(ports?.target ?? [])].map(h =>
+            [h.id!, { x: h.x + h.width / 2, y: h.y + h.height / 2 }]));
+          return { width: node.measured.width, height: node.measured.height, handles };
+        });
+        if (pendingArrange.current === token) {
+          if (displayedProjection.current !== projection) { cancelArrange(); return; }
+          const nested = anchors && new Map(anchors);
+          for (const member of scopes.get(rootKey)!.members) nested?.delete(member.key);
+          setStaged({ base: project, project: positioned, token, anchors: nested });
+        }
+      } catch (error) {
+        if (pendingArrange.current === token) {
+          cancelArrange();
+          report(error instanceof Error ? error.message : '自动排列失败。');
+        }
+      }
+    },
+  }));
+
+  // Read the actual handles after applying the snapped positions to the view, before any store commit.
+  useLayoutEffect(() => {
+    if (!preview) return;
+    let frame: number, attempts = 0;
+    function finish() {
+      if (!preview || pendingArrange.current !== preview.token || !flow.current || !canvas.current) return;
+      try {
+        const root = projection.nodeByKey.get(projection.rootKey);
+        const members = projection.scopes.get(projection.rootKey)!.members;
+        const ready = (root ? [root, ...members] : members).every(n => {
+          const actual = flow.current!.getInternalNode(nodeId(n.key));
+          const origin = n.parentKey ? flow.current!.getInternalNode(nodeId(n.parentKey))?.internals.positionAbsolute : undefined;
+          const p = actual?.internals.positionAbsolute;
+          return p && Math.abs(p.x - (origin?.x ?? 0) - n.position.x) < 0.5
+            && Math.abs(p.y - (origin?.y ?? 0) - n.position.y) < 0.5
+            && (!n.frame || Math.abs((actual.measured.width ?? 0) - n.frame.display.width) <= 1
+              && Math.abs((actual.measured.height ?? 0) - n.frame.display.height) <= 1);
+        });
+        if (!ready && ++attempts < 30) { frame = requestAnimationFrame(finish); return; }
+        if (!ready) throw new Error('画布尺寸尚未就绪，请重试。');
+        const result = routeDisplayedScope(projection, edges, flow.current, canvas.current);
+        const updated = finishRouting(preview.base, preview.project, result);
+        if (preview.anchors && updated !== preview.base) opening?.positions.set(updated, preview.anchors);
+      } catch (error) {
+        report(error instanceof Error ? error.message : '自动理线失败。');
+      }
+      cancelArrange();
+    }
+    frame = requestAnimationFrame(() => { frame = requestAnimationFrame(finish); });
+    return () => cancelAnimationFrame(frame);
+  }, [preview, projection, edges, finishRouting, cancelArrange, report, opening]);
 
   const routes = useMemo(() => new Map(project.layout?.topologyWireRoutes?.map(r => [wireRouteKey(r.modulePath, r.wire), r])),
     [project.layout?.topologyWireRoutes]);
@@ -377,7 +459,7 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
             const { x, y } = nodeByKey.get(key)!.bounds;
             positions.set(key, { x, y });
           }
-          setOpening({ expanded: next, projects: new WeakSet([project]), positions });
+          setOpening({ expanded: next, positions: new WeakMap([[project, positions]]) });
         }
       } : undefined,
     };
@@ -746,6 +828,7 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
       if (!topologyActive || event.defaultPrevented || event.isComposing || document.querySelector('dialog[open]')
         || !(target instanceof Element) || target.closest('input, textarea, select, [contenteditable]')
         || !window.getSelection()?.isCollapsed) return;
+      if (event.key === 'Escape' && pendingArrange.current) { event.preventDefault(); cancelArrange(); return; }
       if (placingModule) {
         if (event.key === 'Escape') { event.preventDefault(); cancelWiring(); cancelPlacement(); }
         return;
@@ -838,7 +921,7 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
 
   return <div ref={canvas} className="v1-topology-canvas" aria-label="逻辑拓扑画布" tabIndex={-1}
     data-space-pan={panWithSpace}
-    onPointerDownCapture={event => { if (panWithSpace) event.currentTarget.focus({ preventScroll: true }); }}
+    onPointerDownCapture={event => { cancelArrange(); if (panWithSpace) event.currentTarget.focus({ preventScroll: true }); }}
     onPointerUpCapture={event => { if (event.button === 0) readBoxSelection(); }}
     onPointerCancel={() => { cancelBoxSelection(); cancelDrag(); }}
     onDragOver={event => {

@@ -17,7 +17,8 @@ const production = Object.entries(lock.packages as Record<string, { dev?: boolea
 const notices = production.map(([path, pkg]) => {
   const files = readdirSync(path).filter(name => /^(license|copying|notice)(\.|$)/i.test(name)).sort();
   const texts = files.map(name => `${name}\n${readFileSync(join(path, name), 'utf8')}`).join('\n\n');
-  return `${path.replace(/^node_modules\//, '')} ${pkg.version} (${pkg.license ?? 'see package license'})\n${texts}`;
+  const source = path === 'node_modules/elkjs' ? `Source available under EPL-2.0: https://github.com/kieler/elkjs/tree/${pkg.version}\n` : '';
+  return `${path.replace(/^node_modules\//, '')} ${pkg.version} (${pkg.license ?? 'see package license'})\n${source}${texts}`;
 }).join('\n\n' + '='.repeat(72) + '\n\n');
 writeFileSync(join(outputDir, 'THIRD_PARTY_NOTICES.txt'), notices + '\n');
 const escaped = notices.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
