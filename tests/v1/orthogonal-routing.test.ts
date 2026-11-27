@@ -49,6 +49,40 @@ test('a narrow channel relaxes clearance, while an obstructed port and a separat
   assert.equal(planOrthogonalRoutes({ ...tight, obstacles: solid }).size, 0);
 });
 
+test('ordinary A* keeps its four-bend detour and a longer search can retry at the same clearance', () => {
+  for (const [span, bends] of [[500, 4], [700, 6]]) {
+    const wall = { id: 'wall', x: span / 2, y: -200, width: 50, height: span + 240 };
+    const wire: RoutingWire = { id: 'a',
+      source: { x: 0, y: 0, side: 'left', obstacle: 'source' },
+      target: { x: span, y: span, side: 'right', obstacle: 'target' } };
+    const routes = planOrthogonalRoutes({ wires: [wire], obstacles: [wall,
+      { id: 'source', x: 0, y: -30, width: 60, height: 60 },
+      { id: 'target', x: span - 60, y: span - 30, width: 60, height: 60 }] });
+    const points = routes.get('a');
+    assert.ok(points);
+    assert.equal(points.length - 2, bends);
+    assert.deepEqual(points[0], { x: -20, y: 0 });
+    assert.deepEqual(points.at(-1), { x: span + 20, y: span });
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i - 1], b = points[i];
+      assert.ok(Math.max(a.x, b.x) <= wall.x - 17 || Math.min(a.x, b.x) >= wall.x + wall.width + 17
+        || Math.max(a.y, b.y) <= wall.y - 17 || Math.min(a.y, b.y) >= wall.y + wall.height + 17);
+    }
+  }
+});
+
+test('failed ordinary and weighted searches share the layer budget across wires and clearances', () => {
+  const boundary = { x: 0, y: 0, width: 4000, height: 3000 };
+  const obstacles = [{ id: 'wall', x: 1000, y: 0, width: 50, height: 3000 }];
+  const deadEnd: RoutingWire = { id: 'a',
+    source: { x: 80, y: 1500, side: 'right', obstacle: 'source' },
+    target: { x: 2000, y: 1500, side: 'left', obstacle: 'target' } };
+  const easy = { ...deadEnd, id: 'z', target: { ...deadEnd.target, x: 300 } };
+  const wires = ['a', 'b', 'c'].map(id => ({ ...deadEnd, id }));
+  assert.ok(planOrthogonalRoutes({ boundary, obstacles, wires: [easy] }).has('z'));
+  assert.equal(planOrthogonalRoutes({ boundary, obstacles, wires: [...wires, easy] }).size, 0);
+});
+
 test('fixed corners use limited radii and only the two connector cubics respond to moving top/bottom handles', () => {
   const points = [{ x: 30, y: 50 }, { x: 30, y: 40 }, { x: 150, y: 40 }, { x: 150, y: 20 }];
   const ends = { sourceX: 31, sourceY: 75, targetX: 150, targetY: 2, sourcePosition: Position.Top, targetPosition: Position.Bottom };
