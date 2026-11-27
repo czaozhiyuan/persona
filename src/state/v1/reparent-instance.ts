@@ -1,6 +1,6 @@
 import { retainWireRoutes } from './wire-routes';
 import { resolveHierarchy } from '../../engine/v1/hierarchy';
-import type { InstancePath, Project, TopologyPlacement } from '../../model/v1/types';
+import type { InstancePath, Project, TopologyPlacement, TopologyWireRoute } from '../../model/v1/types';
 import { validateProjectSnapshot } from '../../storage/v1/project-json';
 import { remapLinkReferences } from './remap-link-references';
 import { moveLocalWiring, transferMoveParameters, type ModuleHop } from './reparent-wiring';
@@ -101,7 +101,7 @@ function applyMove(project: Project, sources: readonly InstancePath[], destinati
   const layout = project.layout;
   const topology = layout?.topology?.map(atInstance);
   const position = options.position;
-  const candidate = retainWireRoutes(project, {
+  let candidate = retainWireRoutes(project, {
     ...project,
     moduleDefinitions: [...modules.values()],
     instanceSettings: project.instanceSettings?.map(atInstance),
@@ -132,6 +132,21 @@ function applyMove(project: Project, sources: readonly InstancePath[], destinati
       })),
     },
   }, remap);
+  const relocated: TopologyWireRoute[] = [];
+  for (const route of layout?.topologyWireRoutes ?? []) {
+    const modulePath = sourceScopes.get(key(route.modulePath));
+    if (!modulePath) continue;
+    const wire = route.wire;
+    if (wire.kind === 'connection') {
+      const id = wiring.relocatedConnections.get(wire.id);
+      if (id !== undefined) relocated.push({ ...route, modulePath, wire: { ...wire, id } });
+    } else if (wire.kind === 'core') {
+      const bundleId = wiring.relocatedBundles.get(wire.bundleId);
+      if (bundleId !== undefined) relocated.push({ ...route, modulePath, wire: { ...wire, bundleId } });
+    }
+  }
+  if (relocated.length) candidate = { ...candidate, layout: { ...candidate.layout,
+    topologyWireRoutes: [...(candidate.layout?.topologyWireRoutes ?? []), ...relocated] } };
   validateProjectSnapshot(candidate);
   return { project: candidate, instancePath, instancePaths, affected,
     wiring: { retained: wiring.retained, disconnected: wiring.disconnected } };

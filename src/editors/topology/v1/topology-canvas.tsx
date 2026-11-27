@@ -21,7 +21,9 @@ import { BlockPorts, type PortValue } from './block-ports';
 import { definitionIcon, DeviceIcon, type DeviceIconKey } from './device-icon';
 import { frameInsets, ModuleFrame, type FramePortHeights } from './module-frame';
 import { canConnect } from '../../../model/v1/types';
-import { keepNodeInside, moduleExtent } from './frame-geometry';
+import { gridCoordinate, gridPoint, topologyGrid } from '../../../state/v1/topology-grid';
+import { moduleExtent } from './frame-geometry';
+import type { LibraryPointerPlacement } from '../../../workbench/v1/use-library-pointer-drag';
 import { ModulePlacement } from './module-placement';
 import { FrameResizeHandles } from './frame-resize-handles';
 import { keepGraphVisible } from './viewport';
@@ -82,6 +84,7 @@ type DragSession = {
   anchor: TopologyItem;
   members: readonly TopologyItem[];
   moduleBounds: ReadonlyMap<string, Rect>;
+  last?: { point?: XYPosition; position: XYPosition };
   leftAnchor: boolean;
   bounds: Rect;
   extent?: CoordinateExtent;
@@ -163,19 +166,20 @@ type Props = {
   fullPage: boolean;
   toggleFullPage: (view: CanvasView) => void;
   restoreView?: CanvasView;
-  move: (placements: readonly TopologyPlacement[], manual: Projection) => void;
+  move: (placements: readonly TopologyPlacement[], manual: Projection, delta: XYPosition) => void;
   resize: (frame: TopologyFrame, placementAdjustments: readonly TopologyPlacement[]) => void;
   finishContentEdit: (base: Project, layout: ExpansionLayout) => void;
   connect: (scope: InstancePath, connection: Omit<Connection, 'id'>) => void;
   mapPort: (scope: InstancePath, mapping: PortMapping) => void;
   placingModule: boolean;
   cancelPlacement: () => void;
-  add: (item: LibraryItem, position: XYPosition) => boolean;
+  add: (item: LibraryItem, placement: CenterPlacement) => boolean;
   deleteInstances: (paths: readonly InstancePath[], preserve: (project: Project, parentIds: ReadonlySet<string>) => Project) => void;
   route: (scope: InstancePath, wire: WiringSelection, point?: XYPosition) => void;
   deleteWiring: (path: InstancePath, wire: WiringSelection) => boolean;
   rename: () => void;
   copyObjects: (view: Projection) => void;
+  pointerPlacement: React.Ref<LibraryPointerPlacement>;
   centerPlacement: React.Ref<CenterPlacement>;
   pasteObjects: (view: Projection, placement: (size: Rect) => XYPosition | undefined) => void;
   report: (message: string) => void;
@@ -189,7 +193,7 @@ export function TopologyCanvas(props: Props) {
 
 function EditableTopologyCanvas({ multiplex, project, instances, modulePath, selectedInstance, selectedPaths, pathResult, budgetHighlight, expanded, manualFrames,
   toggleModule, selectObject, selectObjects, enterModule, reparent, focusMoved, move, resize, connect, mapPort, add, placingModule, cancelPlacement,
-  deleteInstances, deleteWiring, route, rename, copyObjects, pasteObjects, centerPlacement, report, undo, redo, openPort, onAddPort, newPort,
+  deleteInstances, deleteWiring, route, rename, copyObjects, pasteObjects, pointerPlacement, centerPlacement, report, undo, redo, openPort, onAddPort, newPort,
   depth, fullPage, toggleFullPage, restoreView, viewHost, topologyActive, finishContentEdit }: Props) {
   const flowStore = useStoreApi<CanvasNode, WiringEdge>();
   const boxSelection = useRef<readonly InstancePath[] | undefined>(undefined);
@@ -215,6 +219,7 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
   const [dropPreview, setDropPreview] = useState<DropPreview>();
   const renderedPreview = useRef<DropPreview | undefined>(undefined);
   useLayoutEffect(() => { renderedPreview.current = dropPreview; }, [dropPreview]);
+  const [libraryDrop, setLibraryDrop] = useState<XYPosition>();
   const [drag, setDrag] = useState<ReadonlyMap<string, XYPosition>>();
   const [selectedEdgeKey, setSelectedEdgeKey] = useState<string | undefined>(() => restoreView?.edgeId);
   const canvas = useRef<HTMLDivElement>(null);
@@ -389,6 +394,7 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
       data: { ...data, onPortHeight, outerHandles: !boundary, locations: boundary ? [] : structureScope(instances, definition.id),
         resize: {
           frame: frame.display, insets: frame.insets, originLimit,
+          gridOffset: { x: node.bounds.x - frame.display.x, y: node.bounds.y - frame.display.y },
           preview: next => {
             if (next) cancelContentEdit();
             setResizePreview(next && { key, frame: next });
@@ -417,6 +423,8 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
     const y = (parent?.y ?? 0) + node.position.y;
     frameOrigins.set(node.id, { x, y });
     return [<div key={node.id} className="v1-frame-surface" style={{
+      backgroundSize: `${topologyGrid}px ${topologyGrid}px`,
+      backgroundPosition: `${-node.data.resize.frame.x - topologyGrid / 2}px ${-node.data.resize.frame.y - topologyGrid / 2}px`,
       left: x, top: y, width: node.measured?.width, height: node.measured?.height, zIndex: node.zIndex,
     }} />];
   });
@@ -448,9 +456,9 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
     if (!selectedKeys.has(anchor.key)) selectObject(anchor.item.instancePath, false);
   }
 
-  function dragDelta(session: DragSession, position: XYPosition): XYPosition {
+  function dragDelta(session: DragSession, position: XYPosition, free: boolean): XYPosition {
     // Clamp the whole bounding box so siblings keep their spacing at the frame edge.
-    return groupDropDelta(session.bounds, session.anchor.position, position, session.extent);
+    return groupDropDelta(session.bounds, session.anchor.position, position, session.extent, free);
   }
 
   function boundsOf(item: TopologyItem): Rect | undefined {
@@ -489,6 +497,38 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
     return target;
   }
 
+  function crossLevelDrop(session: DragSession, target: NonNullable<ReturnType<typeof targetAt>>, point: XYPosition, free: boolean) {
+    const frame = target.node?.frame;
+    const bounds = target.node && session.moduleBounds.get(target.node.key);
+    const definition = target.node?.item.definition;
+    const origin = frame && bounds ? { x: bounds.x - frame.display.x, y: bounds.y - frame.display.y } : { x: 0, y: 0 };
+    const folded = !frame && definition?.kind === 'module';
+    const position = folded ? defaultTopologyPosition(definition.instances.length, definition.ports.length) : {
+      x: point.x - origin.x - session.anchor.bounds.width / 2, y: point.y - origin.y - session.anchor.bounds.height / 2,
+    };
+    const saved = session.base.layout?.topologyFrames?.find(f => hierarchyKey(f.modulePath) === hierarchyKey(target.destination));
+    // Pin an automatic frame's origin: fitting the first dropped child could otherwise shift the entire preview.
+    const destinationFrame = saved ?? (frame && { modulePath: target.destination, ...frame.base });
+    const dropped = placeDropGroup(session.bounds, session.anchor.bounds, position, destinationFrame,
+      frame?.insets ?? (definition && frameInsets(definition.ports)), free);
+    const parent = session.anchor.parentKey && session.moduleBounds.get(session.anchor.parentKey);
+    const sourceOrigin = parent ? { x: parent.x - session.anchor.offset.x, y: parent.y - session.anchor.offset.y } : { x: 0, y: 0 };
+    // A folded destination has no visible interior. Keep the grabbed card over its drop target.
+    const previewDelta = folded ? {
+      x: point.x - sourceOrigin.x - session.anchor.bounds.x - session.anchor.bounds.width / 2,
+      y: point.y - sourceOrigin.y - session.anchor.bounds.y - session.anchor.bounds.height / 2,
+    } : { x: dropped.delta.x + origin.x - sourceOrigin.x, y: dropped.delta.y + origin.y - sourceOrigin.y };
+    return { delta: dropped.delta, frame: dropped.frame ?? (!saved ? destinationFrame : undefined), previewDelta };
+  }
+
+  function drawDrag(session: DragSession, free: boolean) {
+    if (!session.last) return;
+    const { point, position } = session.last;
+    const target = session.preview;
+    const delta = point && target?.plan ? crossLevelDrop(session, target, point, free).previewDelta : dragDelta(session, position, free);
+    setDrag(new Map(session.members.map(item => [item.key, { x: item.position.x + delta.x, y: item.position.y + delta.y }])));
+  }
+
   function previewDrag(event: MouseEvent | TouchEvent, node: CanvasNode) {
     const session = dragSession.current;
     if (!session) return;
@@ -507,8 +547,8 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
         label: `移入：${name}` };
       setDropPreview(session.preview);
     }
-    const { x, y } = dragDelta(session, node.position);
-    setDrag(new Map(session.members.map(item => [item.key, { x: item.position.x + x, y: item.position.y + y }])));
+    session.last = { point, position: node.position };
+    drawDrag(session, event.altKey);
   }
 
   function cancelDrag() {
@@ -537,34 +577,24 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
         report(target.problem ?? preview.error ?? '无法移动到该模块。');
         return;
       }
-      const frame = target.node?.frame;
-      const bounds = target.node && session.moduleBounds.get(target.node.key);
-      const definition = target.node?.item.definition;
-      const position = frame && bounds ? {
-        x: point.x - bounds.x + frame.display.x - session.anchor.bounds.width / 2,
-        y: point.y - bounds.y + frame.display.y - session.anchor.bounds.height / 2,
-      } : target.kind === 'up' ? {
-        x: point.x - session.anchor.bounds.width / 2, y: point.y - session.anchor.bounds.height / 2,
-      } : definition?.kind === 'module' ? defaultTopologyPosition(definition.instances.length, definition.ports.length) : undefined;
       const plan = preview.plan;
-      const saved = session.base.layout?.topologyFrames?.find(frame => hierarchyKey(frame.modulePath) === hierarchyKey(target.destination));
-      const dropped = position && placeDropGroup(session.bounds, session.anchor.bounds, position, saved,
-        frame?.insets ?? (definition && frameInsets(definition.ports)));
-      const layout = dropped && {
+      const dropped = crossLevelDrop(session, target, point, event.altKey);
+      const layout = {
         placements: session.members.map((item, index) => ({
           instancePath: plan.instancePaths[index], x: item.bounds.x + dropped.delta.x, y: item.bounds.y + dropped.delta.y,
         })),
-        frame: dropped.frame,
+        delta: dropped.delta, frame: dropped.frame,
       };
       reparent(session.base, plan, layout);
       return;
     }
-    const { x, y } = dragDelta(session, node.position);
+    if (!session.last) return;
+    const { x, y } = dragDelta(session, node.position, event.altKey);
     if (!x && !y) return;
     const moves = session.members.map(item => ({
       instancePath: item.item.instancePath, x: item.bounds.x + x, y: item.bounds.y + y,
     }));
-    move(moves, manual);
+    move(moves, manual, { x, y });
   }
 
   function readBoxSelection() {
@@ -587,12 +617,28 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
     flowStore.setState({ userSelectionActive: false, userSelectionRect: null, nodesSelectionActive: false });
   }
 
-  function placeAt(item: LibraryItem, screen: XYPosition) {
-    if (!flow.current) return;
+  function placementPoint(screen: XYPosition, free: boolean) {
+    return flow.current && gridPoint(flow.current.screenToFlowPosition(screen), free);
+  }
+
+  function placeAt(item: LibraryItem, screen: XYPosition, free: boolean) {
+    const position = placementPoint(screen, free);
+    if (!position) return;
     cancelWiring();
     setSelectedEdgeKey(undefined);
-    add(item, flow.current.screenToFlowPosition(screen));
+    add(item, () => ({ position, projection: manual }));
   }
+
+  useImperativeHandle(pointerPlacement, () => (screen, free = false, item) => {
+    if (!topologyActive || !screen || !canvas.current?.contains(document.elementFromPoint(screen.x, screen.y))) {
+      setLibraryDrop(undefined);
+      return;
+    }
+    if (item) {
+      setLibraryDrop(undefined);
+      placeAt(item, screen, free);
+    } else setLibraryDrop(placementPoint(screen, free) ?? undefined);
+  });
 
   useImperativeHandle(centerPlacement, () => (definition, name) => {
     if (!topologyActive) return;
@@ -627,13 +673,10 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
     // Keep the viewport fixed. Prefer a nearby visible gap and use the least-overlapping candidate in a crowded view.
     const offsets = [[0, 0], [0, 1], [1, 0], [0, -1], [-1, 0], [1, 1], [-1, 1], [1, -1], [-1, -1]];
     function candidateAt(x: number, y: number) {
-      const rect = { x, y, width, height };
-      const limit = fits ? visible : undefined;
-      const position = limit ? keepNodeInside(rect, limit) : { x: rect.x, y: rect.y };
-      if (!fits) {
-        position.x = Math.max(topLeft.x - width / 2, Math.min(position.x, bottomRight.x - width / 2));
-        position.y = Math.max(topLeft.y - height / 2, Math.min(position.y, bottomRight.y - height / 2));
-      }
+      const position = {
+        x: gridCoordinate(x, false, fits ? topLeft.x : topLeft.x - width / 2, fits ? bottomRight.x - width : bottomRight.x - width / 2),
+        y: gridCoordinate(y, false, fits ? topLeft.y : topLeft.y - height / 2, fits ? bottomRight.y - height : bottomRight.y - height / 2),
+      };
       let overlap = 0;
       let largest = 0;
       for (const node of occupied) {
@@ -671,7 +714,7 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
     function startTreeDrag(event: DragEvent) {
       draggingTree.current = event.target instanceof Element && !!event.target.closest('.v1-hierarchy-tree');
     }
-    function endTreeDrag() { draggingTree.current = false; }
+    function endTreeDrag() { draggingTree.current = false; setLibraryDrop(undefined); }
     document.addEventListener('pointerdown', remember, true);
     document.addEventListener('dragstart', startTreeDrag);
     document.addEventListener('dragend', endTreeDrag);
@@ -683,6 +726,12 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
   }, []);
 
   useEffect(() => {
+    function dragModifier(event: KeyboardEvent) {
+      if (event.key === 'Alt' && dragSession.current) {
+        event.preventDefault();
+        drawDrag(dragSession.current, event.type === 'keydown');
+      }
+    }
     function keyboard(event: KeyboardEvent) {
       const target = event.target;
       if (!topologyActive || event.defaultPrevented || event.isComposing || document.querySelector('dialog[open]')
@@ -738,7 +787,13 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
       }
     }
     window.addEventListener('keydown', keyboard);
-    return () => window.removeEventListener('keydown', keyboard);
+    window.addEventListener('keydown', dragModifier);
+    window.addEventListener('keyup', dragModifier);
+    return () => {
+      window.removeEventListener('keydown', keyboard);
+      window.removeEventListener('keydown', dragModifier);
+      window.removeEventListener('keyup', dragModifier);
+    };
   });
 
   const renderedEdges = edges.map(edge => {
@@ -749,6 +804,10 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
     const dx = origin && frame ? origin.x - frame.display.x : 0;
     const dy = origin && frame ? origin.y - frame.display.y : 0;
     const saved = routes.get(edge.id);
+    const source = nodeByKey.get(decodeURIComponent(edge.source));
+    const moving = source && drag?.has(decodeURIComponent(edge.target)) && drag.get(source.key);
+    const routeDx = moving && source ? moving.x - source.position.x : 0;
+    const routeDy = moving && source ? moving.y - source.position.y : 0;
     const selected = selectedWiring === edge;
     const directions = multiplex.wire(edge.id);
     const powerLabels = directions?.map(d => {
@@ -758,7 +817,7 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
     });
     return { ...edge, selected, data: { ...data,
       powerLabels, caption: directions ? undefined : data.caption,
-      routePoint: saved && { x: saved.x + dx, y: saved.y + dy },
+      routePoint: saved && { x: saved.x + dx + routeDx, y: saved.y + dy + routeDy },
       savePoint: selected ? (p?: XYPosition) => route(data.scope, data.wire, p && { x: p.x - dx, y: p.y - dy }) : undefined,
     } };
   });
@@ -776,12 +835,17 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
       if (!event.dataTransfer.types.includes(libraryDragType)) return;
       event.preventDefault();
       event.dataTransfer.dropEffect = 'copy';
+      setLibraryDrop(placementPoint({ x: event.clientX, y: event.clientY }, event.altKey) ?? undefined);
+    }}
+    onDragLeave={event => {
+      if (!(event.relatedTarget instanceof Element && event.currentTarget.contains(event.relatedTarget))) setLibraryDrop(undefined);
     }}
     onDrop={event => {
       if (!event.dataTransfer.types.includes(libraryDragType)) return;
       event.preventDefault();
+      setLibraryDrop(undefined);
       const item = readLibraryItem(event.dataTransfer);
-      if (item) placeAt(item, { x: event.clientX, y: event.clientY });
+      if (item) placeAt(item, { x: event.clientX, y: event.clientY }, event.altKey);
     }}>
     <ReactFlow<CanvasNode, WiringEdge> nodes={nodes} edges={renderedEdges}
       nodeTypes={nodeTypes} edgeTypes={edgeTypes} ariaLabelConfig={flowAriaLabels} fitView={fitInitialNodes} defaultViewport={initialViewport} fitViewOptions={canvasFitOptions}
@@ -878,11 +942,16 @@ function EditableTopologyCanvas({ multiplex, project, instances, modulePath, sel
       onNodeDragStart={(_, node, moving) => startDrag(node, moving)}
       onNodeDrag={previewDrag}
       onNodeDragStop={finishDrag}>
-      <Background />
+      <Background gap={topologyGrid} size={1} offset={(1 - topologyGrid) / 2} />
       <ViewportPortal><div className="v1-frame-surfaces" aria-hidden="true">{frameSurfaces}</div></ViewportPortal>
+      {libraryDrop && <ViewportPortal><div className="v1-library-drop-point" aria-hidden="true"
+        style={{ left: libraryDrop.x, top: libraryDrop.y }} /></ViewportPortal>}
       {placingModule && !panWithSpace && <ModulePlacement
-        zoom={() => flow.current?.getZoom()}
-        place={screen => placeAt({ source: 'blank-module', id: blankModuleId, name: '新建模块', automaticName: true }, screen)} />}
+        previewAt={(screen, free) => {
+          const point = placementPoint(screen, free);
+          if (point && flow.current) return { ...flow.current.flowToScreenPosition(point), zoom: flow.current.getZoom() };
+        }}
+        place={(screen, free) => placeAt({ source: 'blank-module', id: blankModuleId, name: '新建模块', automaticName: true }, screen, free)} />}
       <CanvasControls depth={depth} fullPage={fullPage} canLocate={!!locateIds.length} locate={() => {
         if (locateIds.length) void flow.current?.fitView({ ...canvasFitOptions, nodes: locateIds.map(id => ({ id })), maxZoom: 1.2 });
       }} toggleFullPage={switchFullPage} />

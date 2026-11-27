@@ -11,10 +11,11 @@ const sides = {
   nw: '左上角', ne: '右上角', sw: '左下角', se: '右下角',
 } satisfies Record<ResizeDirection, string>;
 
-export function FrameResizeHandles({ frame, childrenBounds, insets, originLimit, preview, finish }: {
+export function FrameResizeHandles({ frame, childrenBounds, insets, originLimit, gridOffset, preview, finish }: {
   frame: Rect;
   childrenBounds: readonly Rect[];
   insets: ReturnType<typeof frameInsets>;
+  gridOffset: Pick<Rect, 'x' | 'y'>;
   originLimit?: Pick<Rect, 'x' | 'y'>;
   preview: (frame?: Rect) => void;
   finish: (frame: Rect, original: Rect) => void;
@@ -22,7 +23,8 @@ export function FrameResizeHandles({ frame, childrenBounds, insets, originLimit,
   const { getZoom } = useReactFlow();
   const gesture = useRef<{
     pointerId: number;
-    rectangle: (event: PointerEvent<HTMLDivElement>) => Rect;
+    last: { clientX: number; clientY: number };
+    rectangle: (next: { clientX: number; clientY: number }, free: boolean) => Rect;
     original: Rect;
   } | undefined>(undefined);
   function start(event: PointerEvent<HTMLDivElement>, direction: ResizeDirection) {
@@ -34,11 +36,11 @@ export function FrameResizeHandles({ frame, childrenBounds, insets, originLimit,
     const { clientX, clientY } = event;
     const zoom = getZoom();
     gesture.current = {
-      pointerId: event.pointerId, original: frame,
-      rectangle: next => dragFrame(frame, direction, {
+      pointerId: event.pointerId, original: frame, last: { clientX, clientY },
+      rectangle: (next, free) => dragFrame(frame, direction, {
         x: (next.clientX - clientX) / zoom,
         y: (next.clientY - clientY) / zoom,
-      }, childrenBounds, insets, originLimit),
+      }, childrenBounds, insets, originLimit, gridOffset, free),
     };
   }
   function cancel(event: PointerEvent<HTMLDivElement>) {
@@ -52,13 +54,16 @@ export function FrameResizeHandles({ frame, childrenBounds, insets, originLimit,
     onPointerDown={event => start(event, direction)}
     onPointerMove={event => {
       const active = gesture.current;
-      if (active?.pointerId === event.pointerId) preview(active.rectangle(event));
+      if (active?.pointerId === event.pointerId) {
+        active.last = { clientX: event.clientX, clientY: event.clientY };
+        preview(active.rectangle(active.last, event.altKey));
+      }
     }}
     onPointerUp={event => {
       const active = gesture.current;
       if (active?.pointerId !== event.pointerId) return;
       cancel(event);
-      const next = active.rectangle(event);
+      const next = active.rectangle(event, event.altKey);
       const before = active.original;
       if (next.x !== before.x || next.y !== before.y || next.width !== before.width || next.height !== before.height) finish(next, before);
     }}
@@ -66,11 +71,15 @@ export function FrameResizeHandles({ frame, childrenBounds, insets, originLimit,
     onKeyDown={event => {
       if (!gesture.current) return;
       event.stopPropagation();
+      if (event.key === 'Alt') { event.preventDefault(); preview(gesture.current.rectangle(gesture.current.last, true)); }
       if (event.key === 'Escape') {
         gesture.current = undefined;
         preview();
         event.preventDefault();
       }
+    }}
+    onKeyUp={event => {
+      if (gesture.current && event.key === 'Alt') { event.preventDefault(); preview(gesture.current.rectangle(gesture.current.last, false)); }
     }}
     onClick={event => event.stopPropagation()}
     onDoubleClick={event => event.stopPropagation()} />);

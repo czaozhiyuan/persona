@@ -2,14 +2,15 @@ import { getNodesBounds } from '@xyflow/react';
 import type { CoordinateExtent, Rect, XYPosition } from '@xyflow/react';
 import type { planInstanceMoves } from '../../../state/v1/reparent-instance';
 import type { TopologyFrame, TopologyPlacement } from '../../../model/v1/types';
-import { keepNodeInside, moduleExtent } from './frame-geometry';
+import { gridCoordinate } from '../../../state/v1/topology-grid';
+import { moduleExtent } from './frame-geometry';
 import { hierarchyKey, inHierarchy } from './hierarchy-view';
 import { frameInsets, framePadding } from './module-frame';
 import type { TopologyItem } from './topology-projection';
 
 export type ApprovedMove = Extract<ReturnType<typeof planInstanceMoves>, { ok: true }>;
 
-export type ReparentLayout = { placements: readonly TopologyPlacement[]; frame?: TopologyFrame };
+export type ReparentLayout = { placements: readonly TopologyPlacement[]; delta: XYPosition; frame?: TopologyFrame };
 
 type DropTarget = {
   kind: 'in' | 'up';
@@ -60,21 +61,19 @@ export function groupDragExtent(bounds: Rect, [[left, top], [right, bottom]]: Co
 }
 
 export function placeDropGroup(bounds: Rect, anchor: XYPosition, position: XYPosition,
-  frame?: TopologyFrame, insets?: ReturnType<typeof frameInsets>) {
-  const delta = { x: position.x - anchor.x, y: position.y - anchor.y };
+  frame?: TopologyFrame, insets?: ReturnType<typeof frameInsets>, free = false) {
+  const delta = groupDropDelta(bounds, anchor, position, frame && insets ? [moduleExtent(frame, insets)[0], [Infinity, Infinity]] : undefined, free);
   if (!frame || !insets) return { delta };
   // Keep the saved origin and translate all members together before growing the far edges.
-  const [[left, top]] = moduleExtent(frame, insets);
-  delta.x = Math.max(delta.x, left - bounds.x);
-  delta.y = Math.max(delta.y, top - bounds.y);
   const width = Math.max(frame.width, bounds.x + delta.x + bounds.width + insets.right - frame.x);
   const height = Math.max(frame.height, bounds.y + delta.y + bounds.height + framePadding - frame.y);
   return { delta, frame: width === frame.width && height === frame.height ? undefined : { ...frame, width, height } };
 }
 
-export function groupDropDelta(bounds: Rect, anchor: XYPosition, position: XYPosition, extent?: CoordinateExtent): XYPosition {
-  const delta = { x: position.x - anchor.x, y: position.y - anchor.y };
-  if (!extent) return delta;
-  const placed = keepNodeInside({ ...bounds, x: bounds.x + delta.x, y: bounds.y + delta.y }, extent);
-  return { x: placed.x - bounds.x, y: placed.y - bounds.y };
+export function groupDropDelta(bounds: Rect, anchor: XYPosition, position: XYPosition, extent?: CoordinateExtent, free = false): XYPosition {
+  const [[left, top], [right, bottom]] = extent ?? [[-Infinity, -Infinity], [Infinity, Infinity]];
+  return {
+    x: gridCoordinate(bounds.x + position.x - anchor.x, free, left, right - bounds.width) - bounds.x,
+    y: gridCoordinate(bounds.y + position.y - anchor.y, free, top, bottom - bounds.height) - bounds.y,
+  };
 }

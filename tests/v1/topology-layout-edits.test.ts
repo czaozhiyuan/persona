@@ -56,6 +56,17 @@ test('dragging children and shrinking frame edges reserve 86 px per occupied sid
   }
 });
 
+test('nested resize snaps only the moving edges in the parent grid and Alt retains fractional coordinates', () => {
+  const frame = { x: 3, y: 7, width: 760, height: 490 };
+  const offset = { x: 587, y: 24 };
+  const delta = { x: 13.5, y: -27.5 };
+  const snapped = dragFrame(frame, 'ne', delta, [], frameInsets([]), undefined, offset);
+  assert.deepEqual(snapped, { x: 3, y: -24, width: 770, height: 521 });
+  const free = dragFrame(frame, 'ne', delta, [], frameInsets([]), undefined, offset, true);
+  assert.deepEqual(free, { x: 3, y: -20.5, width: 773.5, height: 517.5 });
+  assert.equal(dragFrame(frame, 'ne', { x: 0, y: 0 }, [], frameInsets([]), undefined, offset), frame);
+});
+
 test('projection grows a tight saved frame for both columns and preserves a fitting child in nested and internal views', () => {
   const path = ['other'], child = [...path, 'device'];
   const bounds = { x: 86, y: 90, width: 400, height: 80 };

@@ -1,4 +1,5 @@
 import type { CoordinateExtent, Rect, XYPosition } from '@xyflow/react';
+import { gridCoordinate } from '../../../state/v1/topology-grid';
 import { framePadding, frameInsets } from './module-frame';
 
 type Insets = ReturnType<typeof frameInsets>;
@@ -39,15 +40,19 @@ export function keepNodeInside(node: Rect, extent: CoordinateExtent): XYPosition
 }
 
 export function dragFrame(frame: Rect, direction: ResizeDirection, delta: XYPosition, children: readonly Rect[], insets: Insets,
-  originLimit?: XYPosition): Rect {
+  originLimit?: XYPosition, gridOffset: XYPosition = { x: 0, y: 0 }, free = false): Rect {
+  if (!delta.x && !delta.y) return frame;
+  function edge(value: number, offset: number, min: number, max: number) {
+    return Math.min(max, Math.max(min, gridCoordinate(value + offset, free) - offset));
+  }
   const { width, height } = minimumFrame(children, insets);
-  const left = direction.includes('w') ? Math.min(Math.max(frame.x + delta.x, originLimit?.x ?? -Infinity), right(frame) - width,
-    ...children.map(child => child.x - insets.left)) : frame.x;
-  const top = direction.includes('n') ? Math.min(Math.max(frame.y + delta.y, originLimit?.y ?? -Infinity), bottom(frame) - height,
-    ...children.map(child => child.y - insets.top)) : frame.y;
-  const east = direction.includes('e') ? Math.max(right(frame) + delta.x, frame.x + width,
-    ...children.map(child => right(child) + insets.right)) : right(frame);
-  const south = direction.includes('s') ? Math.max(bottom(frame) + delta.y, frame.y + height,
-    ...children.map(child => bottom(child) + framePadding)) : bottom(frame);
+  const left = direction.includes('w') ? edge(frame.x + delta.x, gridOffset.x, originLimit?.x ?? -Infinity,
+    Math.min(right(frame) - width, ...children.map(child => child.x - insets.left))) : frame.x;
+  const top = direction.includes('n') ? edge(frame.y + delta.y, gridOffset.y, originLimit?.y ?? -Infinity,
+    Math.min(bottom(frame) - height, ...children.map(child => child.y - insets.top))) : frame.y;
+  const east = direction.includes('e') ? edge(right(frame) + delta.x, gridOffset.x,
+    Math.max(frame.x + width, ...children.map(child => right(child) + insets.right)), Infinity) : right(frame);
+  const south = direction.includes('s') ? edge(bottom(frame) + delta.y, gridOffset.y,
+    Math.max(frame.y + height, ...children.map(child => bottom(child) + framePadding)), Infinity) : bottom(frame);
   return { x: left, y: top, width: east - left, height: south - top };
 }

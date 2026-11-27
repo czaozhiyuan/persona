@@ -24,7 +24,7 @@ import { PortBindingDialog } from './port-binding-dialog';
 import type { BindingPreview } from './port-binding-dialog';
 import { PortDeletionDialog } from './port-deletion-dialog';
 import type { BudgetHighlight } from './path-highlight';
-import { insertCanvasItem, moveInView } from './topology-layout-edits';
+import { insertCanvasItem, moveInView, type CenterPlacement } from './topology-layout-edits';
 import { applyExpansionLayout } from './inline-expansion-layout';
 import type { CanvasView } from './canvas-controls';
 import { TopologyCanvas } from './topology-canvas';
@@ -35,7 +35,7 @@ import './topology.css';
 
 import type { LibraryConfig } from '../../../library/v1/user-library';
 
-export function TopologyEditor({ multiplex, centerPlacement, linkControls, library, store, state, module, pathResult, graph, rename, expanded, manualFrames, setExpanded, budgetHighlight, canEditLink, onPortBudget, onDcBudget, openPorts, newPort, onSelectObject, onSelectObjects, moveAcrossLevels, focusMoved, copyObjects, pasteObjects, copyNotice, fullPage, toggleFullPage, restoreView, placingModule, setPlacingModule, toolsHost, viewHost, topologyActive }: {
+export function TopologyEditor({ multiplex, pointerPlacement, centerPlacement, linkControls, library, store, state, module, pathResult, graph, rename, expanded, manualFrames, setExpanded, budgetHighlight, canEditLink, onPortBudget, onDcBudget, openPorts, newPort, onSelectObject, onSelectObjects, moveAcrossLevels, focusMoved, copyObjects, pasteObjects, copyNotice, fullPage, toggleFullPage, restoreView, placingModule, setPlacingModule, toolsHost, viewHost, topologyActive }: {
   multiplex: MultiplexPower;
   linkControls: import('react').ReactNode;
   library: LibraryConfig;
@@ -50,6 +50,7 @@ export function TopologyEditor({ multiplex, centerPlacement, linkControls, libra
   onSelectObject: (path: InstancePath, extend: boolean) => void;
   onSelectObjects: (paths: readonly InstancePath[]) => void;
   moveAcrossLevels: (base: Project, plan: ApprovedMove, layout?: ReparentLayout) => string | undefined;
+  pointerPlacement: Parameters<typeof TopologyCanvas>[0]['pointerPlacement'];
   centerPlacement: Parameters<typeof TopologyCanvas>[0]['centerPlacement'];
   copyObjects: Parameters<typeof TopologyCanvas>[0]['copyObjects'];
   pasteObjects: Parameters<typeof TopologyCanvas>[0]['pasteObjects'];
@@ -110,7 +111,7 @@ export function TopologyEditor({ multiplex, centerPlacement, linkControls, libra
     setGroupDialog(true);
   }
 
-  function add(item: LibraryItem, position?: { x: number; y: number }) {
+  function add(item: LibraryItem, position: CenterPlacement) {
     const id = crypto.randomUUID();
     if (!commit(draft => insertCanvasItem(draft, item, module.id, scope, id, position, library))) return false;
     setPlacingModule(false);
@@ -236,7 +237,7 @@ export function TopologyEditor({ multiplex, centerPlacement, linkControls, libra
 
   return <section className="v1-topology" aria-label={`框图 · ${moduleName}`}>
     <div className="v1-hierarchy-workspace">
-      <TopologyCanvas multiplex={multiplex} centerPlacement={centerPlacement} project={project} instances={graph.instances} modulePath={scope} selectedInstance={selection.instancePath}
+      <TopologyCanvas pointerPlacement={pointerPlacement} multiplex={multiplex} centerPlacement={centerPlacement} project={project} instances={graph.instances} modulePath={scope} selectedInstance={selection.instancePath}
         pathResult={pathResult} budgetHighlight={budgetHighlight} expanded={expanded}
         manualFrames={manualFrames} toggleModule={toggleModule}
         selectedPaths={selectedPaths} selectObject={onSelectObject} selectObjects={onSelectObjects}
@@ -249,7 +250,7 @@ export function TopologyEditor({ multiplex, centerPlacement, linkControls, libra
         add={add} placingModule={placingModule} cancelPlacement={() => { setPlacingModule(false); setMessage(''); }}
         deleteInstances={deleteInstances} deleteWiring={deleteWiring} rename={rename} copyObjects={copyObjects} pasteObjects={pasteObjects} report={setMessage} undo={store.undo} redo={store.redo}
         route={(scope, wire, point) => commit(draft => setWireRoute(draft, scope, wire, point))}
-        move={(moves, manual) => commit(draft => moveInView(draft, moves, manual))}
+        move={(moves, manual, delta) => commit(draft => moveInView(draft, moves, manual, delta))}
         resize={(frame, adjustments) => commit(draft =>
           resizeTopologyFrame(moveTopologyNodes(draft, adjustments), frame))}
         finishContentEdit={(base, layout) => {

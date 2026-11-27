@@ -9,6 +9,7 @@ import { componentIconKeys } from '../../../model/v1/types';
 import type { ComponentDefinition, InstancePath, InstanceSettings, ModuleDefinition, Project } from '../../../model/v1/types';
 import type { ProjectStore } from '../../../state/v1/project-store';
 import { editInstanceSettings } from '../../../state/v1/instance-settings';
+import { placeInModule } from '../../../editors/topology/v1/topology-layout-edits';
 import { instantiateModule } from '../../../state/v1/instantiate-module';
 import { structureScope } from '../structure-scope';
 import { editModule } from '../../../state/v1/topology-edits';
@@ -97,7 +98,7 @@ export function PropertiesPanel({ store, occurrence, occurrences, receiverQuery,
 
   function reuseModule() {
     const id = crypto.randomUUID();
-    if (commit(draft => instantiateModule(draft, instancePath, 'reuse', id, () => crypto.randomUUID()))) {
+    if (commit(draft => placeInModule(instantiateModule(draft, instancePath, 'reuse', id, () => crypto.randomUUID()), [...parentPath, id]))) {
       store.selectModule(parentPath);
       store.selectInstance([...parentPath, id]);
     }

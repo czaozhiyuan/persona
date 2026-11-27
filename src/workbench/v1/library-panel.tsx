@@ -19,9 +19,10 @@ import './library-panel.css';
 import { factoryLibrary, libraryDefinitions } from '../../library/v1/user-library';
 import type { LibraryConfig } from '../../library/v1/user-library';
 import type { UserLibrary } from './use-library';
+import { useLibraryPointerDrag, type LibraryPointerPlacement } from './use-library-pointer-drag';
 import { LibraryManager } from './library-manager';
 
-type Props = { centerPlacement: CenterPlacement; library: UserLibrary; store: ProjectStore; state: ProjectStoreSnapshot; module: ModuleDefinition };
+type Props = { pointerPlacement: LibraryPointerPlacement; centerPlacement: CenterPlacement; library: UserLibrary; store: ProjectStore; state: ProjectStoreSnapshot; module: ModuleDefinition };
 type Preview = {
   base: Project;
   library: LibraryConfig;
@@ -36,7 +37,8 @@ function describe(changes: TemplateChanges) {
   ].filter(Boolean).join('。');
 }
 
-export function LibraryPanel({ centerPlacement, library, store, state, module }: Props) {
+export function LibraryPanel({ pointerPlacement, centerPlacement, library, store, state, module }: Props) {
+  const pointerDrag = useLibraryPointerDrag(pointerPlacement);
   const [manage, setManage] = useState(false);
   const templates = libraryDefinitions(library.config);
   const labels = numberedNamesById(templates);
@@ -163,11 +165,11 @@ export function LibraryPanel({ centerPlacement, library, store, state, module }:
   function renderItem(template: (typeof templates)[number]) {
     const item: LibraryItem = { source: 'template', id: template.id, name: template.name, automaticName: true };
     return <button key={template.id} type="button" draggable title="点击或拖入框图，创建独立副本"
-      onClick={() => add(item)} onDragStart={event => drag(event, item)}>
+      onClick={() => add(item)} onPointerDown={event => pointerDrag.start(event, item)} onDragStart={event => drag(event, item)}>
       <DeviceIcon iconKey={definitionIcon(template)} size={16} />{creationLabels.get(template.id) ?? labels.get(template.id)}
     </button>;
   }
-  return <section className="panel v1-properties" aria-label="离线器件与模块库">
+  return <section className="panel v1-properties" aria-label="离线器件与模块库" {...pointerDrag.events}>
     <button type="button" onClick={() => setManage(true)}>管理器件库</button>
     {manage && <LibraryManager library={library} project={project} selected={selection.instancePath} close={() => setManage(false)} />}
     <label>搜索器件库<input type="search" value={query} onChange={event => setQuery(event.target.value)} /></label>
@@ -236,7 +238,10 @@ export function LibraryPanel({ centerPlacement, library, store, state, module }:
         add(selectedItem(event.currentTarget, namedOption.source, namedOption.item.id));
       }}>
         <label>名称<input name="instanceName" defaultValue={namedOption.item.name} required /></label>
-        <button type="submit" draggable title="点击或拖入框图，独立复制此定义" onDragStart={event => {
+        <button type="submit" draggable title="点击或拖入框图，独立复制此定义" onPointerDown={event => {
+          const form = event.currentTarget.form;
+          if (form) pointerDrag.start(event, selectedItem(form, namedOption.source, namedOption.item.id));
+        }} onDragStart={event => {
           const form = event.currentTarget.form;
           if (form) drag(event, selectedItem(form, namedOption.source, namedOption.item.id));
         }}>添加</button>
