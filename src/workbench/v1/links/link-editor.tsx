@@ -186,6 +186,11 @@ export function LinkEditor({ store, options, selected, result, budget, point, co
           </details>}
         </div>
         <button type="submit">{draft === 'edit' ? '保存当前链路修改' : selected && !draft ? '保存链路' : '保存为链路'}</button>
+        {selected && !draft && <button type="button" onClick={() => {
+          const edit = store.commit(project => ({ ...project, namedLinks: project.namedLinks?.filter(link => link.id !== selected.id) }));
+          if (edit.ok) choose(undefined);
+          else setError(edit.message);
+        }}>删除链路</button>}
         {draft && <button type="button" onClick={() => choose(draft === 'edit' ? selected?.id : undefined)}>取消{draft === 'edit' ? '修改' : '新建'}</button>}
       </form>
     </details>

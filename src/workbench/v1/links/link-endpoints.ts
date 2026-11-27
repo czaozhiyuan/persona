@@ -1,6 +1,6 @@
 import type { createPathResolver } from '../../../engine/v1/path-resolver';
 import { signalPortKey } from '../../../engine/v1/signal-graph';
-import type { SignalEdge, SignalPort } from '../../../engine/v1/signal-graph';
+import type { SignalPort } from '../../../engine/v1/signal-graph';
 import type { OpticalChannelId } from '../../../model/v1/channels';
 import { isPowerPort, supportsDirection } from '../../../model/v1/types';
 import type { EndpointRef, PortDirection, PortFlow } from '../../../model/v1/types';
@@ -12,15 +12,13 @@ function addRole(roles: Roles, key: string, flow: PortFlow) {
   roles.set(key, roles.has(key) && roles.get(key) !== flow ? 'bidirectional' : flow);
 }
 
-export function createEndpointChoices({ graph, reachableFrom, followBoundary }: ReturnType<typeof createPathResolver>, all: Option<EndpointRef>[]) {
+export function createEndpointChoices({ graph, reachableFrom, followBoundary, controlTerminals }: ReturnType<typeof createPathResolver>, all: Option<EndpointRef>[]) {
   const occupiedIn = new Set<SignalPort>(), occupiedOut = new Set<SignalPort>();
   const mapped = new Set<SignalPort>();
   const consumes = new Set<SignalPort>(), produces = new Set<SignalPort>();
   const txInputs = new Set<SignalPort>(), rxOutputs = new Set<SignalPort>();
-  const controlWires: SignalEdge[] = [];
   for (const edge of graph.edges) {
     const { source, from, to, supply } = edge;
-    if (source.kind === 'connection' && from.definition.type === 'CONTROL') controlWires.push(edge);
     if ((source.kind === 'connection' || source.kind === 'cableCore') && !source.ref.scopePath.length) {
       occupiedIn.add(to);
       occupiedOut.add(from);
@@ -65,16 +63,9 @@ export function createEndpointChoices({ graph, reachableFrom, followBoundary }: 
     if (!produces.has(port) && (opticalEmitter || (type !== 'OPTICAL' && direction === 'out'))) addRole(starts, key, 'out');
     if (occupiedIn.has(port) && !consumes.has(port)) addRole(ends, key, 'in');
   }
-  // A CONTROL wire can cross any number of port mappings on either side of the connection.
-  for (const wire of controlWires) {
-    const source = followBoundary(wire.from), sink = followBoundary(wire.to);
-    if (txInputs.has(sink) && !source.modulePort && source.ref.instancePath.length > 1
-      && source.definition.direction === 'out' && !produces.has(source)) {
-      addRole(starts, signalPortKey(source.ref), 'out');
-    }
-    if (rxOutputs.has(source) && !sink.modulePort && sink.ref.instancePath.length > 1
-      && sink.definition.direction === 'in' && !consumes.has(sink)) {
-      addRole(ends, signalPortKey(sink.ref), 'in');
+  for (const [boundaries, reverse, roles] of [[txInputs, true, starts], [rxOutputs, false, ends]] as const) {
+    for (const { port, flow } of controlTerminals(boundaries, reverse)) {
+      if (!port.modulePort && port.ref.instancePath.length > 1) addRole(roles, signalPortKey(port.ref), flow);
     }
   }
   const systemStarts = signals.filter(item => starts.has(item.key));

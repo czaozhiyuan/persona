@@ -2,7 +2,7 @@ import { Background, BaseEdge, ConnectionMode, getSmoothStepPath, Handle, Panel,
   ReactFlowProvider, useReactFlow, useStoreApi, useViewport } from '@xyflow/react';
 import type { Edge, EdgeProps, Node, NodeProps, OnConnectStartParams } from '@xyflow/react';
 import { useEffect, useRef, useState } from 'react';
-import type { PathTrace } from '../../../engine/v1/path-resolver';
+import type { PathResult } from '../../../engine/v1/path-resolver';
 import type { Transfer } from '../../../model/v1/device';
 import type { ComponentDefinition, InstancePath } from '../../../model/v1/types';
 import type { ProjectStore } from '../../../state/v1/project-store';
@@ -15,7 +15,7 @@ type PortNode = Node<{ label: string; input: boolean; heading: boolean; wire?: '
 type Route = Extract<Transfer, { kind: 'control' }>;
 type RouteEdge = Edge<{ lane?: number }, 'route'>;
 type Props = {
-  store: ProjectStore; definition: ComponentDefinition; path: InstancePath; trace?: PathTrace;
+  store: ProjectStore; definition: ComponentDefinition; path: InstancePath; result?: PathResult;
   shared: readonly string[]; showName: (path: InstancePath) => string;
   back: () => void; enterModule: (path: InstancePath) => void; openPorts: () => void;
 };
@@ -48,7 +48,7 @@ export function ControlRoutingCanvas(props: Props) {
   return <ReactFlowProvider><Editor {...props} /></ReactFlowProvider>;
 }
 
-function Editor({ store, definition, path, trace, shared, showName, back, enterModule, openPorts }: Props) {
+function Editor({ store, definition, path, result, shared, showName, back, enterModule, openPorts }: Props) {
   const flowStore = useStoreApi();
   const { zoomIn, zoomOut, fitView } = useReactFlow();
   const { zoom } = useViewport();
@@ -64,7 +64,8 @@ function Editor({ store, definition, path, trace, shared, showName, back, enterM
   const routes = definition.transfers?.filter((item): item is Route => item.kind === 'control') ?? [];
   const routeIds = new Set(routes.map(item => routeId(item.fromPortId, item.toPortId)));
   const pathKey = hierarchyKey(path);
-  const highlighted = new Set(trace?.edges.flatMap(edge => {
+  const pathEdges = [...(result?.trace?.edges ?? []), ...(result && result.status !== 'resolved' ? result.digitalAccess ?? [] : [])];
+  const highlighted = new Set(pathEdges.flatMap(edge => {
     if (edge.source.kind !== 'transfer' || edge.source.transfer.kind !== 'control' || hierarchyKey(edge.from.ref.instancePath) !== pathKey) return [];
     return [routeId(edge.from.ref.portId, edge.to.ref.portId)];
   }));
