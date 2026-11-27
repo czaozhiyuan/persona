@@ -244,6 +244,34 @@ try {
   assert.deepEqual(await save(), initial);
   await button('重做').click();
   assert.deepEqual(await save(), beforeEdit);
+
+  // An aligned top mapping can pass through the blank title row, but must detour
+  // when the visible name and controls extend across that same column.
+  const topPort = { id: 'COM', name: 'com', type: 'OPTICAL', direction: 'bidirectional' };
+  const titleFixture = { ...fixture, project: { ...fixture.project,
+    moduleDefinitions: [
+      { ...root, instances: [slot('A', 'box'), slot('B', 'box')], connections: [] },
+      { id: 'box', name: 'box', kind: 'module', ports: [topPort], instances: [slot('T', 'terminal')],
+        portMappings: [{ portId: 'COM', target: { instanceId: 'T', portId: 'COM' } }] },
+    ],
+    componentDefinitions: [{ id: 'terminal', kind: 'component', name: 'terminal', ports: [topPort] }],
+    layout: { topology: [{ instancePath: ['A'], x: 0, y: 0 }, { instancePath: ['B'], x: 1300, y: 0 },
+      { instancePath: ['A', 'T'], x: 390, y: 350 }], topologyFrames: [{ modulePath: ['A'], x: 0, y: 0, width: 960, height: 600 }] },
+  } };
+  for (const name of ['A', '长标题'.repeat(8)]) {
+    titleFixture.project.instanceSettings = [{ instancePath: ['A'], name }];
+    await open(titleFixture);
+    if (!await node('A', 'T').count()) await toggle('A');
+    await node('A').dispatchEvent('click');
+    await run('理线');
+    const title = node('A').locator('.v1-frame-title');
+    assert.equal(await title.locator('.v1-inline-shared, button').count(), 3);
+    const mapping = (await save()).project.layout.topologyWireRoutes.find(r => r.modulePath[0] === 'A' && r.wire.id === 'COM');
+    const xs = mapping.points.map(p => p.x);
+    const span = Math.max(...xs) - Math.min(...xs);
+    if (name === 'A') assert.ok(span <= 10, 'blank title row forced a detour of ' + span);
+    else assert.ok(span > 25, 'route crossed the visible title');
+  }
   assert.deepEqual(errors, []);
   assert.deepEqual(requests, []);
   console.log(JSON.stringify({ chrome: browser.version(), offline: true, displayedScopes: 5, routes: 13, localRoutes: 6, errors, requests }));

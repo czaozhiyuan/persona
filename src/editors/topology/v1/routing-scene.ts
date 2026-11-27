@@ -30,11 +30,21 @@ export function routeDisplayedScope<N extends Node>(projection: Projection, edge
     const element = canvas.querySelector<HTMLElement>('.react-flow__node[data-id="' + CSS.escape(root) + '"]');
     if (!element || !rootNode?.measured.width || !rootNode.measured.height) return { routes: result, failed: scoped.length };
     boundary = frame.display;
-    for (const label of element.querySelectorAll<HTMLElement>('.v1-frame-title, .v1-topology-port .v1-port-label')) {
+    function addObstacle(id: string, left: number, top: number, right: number, bottom: number) {
+      const p = flow.screenToFlowPosition({ x: left, y: top }, { snapToGrid: false });
+      obstacles.push({ id, x: p.x - dx, y: p.y - dy, width: (right - left) / flow.getZoom(), height: (bottom - top) / flow.getZoom() });
+    }
+    // Keep the full title row draggable. Only its rendered contents obstruct wires.
+    const titleParts = Array.from(element.querySelectorAll('.v1-frame-title > *'), part => part.getBoundingClientRect())
+      .filter(box => box.width > 0 && box.height > 0);
+    if (titleParts.length) {
+      addObstacle('frame-title', Math.min(...titleParts.map(b => b.left)), Math.min(...titleParts.map(b => b.top)),
+        Math.max(...titleParts.map(b => b.right)), Math.max(...titleParts.map(b => b.bottom)));
+    }
+    for (const label of element.querySelectorAll<HTMLElement>('.v1-topology-port .v1-port-label')) {
       const box = label.getBoundingClientRect();
-      const p = flow.screenToFlowPosition({ x: box.left, y: box.top }, { snapToGrid: false });
       const inner = label.closest('.v1-topology-port')?.querySelector<HTMLElement>('.v1-frame-inner-handle')?.dataset.handleid;
-      obstacles.push({ id: inner ?? 'frame-title', x: p.x - dx, y: p.y - dy, width: box.width / flow.getZoom(), height: box.height / flow.getZoom() });
+      addObstacle(inner ?? 'frame-title', box.left, box.top, box.right, box.bottom);
     }
   }
   const wires: RoutingWire[] = [];
