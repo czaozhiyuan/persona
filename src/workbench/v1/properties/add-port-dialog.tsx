@@ -101,7 +101,6 @@ function StandardPortDialog({ initialMode, name, owner, locations, store, added,
     if (!result) return;
     if (!result.ok) throw new Error(result.message);
     if (!port) added(next.id);
-    setSelected(next.id);
     setRevision(value => value + 1);
   }
 
