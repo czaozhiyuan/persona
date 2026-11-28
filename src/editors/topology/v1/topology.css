@@ -115,24 +115,27 @@
 .v1-module-pins { position: absolute; top: 52px; }
 .v1-module-pins.top {
   display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr);
-  top: 0; left: 28px; right: 28px; text-align: center;
+  top: 0; left: 28px; right: 28px; padding-bottom: 8px; text-align: center;
 }
-.v1-module-pins.top .v1-topology-port { justify-content: center; padding: 9px 3px 2px; }
-.v1-module-pins.top .v1-frame-inner-handle { left: 50%; top: 3px; bottom: auto; }
+/* Reserve an exit below the dot without changing the height measured for the side ports. */
+.v1-module-pins.top .v1-topology-port { justify-content: center; min-height: 20px; padding: 3px 3px 0; }
+.v1-module-frame:has(.v1-module-pins.top) .v1-frame-title { transform: translateY(8px); }
 .v1-module-pins.top .v1-frame-outer-handle { left: 50%; top: -3px; }
 .v1-module-pins.left { left: 0; text-align: left; }
 .v1-module-pins.right { right: 0; text-align: right; }
 .v1-module-pins .v1-topology-port { box-sizing: border-box; min-height: 28px; padding-block: 2px; font-size: min(.78rem, 13px); line-height: 17px; }
-.v1-module-pins.left .v1-topology-port { padding-left: 8px; }
-.v1-module-pins.right .v1-topology-port { padding-right: 8px; justify-content: end; }
+.v1-module-pins.left .v1-topology-port { padding-inline: 8px 4px; }
+.v1-module-pins:is(.left, .right) .v1-topology-port { width: fit-content; max-width: calc(100% - .85rem); }
+.v1-module-pins.right .v1-topology-port { margin-left: auto; padding-inline: 4px 8px; justify-content: end; }
 .v1-module-pins .v1-topology-port:not(.is-on-path):not(.is-new-port) .v1-port-label { background: var(--v1-frame-fill); }
 .v1-module-pins .v1-topology-port :is(.v1-port-label, span) {
   min-width: 0; max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; overflow: visible; text-overflow: clip;
 }
 .v1-module-pins .v1-topology-port .react-flow__handle { transform: translate(-50%, -50%); right: auto; }
-.v1-module-pins.left .v1-frame-inner-handle { left: 3px; }
+.v1-module-pins.top .v1-frame-inner-handle { left: 50%; top: 100%; bottom: auto; transform: translateX(-50%); }
+.v1-module-pins.left .v1-frame-inner-handle { left: 100%; transform: translateY(-50%); }
 .v1-module-pins.left .v1-frame-outer-handle { left: -3px; }
-.v1-module-pins.right .v1-frame-inner-handle { left: calc(100% - 3px); }
+.v1-module-pins.right .v1-frame-inner-handle { left: 0; transform: translate(-100%, -50%); }
 .v1-module-pins.right .v1-frame-outer-handle { left: calc(100% + 3px); }
 .v1-topology-canvas {
   --v1-signal-OPTICAL: #397f9b;
