@@ -14,5 +14,8 @@
 .v1-routing-port[data-direction="in"] { justify-content: flex-end; }
 .v1-routing-port strong { position: absolute; bottom: calc(100% + 5px); color: #47675c; }
 .v1-routing-port span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.v1-routing-port .react-flow__handle { width: 12px; height: 12px; border: 2px solid #fff; background: var(--v1-signal-CONTROL); }
-.v1-routing .react-flow__edge.selected .v1-wire-halo { stroke: #09896e; opacity: .8; }
+.v1-routing-port .react-flow__handle { width: 12px; height: 12px; border: 2px solid #94a8a0; background: #fff; }
+.v1-routing-networks { position: absolute; overflow: visible; pointer-events: none; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.v1-network-clearance { stroke: #f6faf9; stroke-width: 9px; }
+.v1-network-line { stroke-width: 2.6px; }
+.v1-network-highlight { stroke-width: 7px; }

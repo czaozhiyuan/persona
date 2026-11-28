@@ -69,6 +69,11 @@ try {
     const active = canvas.locator('.react-flow__edge.v1-path-edge');
     await active.first().waitFor();
     assert.deepEqual(await active.evaluateAll(edges => edges.map(e => JSON.parse(decodeURIComponent(e.getAttribute('data-id')!)))), [route]);
+    await page.mouse.move(1, 1);
+    const highlight = canvas.locator('.v1-network-highlight');
+    assert.equal(await highlight.count(), 1);
+    assert.equal(await highlight.getAttribute('data-route'), await active.getAttribute('data-id'));
+    assert.equal(await highlight.getAttribute('d'), await active.locator('.react-flow__edge-interaction').getAttribute('d'));
     await canvas.getByRole('button', { name: '返回框图' }).click();
   }
   async function fibre() {

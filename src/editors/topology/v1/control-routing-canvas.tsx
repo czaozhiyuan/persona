@@ -1,7 +1,7 @@
-import { Background, BaseEdge, ConnectionMode, getSmoothStepPath, Handle, Panel, Position, ReactFlow,
+import { Background, ConnectionMode, EdgeLabelRenderer, Handle, Panel, Position, ReactFlow,
   ReactFlowProvider, useReactFlow, useStoreApi, useViewport } from '@xyflow/react';
 import type { Edge, EdgeProps, Node, NodeProps, OnConnectStartParams } from '@xyflow/react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PathResult } from '../../../engine/v1/path-resolver';
 import type { Transfer } from '../../../model/v1/device';
 import type { ComponentDefinition, InstancePath } from '../../../model/v1/types';
@@ -9,37 +9,29 @@ import type { ProjectStore } from '../../../state/v1/project-store';
 import { portDisplayName } from '../../../workbench/v1/labels';
 import { canvasFitOptions, flowAriaLabels } from './canvas-controls';
 import { hierarchyKey } from './hierarchy-view';
+import { controlNetworks, portHeight, portWidth, routeId, type ControlRoute } from './control-networks';
 import './control-routing.css';
 
-type PortNode = Node<{ label: string; input: boolean; heading: boolean; wire?: 'origin' | 'target' }, 'port'>;
-type Route = Extract<Transfer, { kind: 'control' }>;
-type RouteEdge = Edge<{ lane?: number }, 'route'>;
+type PortNode = Node<{ label: string; input: boolean; heading: boolean; fill?: string; wire?: 'origin' | 'target' }, 'port'>;
+type RouteEdge = Edge<{ path: string }, 'route'>;
 type Props = {
   store: ProjectStore; definition: ComponentDefinition; path: InstancePath; result?: PathResult;
   shared: readonly string[]; showName: (path: InstancePath) => string;
   back: () => void; enterModule: (path: InstancePath) => void; openPorts: () => void;
 };
 
-const routeId = (input: string, output: string) => encodeURIComponent(JSON.stringify([input, output]));
-const columnX = 500;
-const portWidth = 190;
-
 function Port({ data }: NodeProps<PortNode>) {
   return <div className="v1-routing-port" data-direction={data.input ? 'in' : 'out'}>
     {data.heading && <strong>{data.input ? '输入端口' : '输出端口'}</strong>}
     <span title={data.label}>{data.label}</span>
     <Handle type={data.input ? 'source' : 'target'} position={data.input ? Position.Right : Position.Left}
-      data-wire={data.wire} aria-label={data.label} />
+      data-wire={data.wire} style={data.fill ? { background: data.fill, borderColor: '#fff' } : undefined} aria-label={data.label} />
   </div>;
 }
 
 function Wire(edge: EdgeProps<RouteEdge>) {
-  const [path] = getSmoothStepPath({ ...edge, centerX: edge.data?.lane, borderRadius: 8 });
-  return <g className="v1-signal-wire">
-    <path d={path} className="v1-wire-halo" /><path d={path} className="v1-wire-casing" />
-    <BaseEdge id={edge.id} path={path} interactionWidth={12} className="v1-wire-main"
-      style={{ stroke: 'var(--v1-signal-CONTROL)' }} />
-  </g>;
+  return <path className="react-flow__edge-interaction" d={edge.data?.path} fill="none"
+    stroke="transparent" strokeWidth={12} pointerEvents="stroke" />;
 }
 const nodeTypes = { port: Port };
 const edgeTypes = { route: Wire };
@@ -56,12 +48,16 @@ function Editor({ store, definition, path, result, shared, showName, back, enter
   const cancelled = useRef(false);
   const [origin, setOrigin] = useState<string>();
   const [selected, setSelected] = useState<string>();
-  const [lanes, setLanes] = useState(new Map<string, number>());
+  const [organized, setOrganized] = useState(false);
+  const [hovered, setHovered] = useState<string>();
   const [error, setError] = useState('');
-  const ports = definition.ports.filter(port => port.type === 'CONTROL');
-  const inputs = ports.filter(port => port.direction === 'in');
-  const outputs = ports.filter(port => port.direction === 'out');
-  const routes = definition.transfers?.filter((item): item is Route => item.kind === 'control') ?? [];
+  const { ports, inputs, outputs, routes, networks, rowStep, columnX } = useMemo(() => {
+    const ports = definition.ports.filter(port => port.type === 'CONTROL');
+    const inputs = ports.filter(port => port.direction === 'in');
+    const outputs = ports.filter(port => port.direction === 'out');
+    const routes = definition.transfers?.filter((item): item is ControlRoute => item.kind === 'control') ?? [];
+    return { ports, inputs, outputs, routes, ...controlNetworks(inputs, outputs, routes, organized) };
+  }, [definition.ports, definition.transfers, organized]);
   const routeIds = new Set(routes.map(item => routeId(item.fromPortId, item.toPortId)));
   const pathKey = hierarchyKey(path);
   const pathEdges = [...(result?.trace?.edges ?? []), ...(result && result.status !== 'resolved' ? result.digitalAccess ?? [] : [])];
@@ -92,28 +88,27 @@ function Editor({ store, definition, path, result, shared, showName, back, enter
     setOrigin(nodeId ?? undefined);
     setSelected(undefined);
   }
-  function organize() {
-    const inputOrder = new Map(inputs.map((port, i) => [port.id, i]));
-    const outputOrder = new Map(outputs.map((port, i) => [port.id, i]));
-    const ordered = routes.slice().sort((a, b) => inputOrder.get(a.fromPortId)! - inputOrder.get(b.fromPortId)!
-      || outputOrder.get(a.toPortId)! - outputOrder.get(b.toPortId)!);
-    setLanes(new Map(ordered.map((item, i) =>
-      [routeId(item.fromPortId, item.toPortId), portWidth + 24 + (columnX - portWidth - 48) * (i + 1) / (ordered.length + 1)])));
-  }
   useEffect(() => { canvas.current?.focus(); }, []);
+  const portColors = new Map<string, string[]>();
+  for (const net of networks) {
+    portColors.set(net.input, [net.color]);
+    for (const { output } of net.branches) portColors.set(output, [...(portColors.get(output) ?? []), net.color]);
+  }
   const nodes: PortNode[] = [inputs, outputs].flatMap((column, side) => column.map((port, row) => {
     const id = encodeURIComponent(port.id);
     const position = side === 0 ? Position.Right : Position.Left;
-    return { id, type: 'port', width: portWidth, height: 30, measured: { width: portWidth, height: 30 },
-      sourcePosition: position, targetPosition: position, position: { x: side * columnX, y: row * 48 },
-      data: { input: side === 0, heading: row === 0, label: portDisplayName(port, false, definition.ports),
+    const colors = portColors.get(port.id) ?? [];
+    const fill = colors.length < 2 ? colors[0] : 'conic-gradient(' + colors.map((color, i) =>
+      color + ' ' + i / colors.length + 'turn ' + (i + 1) / colors.length + 'turn').join(',') + ')';
+    return { id, type: 'port', width: portWidth, height: portHeight, measured: { width: portWidth, height: portHeight },
+      sourcePosition: position, targetPosition: position, position: { x: side * columnX, y: row * rowStep },
+      data: { fill, input: side === 0, heading: row === 0, label: portDisplayName(port, false, definition.ports),
         wire: origin === id ? 'origin' : origin && candidate(origin, id) ? 'target' : undefined } };
   }));
-  const edges: RouteEdge[] = routes.map(item => {
-    const id = routeId(item.fromPortId, item.toPortId);
-    return { id, type: 'route', source: encodeURIComponent(item.fromPortId), target: encodeURIComponent(item.toPortId),
-      className: highlighted.has(id) ? 'v1-path-edge' : undefined, selected: id === selected, data: { lane: lanes.get(id) } };
-  });
+  const edges: RouteEdge[] = networks.flatMap(net => net.branches.map(({ id, output, path }) => ({
+    id, type: 'route' as const, source: encodeURIComponent(net.input), target: encodeURIComponent(output),
+    className: highlighted.has(id) ? 'v1-path-edge' : undefined, selected: id === selected, data: { path },
+  })));
   return <section ref={canvas} tabIndex={-1} className="v1-routing v1-topology-canvas" aria-label="内部信号连线"
     onKeyDown={event => {
       if (event.nativeEvent.isComposing || event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return;
@@ -138,12 +133,25 @@ function Editor({ store, definition, path, result, shared, showName, back, enter
         const route = candidate(edge.source, edge.target);
         if (route && !cancelled.current) change(current => [...current, route]);
       }}
+      onEdgeMouseEnter={(_, edge) => setHovered(edge.id)} onEdgeMouseLeave={() => setHovered(undefined)}
       onEdgeClick={(_, edge) => { cancel(); setSelected(edge.id); canvas.current?.focus(); }}
       onPaneClick={() => { cancel(); setSelected(undefined); canvas.current?.focus(); }}>
       <Background />
+      <EdgeLabelRenderer>
+        <svg className="v1-routing-networks" width="1" height="1" aria-hidden="true">
+          {networks.map(net => <g key={net.input} data-network={net.input} stroke={net.color}>
+            <path className="v1-network-clearance" d={net.path} />
+            {net.branches.filter(b => highlighted.has(b.id) || b.id === selected || b.id === hovered).map(b =>
+              <path key={b.id} className="v1-network-highlight" data-route={b.id} d={b.path}
+                stroke={b.id === selected ? '#09896e' : '#526d69'} />)}
+            <path className="v1-network-line" d={net.path} />
+            {net.junctions.map(([x, y]) => <circle key={y} cx={x} cy={y} r={3.5} fill={net.color} stroke="none" />)}
+          </g>)}
+        </svg>
+      </EdgeLabelRenderer>
       <Panel position="bottom-right" className="v1-canvas-zoom nopan nowheel" aria-label="内部画布视图控件">
         <div className="v1-canvas-control-group v1-organize-controls">
-          <button type="button" onClick={organize} disabled={!routes.length}>理线</button>
+          <button type="button" onClick={() => setOrganized(true)} disabled={!routes.length}>理线</button>
         </div>
         <div className="v1-canvas-control-group">
           <button type="button" aria-label="缩小" onClick={() => void zoomOut()}>−</button>
