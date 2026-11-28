@@ -41,9 +41,9 @@ export function routeDisplayedScope<N extends Node>(projection: Projection, edge
       addObstacle('frame-title', Math.min(...titleParts.map(b => b.left)), Math.min(...titleParts.map(b => b.top)),
         Math.max(...titleParts.map(b => b.right)), Math.max(...titleParts.map(b => b.bottom)));
     }
-    for (const label of element.querySelectorAll<HTMLElement>('.v1-topology-port .v1-port-label')) {
-      const box = label.getBoundingClientRect();
-      const inner = label.closest('.v1-topology-port')?.querySelector<HTMLElement>('.v1-frame-inner-handle')?.dataset.handleid;
+    for (const row of element.querySelectorAll<HTMLElement>('.v1-module-pins .v1-topology-port')) {
+      const box = row.getBoundingClientRect();
+      const inner = row.querySelector<HTMLElement>('.v1-frame-inner-handle')?.dataset.handleid;
       addObstacle(inner ?? 'frame-title', box.left, box.top, box.right, box.bottom);
     }
   }
